@@ -58,10 +58,46 @@ is(!settings.includes('<Card title="בטיחות הריצה">'), 'the safety car
 for (const key of ['testMode', 'requireConfirmation', 'debugMode']) {
   is(!new RegExp(`browser\\.${key}`).test(settings), `${key} is no longer editable anywhere in settings`);
 }
-is(settings.includes('<Card title="קצב הקבוצות">'), 'but the group pacing, which does real work, stayed');
+/*
+ * ───── AND THEN THE PACING CARD WENT TOO — 07.11.2026 ─────────────────
+ *
+ * "תמחק גם את האופציות האלה, סתם מיותר ומבלבל לקוחות."
+ *
+ * The line above read "but the group pacing, which does real work, stayed",
+ * and it was true when it was written: the card had just been rescued from a
+ * page that was deleted around it. The owner has now asked for the card
+ * itself, with the trade put to him in writing first and confirmed.
+ *
+ * At his numbers none of the three bound anything: one browser window is what
+ * the field's own hint recommended, a 1,000-a-day ceiling over a 231-a-day
+ * round never fires, and an extra gap of zero adds zero.
+ *
+ * SO THE PIN MOVES TO WHAT IT WAS ALWAYS PROTECTING — not "the control is on
+ * the screen" but "deleting the control did not change what publishes".
+ * Exactly the shape the safety card's own pins above already take: gone from
+ * the screen, still in force underneath.
+ */
+is(!settings.includes('<Card title="קצב הקבוצות">'), 'the pacing card is gone from the screen too');
+/*
+ * "no longer editable" is pinned on the BINDING, not on the key appearing
+ * anywhere in the file: the page's own comment records the six removed values
+ * by name on purpose, so that the next person to read it knows what the engine
+ * still reads. A pin that forbade the name would have forbidden the
+ * explanation. `value={browser.X}` is what an input is.
+ */
 for (const key of ['concurrentJobs', 'maxPerCampaignPerDay', 'groupMinGapMinutes']) {
-  is(settings.includes(key), `${key} is still editable`);
+  is(!settings.includes(`value={browser.${key}}`), `${key} has no input bound to it any more`);
+  is(!settings.includes(`setBrowser({ ...browser, ${key}:`), `and nothing writes ${key} from this screen`);
 }
+/*
+ * BUT THE SAVE STILL CARRIES THEM. The screen loads `browser` whole and
+ * writes it whole, so a field with no input keeps the number already stored
+ * — a save made from this screen must not quietly reset a customer's pacing
+ * to the shipped defaults. groupMinGapMinutes is still read here for exactly
+ * that reason, and the seconds column is still derived from it.
+ */
+is(/groupMinGapSeconds: keepOrDerive\(browser\.groupMinGapMinutes, curBrowser\.groupMinGapSeconds\)/.test(settings),
+  'and a save still carries the stored pacing through untouched, so removing the inputs cannot reset it');
 
 const worker = read('worker/social-worker.ts');
 const types = read('src/lib/social/types.ts');
@@ -77,9 +113,16 @@ is(/newPage\(false, 'התחברות ידנית'\)/.test(session), 'the login win
 /* They must be INSIDE the one remaining customer tab, not orphaned. */
 const limitsAt = settings.indexOf("{tab === 'limits' && (");
 const adminAt = settings.indexOf("{tab === 'admin'");
-const pacingAt = settings.indexOf('<Card title="קצב הקבוצות">');
 is(limitsAt > 0 && adminAt > limitsAt, 'found both blocks');
-is(pacingAt > limitsAt && pacingAt < adminAt, 'the rescued pacing card sits inside "קצב ומגבלות", where a customer will find it');
+/*
+ * THE ONE THING KEPT OUT OF THE SIX, and it is not a control: the Meta hold.
+ * It renders only while Facebook is actually holding the account, and its
+ * "נקה" is the only manual way out — the dashboard reports the hold but
+ * offers no clear. Removing it would have left a state the system can enter
+ * by itself with no way back.
+ */
+is(/\{control\.rateLimitedUntil && \(/.test(settings), 'the Meta hold still has a way out, and only shows while there is one');
+is(/onClick=\{clearRateLimit\}/.test(settings), 'with the button that clears it');
 
 // ───────────────── 3. The connection is still reachable ────────────────────
 /*

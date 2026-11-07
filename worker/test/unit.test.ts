@@ -5704,35 +5704,56 @@ const scenario: { step: string; line: string }[] = [];
     assert.ok(gated.includes(needle), `the gated check must still match on ${needle}`);
   }
 
-  // 3. The owner is told what switching it off costs, on the screen that
-  //    switches it off — and the quick-publish warning stops promising a skip
-  //    that will no longer happen.
-  assert.ok(settings.includes('blockRepeatToSameTarget'), 'the settings screen must expose the switch');
   /*
-   * THE REQUIREMENT, NOT THE ELEMENT IT USED TO BE.
+   * 3. ——— AND THEN THE SWITCH ITSELF WAS DELETED — 07.11.2026 —————————
    *
-   * This pinned `Notice tone="warn"` within 600 characters of the state —
-   * the inline block that appeared under the switch the moment it went off.
-   * That block is gone on purpose: "הסברים ואזהרות לא ייפתחו אוטומטית ויזיזו
-   * את המסך. יש להעביר אותם לאייקון מידע." It pushed the rest of the card
-   * down while the thumb was still on the switch.
+   * "תמחק גם את האופציות האלה, סתם מיותר ומבלבל לקוחות." — asked of six
+   * settings controls and confirmed for all six, this switch among them.
    *
-   * What must still be true is what the comment above this block always said
-   * it was: the owner is told what switching it off costs, on the screen that
-   * switches it off. So the test asks for that — the words, tied to the off
-   * state, on this screen — and no longer for the shape they arrive in.
+   * This block used to require the switch on the settings screen, the warning
+   * beside it and the info dot that carried the warning. All three are gone
+   * with the control. What they were protecting is NOT the control: it is
+   * that the rule is on by default, that an older row without the key still
+   * blocks, and that nothing ever promises a skip it will not perform. Those
+   * are pinned above (1 and 2) and below, and they are untouched.
+   *
+   * So this asks the opposite of what it used to, in the same shape the
+   * safety card's pins take: gone from the screen, still in force underneath.
    */
   assert.ok(
-    /blockRepeatToSameTarget === false[\s\S]{0,900}(Notice tone="warn"|text-warning-400)/.test(settings),
-    'turning it off must still raise a warning on the settings screen, not switch silently',
+    !/value=\{limits\.blockRepeatToSameTarget\}|on=\{limits\.blockRepeatToSameTarget/.test(settings),
+    'the settings screen no longer offers the switch',
   );
   assert.ok(
-    settings.includes('מסכן את החשבון האישי שלכם'),
-    'and the warning still names the cost in the owner\'s own terms — his Facebook account, not an abstraction',
+    !settings.includes('blockRepeatToSameTarget === false'),
+    'and nothing on it branches on the off state any more — the warning went with the control it warned about',
   );
   assert.ok(
-    /<InfoDot title="מניעת פרסום חוזר לאותה קבוצה">/.test(settings),
-    'it is reachable from an always-present info dot, so nothing appears or disappears under the thumb',
+    !/<InfoDot title="מניעת פרסום חוזר לאותה קבוצה">/.test(settings),
+    'nor the info dot that explained it',
+  );
+  /*
+   * BUT THE SAVE MUST STILL CARRY THE STORED VALUE. The screen loads `limits`
+   * whole and writes it whole, so a key with no input keeps what is already
+   * saved. Every one of the eight live accounts has blockRepeatToSameTarget
+   * false in its row; a save made from this screen must not reset that to the
+   * shipped default and switch a customer's rule back on behind their back.
+   */
+  assert.ok(
+    /saveSetting\('limits', \{ \.\.\.curLimits, \.\.\.limits,/.test(settings),
+    'a save still writes the whole limits row over the stored one, so a field with no input keeps its saved value',
+  );
+  /*
+   * AND THE DELETION LEFT ONE THING OPEN, pinned so it cannot be forgotten:
+   * with no switch anywhere, DEFAULT_LIMITS decides for every account that
+   * has no saved row. It still says true. That is deliberate — flipping it
+   * would change what publishes, which the control deletion did not — and it
+   * means a brand-new customer gets the rule ON and no way to turn it off.
+   * The day that default changes, this pin is the place that says so.
+   */
+  assert.ok(
+    /blockRepeatToSameTarget:\s*true/.test(types),
+    'and with the switch gone, DEFAULT_LIMITS is the only thing left deciding for a customer with no saved row',
   );
   assert.ok(
     sheet.includes('ctx.limits.blockRepeatToSameTarget === false'),
@@ -5752,30 +5773,49 @@ const scenario: { step: string; line: string }[] = [];
   assert.ok(campaignSrc.includes("label: 'התחיל — טרם פורסם'"), 'and the replacement must say what actually happened');
 
   /*
-   * The switch is enforced in rules.ts, and rules.ts runs on the owner's PC
-   * too. A copy there that predates the key ignores it and goes on skipping,
-   * so the switch must announce that rather than appear to have worked —
-   * groups are nearly everything this owner publishes.
+   * ——— THE STALE-PC WARNING, AFTER THE SWITCH IT BELONGED TO ———————————
+   *
+   * These three pins required the settings screen to compare the PC's worker
+   * version, in an error tone, and to say "הכיבוי עדיין לא תקף לקבוצות".
+   * They existed because of ONE control: the switch is enforced in rules.ts,
+   * rules.ts runs on the owner's own PC, and a copy that predates the key
+   * ignores it and goes on skipping — so a switch that had not reached the
+   * machine had to say so rather than appear to have worked.
+   *
+   * With the switch deleted there is nothing left on that screen whose effect
+   * waits on the PC, so the comparison, the state behind it and the
+   * listWorkers() read that fed it are all gone with it.
+   *
+   * WHAT THAT WARNING WAS REALLY FOR IS NOT GONE, and this is now where it is
+   * pinned: BrowserStatusCard holds the same comparison and says it in the
+   * owner's own terms with both numbers — from the header panel, which
+   * settings-tabs.test.ts pins as reachable from every screen in the product
+   * via #pc, including this one. A warning on one tab became a warning
+   * everywhere.
    */
+  const statusCard = readFileSync(new URL('../../src/components/social/BrowserStatusCard.tsx', import.meta.url), 'utf8');
+  /* Pinned on the IMPORT and the CALL, not on the word: the page's own comment
+     names what was removed on purpose, and a pin that forbade the name would
+     forbid the explanation. */
   assert.ok(
-    /workerVersion !== WORKER_VERSION/.test(settings),
-    'the settings screen must compare the PC worker version, or turning the switch off silently does nothing for groups',
-  );
-  /*
-   * Same move as the pin above, and the same reason: the inline Notice that
-   * used to appear here is now a paragraph inside the info sheet, because it
-   * pushed the card down under the thumb. The DISTINCTION it exists for is
-   * untouched and still pinned — the risk of the setting is a warning, the
-   * setting not being in force at all is an error, and they must not read
-   * the same.
-   */
-  assert.ok(
-    /blockRepeatToSameTarget === false && workerVersion[\s\S]{0,400}(Notice tone="error"|text-error-400)/.test(settings),
-    'and it must say so loudly — a warn tone is for the risk of the setting, an error tone for the setting not being in force',
+    !settings.includes("import { WORKER_VERSION }"),
+    'the settings screen no longer even imports the version it used to compare — nothing on it waits for the PC any more',
   );
   assert.ok(
-    settings.includes('הכיבוי עדיין לא תקף לקבוצות'),
-    'and it still says the one thing that matters: the switch he just moved does nothing for groups until the PC updates',
+    !/listWorkers\(\)\.catch/.test(settings),
+    'and a settings load no longer asks the database a question whose only answer fed the paragraph that went with the switch',
+  );
+  assert.ok(
+    /worker\.version !== WORKER_VERSION/.test(statusCard),
+    'BrowserStatusCard still compares the PC version — the product must never stop noticing that the machine is behind',
+  );
+  assert.ok(
+    statusCard.includes('התוכנה במחשב מריצה גרסה ישנה'),
+    'and still says so in his own words, with both version numbers, instead of leaving it to be inferred',
+  );
+  assert.ok(
+    /\{stale && \(/.test(statusCard) && /worker\?\.online/.test(statusCard),
+    'only while a machine is actually online and actually behind — an offline PC has its own, different sentence',
   );
   const workerVersionSrc = readFileSync(new URL('../../src/lib/social/worker-version.ts', import.meta.url), 'utf8');
   assert.ok(

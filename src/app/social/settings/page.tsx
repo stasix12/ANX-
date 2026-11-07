@@ -1,14 +1,11 @@
 'use client';
 
-import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
 import { Stamp } from '@/components/social/DateTime';
 import { ScreenProbe } from '@/components/social/ScreenProbe';
 import { SocialShell } from '@/components/social/SocialShell';
-import { Button, Card, Field, InfoDot, Loading, Notice, SegmentedControl, Toggle, inputClass, useToast } from '@/components/social/ui';
-import { getBrowserSettings, getBusiness, getControl, getLimits, listWorkers, loadAdminPresence, saveSetting, setPaused } from '@/lib/social/client';
-import { WORKER_VERSION } from '@/lib/social/worker-version';
-import { ABSOLUTE_MIN_REPEAT_HOURS, MAX_REPEAT_HOURS, MIN_REPEAT_HOURS, repeatFloorFrom } from '@/lib/social/campaign-schedule';
+import { Button, Card, Field, Loading, Notice, SegmentedControl, inputClass, useToast } from '@/components/social/ui';
+import { getBrowserSettings, getBusiness, getControl, getLimits, loadAdminPresence, saveSetting } from '@/lib/social/client';
 import { DEFAULT_BROWSER, DEFAULT_BUSINESS, DEFAULT_LIMITS, type AdminPresence, type BrowserSettings, type BusinessSettings, type ControlSettings, type LimitsSettings } from '@/lib/social/types';
 import { accountGapLabel, accountGapSeconds } from '@/lib/social/rules';
 import { friendlyMessage } from '@/lib/social/errors';
@@ -40,17 +37,20 @@ export default function SettingsPage() {
   const toast = useToast();
 
   /*
-   * The version the PC is actually running.
+   * NO workerVersion STATE ANY MORE, and that is the switch's last loose end.
    *
-   * Some settings on this screen are enforced on the SERVER (Pages, Graph API)
-   * and take effect the moment they are saved. The repeat-to-same-group switch
-   * is not one of them: groups are published by the copy of this codebase
-   * running on the owner's own machine, and an older copy does not know the
-   * key exists — it reads the same settings row, ignores the new field, and
-   * goes on skipping. Saving the switch then looks like it did nothing, which
-   * is exactly the kind of silence this product keeps removing.
+   * It existed for one sentence: the repeat-to-same-group switch is enforced
+   * on the owner's OWN machine, so an older copy of the worker ignores the key
+   * and goes on skipping, and the screen had to say the switch had not taken
+   * effect yet rather than look as though it had. With the switch deleted
+   * there is nothing on this screen whose effect waits on the PC — and the
+   * warning itself did not go missing: BrowserStatusCard says
+   * "התוכנה במחשב מריצה גרסה ישנה" with both version numbers, from the
+   * header panel, on every screen in the product.
+   *
+   * So the listWorkers() read went with it. A settings load no longer asks
+   * the database a question whose only answer fed a paragraph that is gone.
    */
-  const [workerVersion, setWorkerVersion] = useState<string | null>(null);
 
   /*
    * ─── THE OWNER'S PANEL, AND WHY IT IS NULL FOR EVERYONE ELSE ─────────────
@@ -75,7 +75,6 @@ export default function SettingsPage() {
       getControl(),
       getBusiness(),
       getBrowserSettings(),
-      listWorkers().catch(() => []),
       /* Swallowed on purpose: a customer, or a deployment with no allowlist
          configured, must not see "טעינה נכשלה" over a panel they were never
          going to be shown. A real failure for the OWNER shows as the panel
@@ -83,14 +82,12 @@ export default function SettingsPage() {
          simply does not appear and nothing on this screen is wrong. */
       loadAdminPresence().catch(() => null),
     ])
-      .then(([l, c, b, br, workers, pres]) => {
+      .then(([l, c, b, br, pres]) => {
         setPresence(pres);
         setLimits(l);
         setControl(c);
         setBusiness(b);
         setBrowser(br);
-        const live = workers.find((w) => w.online) ?? workers[0] ?? null;
-        setWorkerVersion(live?.version ?? null);
         setLoaded(true);
       })
       .catch((err) => setError(friendlyMessage(err, 'טעינה נכשלה.')));
@@ -223,24 +220,19 @@ export default function SettingsPage() {
   }
 
   /**
-   * The emergency stop writes on the tap, like the identical button in the
-   * header does — it is the same switch, and a stop that waits for a second
-   * tap on שמור is not a stop. setPaused() re-reads the row and merges, so a
-   * cooldown Meta set a second ago survives.
+   * THE ONE WRITE TO `control` LEFT ON THIS SCREEN, and it is not a setting.
+   *
+   * The emergency stop that used to live beside it is gone with the other five
+   * controls — it wrote the same control.paused as the dashboard's own
+   * "השהה פרסום / הפעל פרסום" button, which is now the only writer of
+   * that field in the product.
+   *
+   * This one stays because nothing else can do it: it clears a hold FACEBOOK
+   * put on the account, which the system can enter on its own and which the
+   * dashboard reports without offering a way out. It re-reads the row and
+   * merges rather than writing a whole object, so a `paused` the header set a
+   * second ago is not overwritten by a stale copy of it.
    */
-  async function togglePause(next: boolean) {
-    const previous = control.paused;
-    setControl((c) => ({ ...c, paused: next }));
-    try {
-      await setPaused(next);
-      toast(next ? 'הפרסום הושהה. התור נשמר.' : 'הפרסום חודש.');
-    } catch (err) {
-      setControl((c) => ({ ...c, paused: previous }));
-      toast(friendlyMessage(err, 'לא הצלחנו לשנות את מצב הפרסום.'), 'error');
-    }
-  }
-
-  /** Same merge, for the one server-written field this screen may clear. */
   async function clearRateLimit() {
     const previous = control.rateLimitedUntil;
     setControl((c) => ({ ...c, rateLimitedUntil: null }));
@@ -390,138 +382,97 @@ export default function SettingsPage() {
                 )}
 
                 {/*
-                  The one rule in the product that had no time window and no
-                  switch: rules.ts refused a post at a group it had ever
-                  reached, so an owner republishing the same monthly offer
-                  watched every row skip with a reason that read like a bug.
-                  It is a judgement, so it is presented as one — and the
-                  consequence of switching it off is stated on the screen
-                  rather than discovered on Facebook.
-                */}
-                <div className="mt-4 rounded-xl border border-ink-700 px-3 py-3">
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="font-bold text-mist-100">לא לשלוח את אותו פוסט פעמיים לאותה קבוצה</p>
-                      <p className="text-xs text-mist-500">
-                        כשמופעל, פוסט שכבר פורסם לקבוצה לא יצא אליה שוב — לעולם, בלי קשר לכמה זמן עבר. זו הסיבה שמופיעה בהיסטוריה כ״הפוסט
-                        הזה כבר פורסם ל…״.
-                      </p>
-                    </div>
-                    {/*
-                      THE WARNINGS MOVED HERE, AND THEY NO LONGER ARRIVE WITH
-                      THE TAP.
-                      *
-                      * "הסברים ואזהרות לא ייפתחו אוטומטית ויזיזו את המסך. יש
-                      *  להעביר אותם לאייקון מידע."
-                      *
-                      * Three blocks used to appear and disappear under this
-                      * switch depending on its state and on the version of
-                      * the program on his PC — each of them several lines,
-                      * each pushing the rest of the card down while the thumb
-                      * was still on the switch. They are the same words, in a
-                      * sheet, on a dot that is always here.
-                    */}
-                    <InfoDot title="מניעת פרסום חוזר לאותה קבוצה">
-                      {limits.blockRepeatToSameTarget === false && workerVersion && workerVersion !== WORKER_VERSION && (
-                        <p className="text-error-400">
-                          <strong>הכיבוי עדיין לא תקף לקבוצות.</strong> התוכנה שעל המחשב מריצה גרסה{' '}
-                          <span dir="ltr">{workerVersion}</span> במקום <span dir="ltr">{WORKER_VERSION}</span>, והיא זו שמפרסמת לקבוצות —
-                          גרסה ישנה לא מכירה את המתג הזה ותמשיך לדלג. סגרו את חלון התוכנה במחשב ולחצו פעמיים על{' '}
-                          <code dir="ltr">start-worker.cmd</code> כדי לעדכן אותה. פרסום לדפי פייסבוק כבר עובד לפי המתג.
-                        </p>
-                      )}
-                      {limits.blockRepeatToSameTarget === false ? (
-                        <p className="text-warning-400">
-                          כיביתם את ההגנה. מעכשיו אותו פוסט יכול לצאת שוב ושוב לאותה קבוצה, ומה שימנע חזרה מיידית זה רק ״מניעת כפילות״
-                          למעלה ({limits.dedupeDays} ימים), שבודקת טקסט ומדיה זהים. פרסום לקבוצות יוצא מחשבון הפייסבוק שלכם דרך הדפדפן שעל
-                          המחשב, ולא דרך API, ולכן תוכן חוזר לאותה קבוצה מסכן את החשבון האישי שלכם. אם אתם מפרסמים מבצע חוזר — עדיף לשנות
-                          את הנוסח בין סבב לסבב.
-                        </p>
-                      ) : (
-                        <p>
-                          כשמופעל, פוסט שכבר פורסם לקבוצה לא יצא אליה שוב — לעולם. המרווח שמתחת קובע כמה זמן חייב לעבור בין שני פרסומים
-                          של אותו פוסט לאותה קבוצה, והוא מה שמחליט כמה סבבים ביום אפשר באמת להריץ לאותן קבוצות.
-                        </p>
-                      )}
-                      {repeatFloorFrom(limits) < MIN_REPEAT_HOURS && limits.blockRepeatToSameTarget !== false && (
-                        <p className="text-warning-400">
-                          {repeatFloorFrom(limits) === 0
-                            ? 'ביטלתם את ההגנה לגמרי — אין מרווח מינימלי בין שני פרסומים של אותו פוסט לאותה קבוצה. '
-                            : `הורדתם את ההגנה ל-${repeatFloorFrom(limits)} שעות במקום ${MIN_REPEAT_HOURS}. מעכשיו אותו פוסט יכול לצאת לאותה `}
-                          קבוצה פעמיים באותו יום עבודה. תוכן חוזר לאותה קבוצה בפרק זמן קצר הוא בדיוק מה שמנהלי קבוצות ומערכות הסינון של
-                          Meta מחפשים — והחשבון שבסיכון הוא שלכם. זו החלטה שלכם, והמערכת מבצעת אותה.
-                        </p>
-                      )}
-                    </InfoDot>
-                    <Toggle
-                      checked={limits.blockRepeatToSameTarget !== false}
-                      onChange={(v) => setLimits({ ...limits, blockRepeatToSameTarget: v })}
-                      label="מניעת פרסום חוזר לאותה קבוצה"
-                    />
-                  </div>
-                  {/*
-                    THE FIELD STAYS, AND IT STAYS PUT.
-                    *
-                    * It is a control, not an explanation, so it does not
-                    * belong in the sheet with the warnings. But it used to
-                    * appear and vanish with the switch above it, and a card
-                    * that changes height under a thumb is the thing the owner
-                    * asked to be rid of. It is always drawn now, and simply
-                    * cannot be edited while the protection it belongs to is
-                    * off — which is also a clearer statement of what it is.
-                    *
-                    * MIN_REPEAT_HOURS was a hard 12 in three clamps and a
-                    * database CHECK, and it was quietly costing him a layout
-                    * he had chosen on purpose. Measured by driving the real
-                    * engine: with rounds at 03:30, 06:30 and 18:30 the queue
-                    * row for round two was DEFERRED from 06:30 to 23:30, and
-                    * because a group may hold only one open row, that parked
-                    * row then blocked round three entirely. He asked for
-                    * three publications a day, the system delivered two — one
-                    * at an hour he never chose — and the card said it had
-                    * saved three.
-                  */}
-                  <div className="mt-3 border-t border-ink-700 pt-3">
-                    <Field
-                      label="מרווח מינימלי בין שני פרסומים של אותו פוסט לאותה קבוצה (שעות)"
-                      hint="ברירת המחדל היא 12. זה המספר שקובע כמה סבבים ביום אפשר באמת להריץ לאותן קבוצות"
-                    >
-                      <input
-                        type="number"
-                        min={ABSOLUTE_MIN_REPEAT_HOURS}
-                        max={MAX_REPEAT_HOURS}
-                        inputMode="numeric"
-                        disabled={limits.blockRepeatToSameTarget === false}
-                        className={`${inputClass} disabled:cursor-not-allowed disabled:opacity-50`}
-                        value={limits.repeatFloorHours ?? MIN_REPEAT_HOURS}
-                        onChange={(e) =>
-                          setLimits({
-                            ...limits,
-                            repeatFloorHours: Math.min(
-                              MAX_REPEAT_HOURS,
-                              Math.max(ABSOLUTE_MIN_REPEAT_HOURS, Math.round(Number(e.target.value) || MIN_REPEAT_HOURS)),
-                            ),
-                          })
-                        }
-                      />
-                    </Field>
-                  </div>
-                </div>
-              </Card>
+                  ───── WHAT WAS HERE, AND WHY IT IS NOT ─────────────────────
 
-              <Card title="עצירת חירום">
-                <div className="flex items-center justify-between gap-3 rounded-xl border border-ink-700 px-3 py-3">
-                  <div className="min-w-0">
-                    <p className="font-bold text-mist-100">השהיית כל הפרסומים</p>
-                    <p className="text-xs text-mist-500">כשמופעל, שום דבר לא יוצא — כולל "פרסם עכשיו". התור נשמר.</p>
-                  </div>
-                  <Toggle checked={control.paused} onChange={togglePause} label="השהיה" />
-                </div>
-                {/* Two save models on one screen, so say which one this card
-                    uses. Everything above needs שמור; this switch does not. */}
-                <p className="mt-2 text-xs text-mist-500">ההשהיה נשמרת מיד — אין צורך ללחוץ "שמור".</p>
+                  "תמחק גם את האופציות האלה, סתם מיותר ומבלבל לקוחות" — 07.11.2026, asked
+                  of six controls and confirmed for all six after the trade was
+                  put to him in writing.
+
+                  THE CONTROLS ARE GONE. THE BEHAVIOUR IS NOT. Every value they
+                  edited is a stored field that the engine goes on reading:
+
+                    limits.blockRepeatToSameTarget   false on his account
+                    limits.repeatFloorHours          6, which he set himself
+                    browser.concurrentJobs           1
+                    browser.maxPerCampaignPerDay     1000
+                    browser.groupMinGapMinutes       0
+                    control.paused                   false
+
+                  The save still writes `browser` and `limits` whole, so the
+                  stored numbers survive every save made from this screen with
+                  no field to show them. Nothing about publishing changed on
+                  the day this was removed.
+
+                  THREE OF THEM GOVERNED NOTHING AT HIS NUMBERS and were the
+                  clutter he meant: one browser window is what the hint itself
+                  recommended, a 1,000-a-day ceiling over a 231-a-day round
+                  never binds, and an extra gap of zero adds zero.
+
+                  AT HIS NUMBERS — and that qualifier is the whole of it, so
+                  it is written down rather than left as an impression. Read
+                  live off the eight `browser` rows: his own is 1 / 1000 / 0,
+                  one other account is 3 / 1000 / 1, and the remaining SIX are
+                  1 / 8 / 20 — which is DEFAULT_BROWSER exactly, so nobody
+                  chose them, a save merged them. For those six the ceiling is
+                  real: rules.ts defers everything past the eighth publication
+                  of a campaign in a day with "הסבב מילא את המכסה היומית
+                  שלו (8)" (rules.ts:561-567), and the 20 minutes are added to
+                  every gap between two publications to one group.
+
+                  THEY KEEP THOSE NUMBERS — that is what the whole-row save
+                  guarantees and what the test pins. What they no longer have
+                  is a screen to CHANGE them, which for a customer who one day
+                  wants more than eight a day means asking rather than
+                  tapping. That is the cost of the deletion, it is his to
+                  accept, and it is stated here so the next person does not
+                  have to rediscover it from a customer's stalled round.
+
+                  THE OTHER THREE ARE REAL, and they are not all the same
+                  kind of real:
+
+                    • עצירת חירום was a DUPLICATE. The dashboard's own
+                      "השהה פרסום / הפעל פרסום" button writes the same
+                      control.paused (page.tsx:1792-1798), on the screen he
+                      opens first. The capability did not move, the second
+                      copy did — and after this deletion those few lines are
+                      the ONLY writer of control.paused left in the product,
+                      so they are load-bearing.
+                    • the two duplicate guards are now editable NOWHERE. An
+                      earlier draft of this comment claimed they moved to the
+                      campaign's own panel; that was false and is corrected
+                      here. The panel toggles whether a campaign repeats
+                      (CampaignSchedulePanel:838, `{ ...repeat, enabled }`)
+                      and PRINTS the window through repeatWindowSentence — it
+                      has never had an input for either of these two values.
+
+                  WHICH IS SAFE FOR EVERY ACCOUNT THAT EXISTS, and the
+                  database is how that is known rather than assumed. All eight
+                  saved `limits` rows — every tenant on the project, his own
+                  included — already read blockRepeatToSameTarget: false, and
+                  seven of the eight repeatFloorHours: 0 (his own says 6). So
+                  for every customer alive today the switch was already off
+                  and the floor already open: removing the control removed a
+                  control, not a protection.
+
+                  THE ONE THING IT LEAVES OPEN, recorded here rather than
+                  quietly fixed: DEFAULT_LIMITS still ships
+                  blockRepeatToSameTarget: true (types.ts), so an account with
+                  NO saved row — a brand-new customer — gets the rule ON with
+                  no switch to turn it off. That is the state that produced
+                  "לא הסרת את המגבלה של ה-20 שעות! תמחק את זה כבר." Flipping that
+                  default to false would change what PUBLISHES, which this
+                  change deliberately does not, so it is his call and not
+                  this commit's.
+
+                  WHAT IS DELIBERATELY KEPT is the Meta hold below. It is not
+                  one of the six, it appears only while Facebook is actually
+                  holding the account, and it is the only manual way out: the
+                  dashboard reports the hold but offers no clear. Removing it
+                  would have left a state the system can enter on its own with
+                  no way back.
+                */}
                 {control.rateLimitedUntil && (
-                  <p className="mt-2 text-xs text-warning-400">
+                  <p className="mt-4 text-xs text-warning-400">
                     Meta ביקשה להאט — הפרסום מושהה עד <Stamp iso={control.rateLimitedUntil} />.{' '}
                     <button type="button" className="min-h-11 px-1 font-bold underline" onClick={clearRateLimit}>
                       נקה
@@ -529,41 +480,7 @@ export default function SettingsPage() {
                   </p>
                 )}
               </Card>
-              <Card title="קצב הקבוצות">
-                <div className="grid gap-4 sm:grid-cols-3 [&>*]:min-w-0">
-                  <Field label="עבודות דפדפן במקביל" hint="1 מומלץ — חלון אחד שעושה דבר אחד">
-                    <input
-                      type="number"
-                      min={1}
-                      max={3}
-                      inputMode="numeric"
-                      className={inputClass}
-                      value={browser.concurrentJobs}
-                      onChange={(e) => setBrowser({ ...browser, concurrentJobs: Math.min(3, Math.max(1, Number(e.target.value) || 1)) })}
-                    />
-                  </Field>
-                  <Field label="מקסימום לסבב ביום">
-                    <input
-                      type="number"
-                      min={1}
-                      inputMode="numeric"
-                      className={inputClass}
-                      value={browser.maxPerCampaignPerDay}
-                      onChange={(e) => setBrowser({ ...browser, maxPerCampaignPerDay: Math.max(1, Number(e.target.value) || 1) })}
-                    />
-                  </Field>
-                  <Field label="מרווח נוסף בין קבוצות (דקות)" hint="מתווסף למרווח הכללי">
-                    <input
-                      type="number"
-                      min={0}
-                      inputMode="numeric"
-                      className={inputClass}
-                      value={browser.groupMinGapMinutes}
-                      onChange={(e) => setBrowser({ ...browser, groupMinGapMinutes: Math.max(0, Number(e.target.value) || 0) })}
-                    />
-                  </Field>
-                </div>
-              </Card>
+
             </>
           )}
 

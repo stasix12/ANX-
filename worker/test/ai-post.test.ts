@@ -94,6 +94,20 @@ is(validateAt > gateAt && validateAt < clientAt, 'the body is validated between 
  * route's success path has exactly ONE source of text, and every failure
  * answers with a reason instead.
  */
+/*
+ * THE MODEL IS A COST DECISION THE OWNER MADE, so it is pinned like one.
+ *
+ * "אני לא רוצה לשלם עוד פעם כבר יש לי מנוי אצלך" — a subscription cannot pay
+ * for a server's API calls, so the choice put to him was which model, with
+ * the arithmetic: ~0.15 agorot a post on Haiku against ~6 on Opus, same
+ * prompt. He chose Haiku. A later edit that quietly restored the Opus id
+ * would multiply his bill by forty with nothing on any screen saying so,
+ * which is exactly the kind of silent change this file exists to catch.
+ */
+is(/model: 'claude-haiku-5-5'/.test(routeCode), 'the route asks for Haiku — the model the owner chose after seeing both prices');
+is(!/claude-opus|claude-sonnet|claude-fable/.test(routeCode), 'and no costlier model has crept back in');
+is(/effort: 'low'/.test(routeCode), "effort is set explicitly, not left to Haiku's own `medium` default, which costs more than this job needs");
+
 is(/message\.content/.test(routeCode), 'the text comes from the model response and from nothing else');
 is(/if \(!text\) return fail\('upstream', 502\)/.test(routeCode),
   'an empty answer is a FAILURE, not an empty post — returning it would put a blank card on screen that looks like success');
@@ -145,9 +159,17 @@ is(!/getSetting/.test(routeCode), 'the route does not use the non-tenant-aware s
 is(/social_tenant_members/.test(routeCode), 'it resolves the tenant from the authenticated user');
 is(/\.eq\('user_id', userId\)/.test(routeCode), 'by the user id the token proved — never by anything the body said');
 is(/\.eq\('tenant_id', member\.tenant_id\)/.test(routeCode), 'and reads the business row for that tenant alone');
-/* The business details come from the row, so a browser cannot put another
-   business's name on a post published from this account. */
-is(!/business:/.test(strip(composerCode)), 'the screen never sends business details — the server reads them');
+/*
+ * The business details come from the row, so a browser cannot put another
+ * business's name on a post published from this account.
+ *
+ * THIS WAS A WHOLE-FILE SEARCH FOR `business:` and it broke the moment the
+ * free template path was added — that one runs in the browser and genuinely
+ * needs the details, so the component takes them as a prop. The question was
+ * never whether the word appears; it is whether the AI REQUEST carries them.
+ * That is bounded to generate()'s own body, in section 10b.
+ */
+is(/businessFor\(user\.id\)/.test(routeCode), 'the AI path gets the business from the row the authenticated user owns');
 
 // ───────────────── 6. THE PROMPT TREATS THE OWNER'S TEXT AS DATA ───────────
 is(/<נושא_מהמשתמש>/.test(routeCode), 'free text arrives inside a tagged block');
@@ -224,6 +246,56 @@ is(/hasText=\{Boolean\(post\.base_text\.trim\(\)\)\}/.test(editorCode), 'and the
 is(/setHistory\(\(h\) => \[\.\.\.h, text\]\)/.test(composerCode), 'a new version is appended to the history, never written over it');
 is(/history\.map\(\(h, i\)/.test(composerCode), 'every version stays reachable');
 is(/previous: history\.slice\(-3\)/.test(composerCode), 'and the model is shown what it already wrote, so "צור גרסה נוספת" differs');
+
+// ───────────────── 10b. THE FREE PATH, AND IT IS NOT CALLED AI ────────────
+/*
+ * "תעשה שזה יעלה בלי כסף." A subscription cannot pay for a server's API
+ * calls, so the free path is the template generator the product already
+ * owned — and the one thing that must never slip is its LABEL.
+ *
+ * "אין להציג תוכן דמה כאילו נוצר באמצעות AI" is his own rule. A template
+ * presented as a model's work is exactly that, and he would find out the
+ * first time two customers' posts came out word for word identical.
+ */
+is(/generateVariantSeeds/.test(composerCode), 'the free path uses the generator the product already had, not a second copy of it');
+is(/בלי AI/.test(composer), 'and its button says בלי AI in so many words');
+is(/חינם/.test(composer), 'and says it is free, which is the whole reason it is there');
+is(/מתבנית/.test(composer), 'and names it a template, so nobody can mistake it for the model');
+/* It must not borrow the AI button's skin: the gradient is this product's
+   mark for "this one calls a model and costs money". */
+{
+  const freeAt = composer.indexOf('בלי AI');
+  const btnStart = composer.lastIndexOf('<button', freeAt);
+  const skin = composer.slice(btnStart, freeAt);
+  is(!skin.includes('bg-gradient-to-l'), 'the free button is not dressed in the AI gradient');
+}
+/* The free generator runs in the browser, so it needs the business details —
+   and that is the ONLY reason the component receives them. The AI path still
+   must not send them. */
+is(/business: BusinessSettings/.test(composer), 'the component takes the business details for the template path');
+{
+  const body = composerCode.slice(composerCode.indexOf('async function generate()'), composerCode.indexOf('function fromTemplate'));
+  is(!body.includes('business'), 'but the AI request still never carries them — the server reads them itself');
+}
+
+// ───────────────── 10c. THE HEBREW PREFIX THAT PUBLISHES ──────────────────
+/*
+ * The personal template read `אני מ${business.name}`, which is right for a
+ * Hebrew name and wrong for a Latin one: "אני מANX". That is not a preview —
+ * it is text the owner taps into a post that goes to fifty groups. Found by
+ * running the generator and reading what it wrote.
+ */
+{
+  const compose = read('src/lib/social/compose.ts');
+  /* Stripped, because the fix's own comment QUOTES the broken form to explain
+     it — the fifth time in this change that a pin matched an explanation
+     instead of code. The question is only ever what the template emits. */
+  const composeCode = strip(compose);
+  is(/function prefixed\(/.test(composeCode), 'the Hebrew prefix is applied through one helper');
+  is(/Script=Hebrew/.test(composeCode), 'which decides by script, not by guessing');
+  is(!/אני מ\$\{business\.name\}/.test(composeCode), 'and the raw glued form is gone from the template itself');
+  is(composeCode.includes("prefixed('מ', business.name)"), 'the template calls the helper instead');
+}
 
 // ───────────────── 11. THE REAL COMPONENT, MEASURED ───────────────────────
 /*

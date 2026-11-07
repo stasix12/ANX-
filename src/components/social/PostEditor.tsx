@@ -717,6 +717,7 @@ export function PostEditor({ postId }: { postId?: string }) {
             />
             {writeMode === 'ai' && (
               <AiPostComposer
+                business={business}
                 hasText={Boolean(post.base_text.trim())}
                 onAccept={(text) => {
                   update('base_text', text);

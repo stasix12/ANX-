@@ -182,11 +182,29 @@ export async function POST(request: Request) {
     const client = new Anthropic({ apiKey });
 
     const message = await client.messages.create({
-      model: 'claude-opus-5-5',
+      /*
+       * ─── HAIKU, AND IT IS THE OWNER'S OWN COST DECISION ─────────────────
+       *
+       * "אני לא רוצה לשלם עוד פעם כבר יש לי מנוי אצלך" — and the honest answer
+       * was that a subscription cannot pay for a server's API calls, so the
+       * choice put to him was which model, with the numbers.
+       *
+       * This shipped on claude-opus-5-5 for one commit. For short Hebrew
+       * marketing copy that is the most expensive model in the catalogue
+       * doing the least demanding job: at $0.10/$0.50 per MTok against
+       * $4/$20, Haiku is ~40× cheaper on the same prompt — roughly 0.15
+       * agorot a post against 6, which turns the $5 minimum credit load from
+       * about 300 posts into about 12,000.
+       *
+       * He chose it after seeing both numbers. If the writing ever reads thin,
+       * this one string is the whole of the change back.
+       */
+      model: 'claude-haiku-5-5',
       max_tokens: MAX_TOKENS,
       /* Low effort on purpose: this is short-form copywriting, not reasoning,
-         and the owner pays per generation. The quality bar is a readable
-         Hebrew post, which this clears. */
+         and the owner pays per generation. Valid on Haiku 5.5, whose own
+         default is `medium` — so it is set explicitly rather than left to a
+         default that costs more than this job needs. */
       output_config: { effort: 'low' },
       system: systemPrompt(business),
       messages: [{ role: 'user', content: userPrompt(parsed.value) }],

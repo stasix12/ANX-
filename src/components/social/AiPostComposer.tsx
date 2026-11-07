@@ -8,11 +8,14 @@ import {
   AI_TOPIC_MAX,
   AI_SERVICE_MAX,
   CUSTOM_SERVICE,
+  serviceLabel,
   type AiPostKind,
   type AiPostService,
   type AiPostTone,
 } from '@/lib/social/ai-post';
 import { callSocialApi } from '@/lib/social/client';
+import { generateVariantSeeds } from '@/lib/social/compose';
+import { type BusinessSettings } from '@/lib/social/types';
 import { friendlyMessage } from '@/lib/social/errors';
 import { CheckIcon, ClipboardListIcon, PencilIcon, RepeatIcon, SparklesIcon } from '@/components/icons';
 import { Field, Notice, inputClass } from './ui';
@@ -56,6 +59,7 @@ type Phase = { state: 'idle' } | { state: 'working' } | { state: 'failed'; messa
 export function AiPostComposer({
   onAccept,
   hasText,
+  business,
   initialResult,
 }: {
   /**
@@ -65,6 +69,14 @@ export function AiPostComposer({
   onAccept: (text: string) => void;
   /** True when the editor's text box already has something in it. */
   hasText: boolean;
+  /**
+   * The saved business details, for the FREE generator below. The AI path
+   * never receives these — the server reads them itself, so a browser cannot
+   * put another business's name on a post. This copy exists only because the
+   * template generator runs here, in the browser, where the business name is
+   * already on screen anyway.
+   */
+  business: BusinessSettings;
   /**
    * TEST SEED, AND NOTHING IN THE APP PASSES IT.
    *
@@ -130,6 +142,44 @@ export function AiPostComposer({
   }
 
   const canGenerate = !working && (service !== CUSTOM_SERVICE || serviceOther.trim().length > 0);
+
+  /*
+   * ─── THE FREE WAY, AND IT IS NOT CALLED AI ─────────────────────────────
+   *
+   * "תעשה שזה יעלה בלי כסף." A subscription cannot pay for a server's API
+   * calls, so the honest answer was no — and then the product turned out to
+   * already own a generator that costs nothing: generateVariantSeeds() in
+   * compose.ts, four Hebrew drafts built from the service, the city and the
+   * saved business details. It has been in the codebase all along, reachable
+   * only from a button that makes four VARIANTS, which is a different job.
+   *
+   * IT IS LABELLED AS WHAT IT IS. "אין להציג תוכן דמה כאילו נוצר באמצעות AI"
+   * is his own rule, and a template is not a model: the button says תבנית,
+   * says חינם, and says בלי AI. Dressing this as the AI result would be the
+   * exact deception that rule forbids — and the owner would discover it the
+   * first time two customers' posts came out word for word identical.
+   *
+   * It cycles rather than always handing back the first draft, so pressing it
+   * again gives a different one of the four.
+   */
+  const [templateIndex, setTemplateIndex] = useState(0);
+
+  function fromTemplate() {
+    const seeds = generateVariantSeeds({
+      service: serviceLabel({ service, serviceOther }),
+      city: business.cities[0] ?? '',
+      language: 'he',
+      business,
+    });
+    if (!seeds.length) return;
+    const seed = seeds[templateIndex % seeds.length];
+    setTemplateIndex((i) => i + 1);
+    setResult(seed.text);
+    setHistory((h) => [...h, seed.text]);
+    setPhase({ state: 'done' });
+    setEditing(false);
+    setCopied(false);
+  }
 
   return (
     <div className="mt-4">
@@ -246,6 +296,23 @@ export function AiPostComposer({
             {history.length ? 'כתוב פוסט חדש עם AI' : 'כתוב פוסט עם AI'}
           </>
         )}
+      </button>
+
+      {/*
+        THE FREE PATH, UNDER THE PAID ONE AND VISIBLE BEFORE IT IS NEEDED.
+
+        Not hidden behind the AI failure: a person who does not want to pay
+        should see the option without having to trigger an error first. The
+        quieter styling says which one is the main road.
+      */}
+      <button
+        type="button"
+        onClick={fromTemplate}
+        disabled={working || (service === CUSTOM_SERVICE && !serviceOther.trim())}
+        className="mt-2 flex min-h-11 w-full items-center justify-center gap-1.5 rounded-tile border border-ink-700 px-4 text-[13px] font-bold text-mist-300 hover:bg-ink-800 disabled:opacity-60"
+      >
+        <PencilIcon aria-hidden className="h-4 w-4" />
+        או נסחו לי מתבנית מוכנה — חינם, בלי AI
       </button>
 
       {phase.state === 'failed' && (

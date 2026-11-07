@@ -1245,6 +1245,20 @@ export const WORKER_VERSION = '4.53.0';
  * prints the exact command: `npm install --no-save electron-updater@6`. With
  * it installed for the run, the bundle builds and answers directly.
  *
+ * AND AGAIN FOR THE FREE TEMPLATE PATH (same day). compose.ts IS bundled —
+ * the worker calls dedupeKey() from it — so a change there is not obviously
+ * web-only and the bundle was asked a second time. generateVariantSeeds and
+ * the Hebrew drafts are tree-shaken out: the worker publishes posts, it never
+ * writes them. Measured in the rebuilt bundle:
+ *
+ *     generateVariantSeeds  0        "היי שכנים"      0
+ *     Script=Hebrew         0        dedupeKey        4   ← control
+ *
+ * One grep for `prefixed` came back 1 and was chased down rather than waved
+ * through: it is the English word inside a comment in the Supabase realtime
+ * library (worker.cjs:5022), not the new helper. A hit that is not read is
+ * not evidence.
+ *
  * Grepped in dist/app/worker.cjs, 1.19 MB, built from this tree:
  *
  *     validateAiRequest   0        AiPostComposer      0
@@ -1264,4 +1278,4 @@ export const WORKER_VERSION = '4.53.0';
  * it would have burned a release number on a web-only change and told every
  * machine to update to a build identical to the one it has.
  */
-export const WORKER_FINGERPRINT = 'fdefd54b73dde373';
+export const WORKER_FINGERPRINT = '6854f402f31f6e59';

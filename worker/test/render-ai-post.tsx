@@ -22,12 +22,14 @@
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { AiPostComposer } from '@/components/social/AiPostComposer';
+import { DEFAULT_BUSINESS } from '@/lib/social/types';
 
 const block = (id: string, seed?: string) =>
   `<section id="${id}" style="max-width:520px">${renderToStaticMarkup(
     createElement(AiPostComposer, {
       onAccept: () => {},
       hasText: false,
+      business: { ...DEFAULT_BUSINESS, name: 'ANX', cities: ['באר שבע'] },
       /* Test-only seed: the component opens showing this as its result, which
          is the state a successful generation leaves it in. Nothing in the app
          passes it — see the prop's own comment in the component. */

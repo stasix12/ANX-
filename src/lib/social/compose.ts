@@ -118,7 +118,7 @@ export function generateVariantSeeds(opts: {
       label: 'C',
       title: 'אישי',
       language,
-      text: `היי שכנים 👋 אני מ${business.name}, עוסק ב${svc} ב${cityHe}. עובד לבד, בקפידה ובכנות — שולח תמונות לפני/אחרי לפני התשלום. אם בא לכם לרענן את הבית, כתבו לי.`,
+      text: `היי שכנים 👋 אני ${prefixed('מ', business.name)}, עוסק ב${svc} ב${cityHe}. עובד לבד, בקפידה ובכנות — שולח תמונות לפני/אחרי לפני התשלום. אם בא לכם לרענן את הבית, כתבו לי.`,
     },
     {
       label: 'D',
@@ -127,6 +127,26 @@ export function generateVariantSeeds(opts: {
       text: `תושבי ${cityHe}! ${svc} עם הגעה עד הבית — כבר מחר באזור שלכם. התקשרו או כתבו ב-WhatsApp, עונה מהר.`,
     },
   ];
+}
+
+/**
+ * "אני מANX" — THE MISSING MAQAF, AND IT PUBLISHES.
+ *
+ * The personal template reads `אני מ${business.name}`, which is right for a
+ * Hebrew name ("אני מניקיון הדרום") and wrong for a Latin one: Hebrew glues
+ * the prefix straight onto Hebrew letters but takes a maqaf before Latin
+ * ones. With the business called ANX the draft said "אני מANX", and that is
+ * not a preview — it is text the owner taps into a post that goes out to
+ * fifty groups.
+ *
+ * Found by running the generator and reading what it wrote, which is the only
+ * way this kind of thing is ever found.
+ */
+function prefixed(prefix: string, name: string): string {
+  const first = name.trim().charAt(0);
+  /* A Hebrew letter takes the prefix directly; anything else — Latin,
+     Cyrillic, a digit — takes a maqaf. */
+  return /\p{Script=Hebrew}/u.test(first) ? `${prefix}${name}` : `${prefix}-${name}`;
 }
 
 function cap(s: string): string {

@@ -9,6 +9,7 @@ import {
   ClipboardListIcon,
   ClockIcon,
   GearIcon,
+  LayersIcon,
   MonitorIcon,
   HomeIcon,
   LogOutIcon,
@@ -27,7 +28,7 @@ import { InstallPrompt } from './InstallPrompt';
 import { NotificationBell } from './NotificationBell';
 import { BrowserStatusCard } from './BrowserStatusCard';
 import { UpdateBanner } from './UpdateBanner';
-import { Sheet, TONE_TEXT, WorkingNote, useConfirm, type Tone } from './ui';
+import { Sheet, TONE_TEXT, TONE_TINT, WorkingNote, useConfirm, type Tone } from './ui';
 
 /*
  * The dot beside the status line, in the INDICATOR step of each tone rather
@@ -87,32 +88,343 @@ type FbAccount = { name: string; avatar: string };
 /** One of the identities on that account, as the worker read it out of Facebook's menu. */
 type Identity = { name: string; kind?: 'profile' | 'page'; image?: string };
 
-/**
- * Greeting by time of day, in the app's own timezone.
+/*
+ * ─── THE GREETING AND ITS FIRST-NAME HELPER ARE GONE ──────────────────────
  *
- * It lived on the dashboard while the bar carried the product name and took
- * it as `subtitle`. The bar now greets the owner by name on every screen, so
- * the greeting lives with the bar — one copy, not one per screen that wants
- * one.
+ * "החלף את הכיתוב 'בוקר טוב, Stas 👋' בכותרת: לוח בקרה."
+ *
+ * greetingNow() turned the clock into one of four Hebrew words and
+ * firstName() kept "צהריים טובים, Stas Terehin" from truncating mid-surname
+ * at 375px. Both existed for one line of text, and that line is now the
+ * screen's own `title` — a fact the shell was already being handed on every
+ * screen. Nothing else in the product called either function (grep: no other
+ * caller, no test pins them), so they are deleted rather than left behind as
+ * two dead exports the next reader has to rule out.
+ *
+ * WHO is still on the bar, and in a better place for it: the face is the
+ * profile switcher and its accessible name is "מפרסם בתור …", which is the
+ * fact the greeting was carrying by accident.
  */
-function greetingNow(): string {
-  const hour = Number(new Intl.DateTimeFormat('en-GB', { hour: 'numeric', hour12: false, timeZone: 'Asia/Jerusalem' }).format(new Date()));
-  if (hour < 5) return 'לילה טוב';
-  if (hour < 12) return 'בוקר טוב';
-  if (hour < 17) return 'צהריים טובים';
-  return 'ערב טוב';
+
+/**
+ * ─── THE IDENTITY BAR, AS THE REFERENCE DRAWS IT ──────────────────────────
+ *
+ * "מצורפת תמונת רפרנס … עליך ליישם את העיצוב המצורף בצורה מדויקת ככל האפשר"
+ * — and the image is of this bar: ONE white rounded card floating on the
+ * page's own pale blue, with four groups inside it separated by hairline
+ * rules. Right to left: the face, the screen's name over a state pill, the
+ * computer, the bell, the gear.
+ *
+ * TWO THINGS CHANGED IN IT, AND NOTHING ELSE.
+ *
+ * 1. "החלף את הכיתוב 'בוקר טוב, Stas 👋' בכותרת: לוח בקרה." The greeting is
+ *    gone and the screen's own `title` stands in its place — which on the
+ *    dashboard IS the words he asked for, and on the other ten screens is
+ *    that screen's name rather than a fourth copy of the hour of day.
+ * 2. "מתחתיה הצג: 🟢 המערכת פעילה." The status line became a tinted pill.
+ *    The SENTENCE is unchanged and still comes from the same place it came
+ *    from before — SYSTEM_STATE_LABEL, decided once by the page — so the
+ *    pill reads "המערכת פעילה" exactly when the system is active and says
+ *    something else, in another colour, when it is not. It is not the
+ *    constant the mock draws: "הטקסט והצבעים חייבים להשתנות בהתאם למצב
+ *    האמיתי של המערכת."
+ *
+ * It is a component of its own so that a browser can measure it: nothing in
+ * worker/test/ could render this bar while it was 300 lines inside a shell
+ * that needs a Supabase session and an app router. Same trick, same reason,
+ * as CrmChrome — see worker/test/render-crm.tsx.
+ */
+export function IdentityBar({
+  title,
+  who,
+  pending,
+  pcOnline,
+  state,
+  whoOpen,
+  onAvatar,
+  pcOpen,
+  onPc,
+  settingsActive,
+  menu,
+  children,
+}: {
+  title: string;
+  /** The confirmed identity — name and picture, as the bar has always had it. */
+  who: FbAccount | null;
+  /** The one being switched to, which is what makes the ring turn. */
+  pending: Identity | null;
+  pcOnline: boolean | null;
+  state: { label: string; tone: Tone } | null;
+  whoOpen: boolean;
+  onAvatar: () => void;
+  pcOpen: boolean;
+  onPc: () => void;
+  settingsActive: boolean;
+  /** The profile switcher, owned by the shell — this bar only gives it a corner. */
+  menu?: React.ReactNode;
+  /** The connection panel and the desktop tab row, which drop out of the bar. */
+  children?: React.ReactNode;
+}) {
+  return (
+    <header
+      /*
+       * THE GROUND AROUND THE CARD IS THE PAGE, NOT A BAR.
+       *
+       * This was `bg-ink-850/96` with a `border-b` — a full-bleed strip the
+       * width of the screen. The reference floats a card on the page's own
+       * pale blue, so the sticky element now wears the PAGE colour and the
+       * white belongs to the card inside it. The blur stays: it is what keeps
+       * content legible as it scrolls under the gutters.
+       */
+      className={`sticky top-0 z-40 bg-ink-950/90 px-3 pb-1.5 pt-[max(env(safe-area-inset-top),4px)] ${
+        whoOpen ? '' : 'backdrop-blur-lg'
+      }`}
+    >
+      {/*
+        50px OF CARD, WHICH IS WHAT THE REFERENCE MEASURES.
+        *
+        * Its bar is 167px of a 1338px-wide image — about 50 CSS px on the
+        * phone it was drawn at — and the compaction brief asks the dashboard
+        * to come DOWN, not up. So the three controls stand at 40, which is
+        * the floor campaign-card.test.ts hit-tests every control in this
+        * product against and the size this module's own chips already use;
+        * the 4px of padding round them is the white the reference leaves.
+        * 44 would have made this bar taller than the one it replaces.
+      */}
+      <div className="mx-auto flex max-w-6xl items-center gap-1 rounded-[20px] border border-ink-700 bg-ink-850 px-1.5 py-1 shadow-[0_4px_14px_-6px_rgba(46,16,101,0.18)]">
+        <div className="relative flex shrink-0 items-center">
+          <button
+            type="button"
+            onClick={onAvatar}
+            aria-expanded={whoOpen}
+            aria-haspopup="menu"
+            /* The words a screen reader gets must not claim it either: while the
+               computer is still moving, this says so. */
+            aria-label={
+              pending
+                ? `מעביר ל${pending.name} — החלפת פרופיל`
+                : who
+                  ? `מפרסם בתור ${who.name} — החלפת פרופיל`
+                  : 'בחירת הפרופיל שמפרסם'
+            }
+            className="shrink-0 rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-300"
+          >
+            {/*
+              THE PICTURE, AND A RING THAT TURNS WHILE THE COMPUTER WORKS.
+              *
+              * Asked for in those words: "בזמן הזה שקורה מעבר שתיהיה אינדיקציה
+              * של טעינה (סוג של טבעת טעינה מסביב לתמונה שזה עובר אלייה)". The
+              * chosen face and name are already up — this is what says the
+              * machine has not finished, and it is a spinner rather than a pulse
+              * because a pulse reads as decoration and a turning ring reads as
+              * work in progress.
+              *
+              * It rides OUTSIDE the picture (a 2px outset, which keeps the whole
+              * control at the header's 44px row height) so nothing of the logo
+              * is covered, and it is aria-hidden: the button's own label already
+              * says "מעביר ל…", and a screen reader has no use for a spinning
+              * border.
+            */}
+            <span className="relative block h-10 w-10 shrink-0">
+              {who?.avatar ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={who.avatar} alt="" className="h-10 w-10 rounded-full object-cover ring-1 ring-ink-700" />
+              ) : (
+                /* No picture, or nobody connected yet: the brand mark holds the
+                   slot rather than a grey circle, so the bar never looks broken
+                   before the first connection. */
+                <span
+                  aria-hidden
+                  className="grad-primary grid h-10 w-10 place-items-center rounded-full bg-brand-500 text-on-brand shadow-[0_4px_12px_rgba(124,58,237,0.25)]"
+                >
+                  <SparklesIcon className="h-5 w-5" />
+                </span>
+              )}
+              {/* Turning only while something is actually turning: with the
+                  computer off the ring goes still and amber, matching the pill
+                  beside it. A spinner over a machine that is not
+                  running is the animation equivalent of a lie. */}
+              {pending && (
+                <span
+                  aria-hidden
+                  className={
+                    pcOnline === false
+                      ? 'absolute -inset-0.5 rounded-full border-2 border-warning-400/70'
+                      : 'absolute -inset-0.5 rounded-full border-2 border-brand-300/25 border-t-brand-400 motion-safe:animate-spin'
+                  }
+                />
+              )}
+            </span>
+          </button>
+          {menu}
+        </div>
+        <Rule />
+        {/*
+          THE SCREEN'S NAME, AND WHETHER THE SYSTEM IS RUNNING.
+          The link still goes home, exactly as the greeting did.
+        */}
+        {/* CENTRED IN ITS SLOT, which is where the reference puts it: the gap
+            to the face's rule and the gap to the computer's are the same in
+            the image. The two lines inside stay aligned to each other at
+            their start — the pill is wider than the title and the image has
+            them flush on the right — so this is `justify-center` on the row
+            and `items-start` on the column, not `text-center` on both. */}
+        <Link href="/social" className="flex min-h-10 min-w-0 grow items-center justify-center rounded-xl px-0.5">
+          <span className="flex min-w-0 flex-col items-start gap-0.5">
+          <span className="flex min-w-0 max-w-full items-center gap-1.5">
+            {/* BY ITS OWN ATTRIBUTE, like the pill under it. The measured
+                suite read this through "the link's first span", and the
+                moment the two lines were wrapped for centring that selector
+                started returning the title AND the pill as one string. A
+                probe that finds the wrong element cannot fail for the right
+                reason. */}
+            <span data-bar-title dir="auto" className="min-w-0 truncate text-[15px] font-extrabold leading-[19px] text-mist-100">
+              {title}
+            </span>
+            {/* The mark the reference puts beside the title, after the words
+                in reading order — which in RTL is to their left. */}
+            <LayersIcon aria-hidden className="h-[17px] w-[17px] shrink-0 text-brand-400" />
+          </span>
+          {state && (
+            <span
+              data-state-pill
+              /*
+                THE CAPSULE IS THE PAIR THIS MODULE ALREADY OWNS.
+                *
+                * "מתחתיה הצג: 🟢 המערכת פעילה" — the reference draws the
+                * sentence inside a pale green pill, and green is the colour of
+                * exactly one of the four states this line can hold. So the fill
+                * is TONE_TINT and the words TONE_TEXT, keyed by the same tone
+                * that already decided the dot: a paused or an unattended system
+                * gets a capsule that says so, and the pair is the one the stat
+                * strip's chips already wear, which is the pair
+                * worker/test/contrast.test.ts measures.
+              */
+              className={`inline-flex min-w-0 max-w-full items-center gap-1 rounded-full px-2 py-0.5 text-[10.5px] font-extrabold leading-[14px] ${TONE_TINT[state.tone]} ${TONE_TEXT[state.tone]}`}
+            >
+              <span dir="auto" className="min-w-0 truncate">
+                {state.label}
+              </span>
+              {/* The dot closes the pill, which is the side the reference
+                  draws it on. It is the second channel for the tone: a pill
+                  that only differs by fill says nothing in sunlight. */}
+              <span aria-hidden className={`h-1.5 w-1.5 shrink-0 rounded-full ${DOT_FILL[state.tone]}`} />
+            </span>
+          )}
+          </span>
+        </Link>
+        <Rule />
+            {/*
+              THE PAUSE BUTTON IS GONE FROM HERE — "למעלה ב-header יש כפתור
+              עצירה ומתחת גם … לא צריך שיהיה פעמיים, תמחק למעלה".
+              *
+              * It was put here so that stopping everything would be reachable
+              * from any screen, and that reasoning was sound in isolation. On
+              * the screen the owner actually opens it produced two controls for
+              * one switch, 300px apart, one of them a bare icon — and two
+              * buttons for one fact is the thing this module keeps removing,
+              * not adding.
+              *
+              * It is still reachable in two places, both of them named: the
+              * "השהה פרסום" card at the top of the dashboard, and "עצירת
+              * חירום" in settings, which is one tap from here.
+              *
+              * The pause FLAG is still read on this bar. It is what the line
+              * under the greeting says when everything is stopped — "הפרסום
+              * מושהה" — and that line is now the only thing here that speaks
+              * about it. Saying it beats having a second button for it.
+            */}
+            {/*
+              THE COMPUTER, AND WHETHER IT IS RUNNING.
+              *
+              * This replaces the "התוכנה במחשב פועלת ומחוברת" strip that sat
+              * on the dashboard: one fact, on every screen, in the corner
+              * where the other state lives — "למחוק את זה ובמקום להוסיף
+              * אייקון של מחשב למעלה".
+              *
+              * GREEN WHEN IT IS RUNNING, AND NEVER RED — asked for in those
+              * words. Off is the muted grey every other inactive control in
+              * this bar wears, not an alarm: the PC being off in the evening
+              * is the normal state of this product, and a red badge that is
+              * red most nights is a red badge nobody reads. What actually
+              * needs doing still arrives as an alert on the dashboard, in
+              * words, with a button.
+              *
+              * It goes to the connection card, which is where "התחבר
+              * לפייסבוק" now lives.
+            */}
+            <button
+              type="button"
+              onClick={onPc}
+              aria-expanded={pcOpen}
+              aria-controls="pc-panel"
+              aria-label={pcOnline ? 'המחשב מחובר — פרטי החיבור' : 'המחשב לא מחובר — פרטי החיבור'}
+              /* A column, not a grid, and still exactly 44px tall: the icon
+                 (20) plus a 9px label on a 10px line plus the 1px gap is 31px
+                 inside the 44 the touch floor already required, so the word
+                 costs the header no height at all. Rounded-2xl rather than
+                 -full because the box is no longer a circle. */
+              className={`flex h-10 min-w-10 shrink-0 flex-col items-center justify-center gap-px rounded-2xl px-1.5 transition-colors ${
+                pcOpen
+                  ? 'bg-brand-300/12 text-brand-400'
+                  : pcOnline
+                    ? 'text-success-400 hover:bg-success-400/10'
+                    : 'text-mist-500 hover:bg-ink-800 hover:text-mist-100'
+              }`}
+            >
+              <MonitorIcon className="h-5 w-5" />
+              {/*
+                THE WORD, NOT ONLY THE COLOUR — "שיהיה רשום גם מתחת … שזה דלוק
+                או מכובה".
+                *
+                * Colour alone is the wrong carrier for this on its own: it is
+                * the fact people check at a glance, and green-vs-grey is
+                * exactly the distinction that disappears for a colour-blind
+                * reader, in sunlight, or on a dimmed phone at night. The word
+                * says it outright and the colour agrees with it.
+                *
+                * "בודק" while the first read is in flight rather than a blank
+                * or a dash: the slot keeps its width so nothing jumps when the
+                * answer lands, and the button never claims "כבוי" about a
+                * machine nobody has asked about yet.
+              */}
+              <span aria-hidden className="text-[9px] font-extrabold leading-[10px]">
+                {/* "פעיל", which is the word the dashboard reference prints
+                    under this icon. The other two states keep their own
+                    words — this control still answers three questions, not
+                    the one the mock could draw. */}
+                {pcOnline === null ? 'בודק' : pcOnline ? 'פעיל' : 'כבוי'}
+              </span>
+            </button>
+        <Rule />
+            <NotificationBell />
+            {/* Settings had a tab on desktop and lived two taps deep behind
+                "עוד" on a phone, which is where the owner goes after a run
+                goes wrong. It is one tap from every screen now; the route is
+                the existing one. */}
+            <Link
+              href="/social/settings"
+              aria-label="הגדרות"
+              aria-current={settingsActive ? 'page' : undefined}
+              className={`grid h-10 w-10 shrink-0 place-items-center rounded-full transition-colors ${
+                settingsActive ? 'bg-brand-300/12 text-brand-400' : 'text-mist-500 hover:bg-ink-800 hover:text-mist-100'
+              }`}
+            >
+              <GearIcon className="h-5 w-5" />
+            </Link>
+      </div>
+      {children}
+    </header>
+  );
 }
 
 /**
- * First name only.
- *
- * Measured at 375px: the identity block has ~145px for this line beside three
- * 44px controls, and "צהריים טובים, Stas Terehin" truncates in the middle of
- * the surname — the one word on the line that is actually the owner's. The
- * first name always fits, and it is how a product greets someone anyway.
+ * The hairline between two groups of the bar. The reference draws three of
+ * them and they are the only separators in it — there is no second border,
+ * no second shadow and no box around any control.
  */
-function firstName(full: string): string {
-  return full.trim().split(/\s+/)[0] || full.trim();
+function Rule() {
+  return <span aria-hidden className="h-6 w-px shrink-0 bg-ink-700" />;
 }
 
 /**
@@ -653,100 +965,22 @@ export function SocialShell({
         * opacity the 4% showing through is a tint either way — and in exchange
         * the panel below gets a real backdrop to frost.
       */}
-      <header
-        className={`sticky top-0 z-40 border-b border-ink-700 bg-ink-850/96 pt-[max(env(safe-area-inset-top),2px)] ${
-          whoOpen ? '' : 'backdrop-blur-lg'
-        }`}
-      >
-        {/* No vertical padding at all: every child of this row is pinned at
-            the 44px touch floor (the identity link is min-h-11; the three
-            controls are h-11 each), so every pixel of py was dead space
-            around targets that were already tall enough. Measured below the
-            safe area: the row is 44px and the header 45, against 52/53
-            before — 15% shorter with no target touched. */}
-        <div className="mx-auto flex max-w-6xl items-center justify-between gap-2 px-4">
-          {/*
-            WHO, and WHETHER IT IS RUNNING.
-
-            This was the product's own name and tagline — "הפתרון המבריק /
-            פרסום חכם לקבוצות פייסבוק" — which is a thing the owner knows and
-            paid for, printed at the top of every screen of their own tool.
-            The two facts worth that space are the ones that change: who the
-            computer is signed in as, and whether anything is going out right
-            now. The link still goes home, so nothing that was reachable from
-            this corner stopped being reachable.
-          */}
-          {/*
-            THE PICTURE OPENS THE SWITCHER; THE WORDS STILL GO HOME.
-            Two jobs that were one link. Tapping a face to change whose face
-            it is needs no label, and the greeting keeps the way back to the
-            dashboard that this corner has always had.
-          */}
-          <div className="relative flex min-w-0 items-center gap-2.5">
-          <button
-            type="button"
-            onClick={() => setWhoOpen((v) => !v)}
-            aria-expanded={whoOpen}
-            aria-haspopup="menu"
-            /* The words a screen reader gets must not claim it either: while the
-               computer is still moving, this says so. */
-            aria-label={
-              pending
-                ? `מעביר ל${pending.name} — החלפת פרופיל`
-                : who
-                  ? `מפרסם בתור ${who.name} — החלפת פרופיל`
-                  : 'בחירת הפרופיל שמפרסם'
-            }
-            className="shrink-0 rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-300"
-          >
-            {/*
-              THE PICTURE, AND A RING THAT TURNS WHILE THE COMPUTER WORKS.
-              *
-              * Asked for in those words: "בזמן הזה שקורה מעבר שתיהיה אינדיקציה
-              * של טעינה (סוג של טבעת טעינה מסביב לתמונה שזה עובר אלייה)". The
-              * chosen face and name are already up — this is what says the
-              * machine has not finished, and it is a spinner rather than a pulse
-              * because a pulse reads as decoration and a turning ring reads as
-              * work in progress.
-              *
-              * It rides OUTSIDE the picture (a 2px outset, which keeps the whole
-              * control at the header's 44px row height) so nothing of the logo
-              * is covered, and it is aria-hidden: the button's own label already
-              * says "מעביר ל…", and a screen reader has no use for a spinning
-              * border.
-            */}
-            <span className="relative block h-10 w-10 shrink-0">
-              {who?.avatar ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={who.avatar} alt="" className="h-10 w-10 rounded-full object-cover ring-1 ring-ink-700" />
-              ) : (
-                /* No picture, or nobody connected yet: the brand mark holds the
-                   slot rather than a grey circle, so the bar never looks broken
-                   before the first connection. */
-                <span
-                  aria-hidden
-                  className="grad-primary grid h-10 w-10 place-items-center rounded-full bg-brand-500 text-on-brand shadow-[0_4px_12px_rgba(124,58,237,0.25)]"
-                >
-                  <SparklesIcon className="h-5 w-5" />
-                </span>
-              )}
-              {/* Turning only while something is actually turning: with the
-                  computer off the ring goes still and amber, matching the line
-                  under the greeting. A spinner over a machine that is not
-                  running is the animation equivalent of a lie. */}
-              {pending && (
-                <span
-                  aria-hidden
-                  className={
-                    pcOnline === false
-                      ? 'absolute -inset-0.5 rounded-full border-2 border-warning-400/70'
-                      : 'absolute -inset-0.5 rounded-full border-2 border-brand-300/25 border-t-brand-400 motion-safe:animate-spin'
-                  }
-                />
-              )}
-            </span>
-          </button>
-          {whoOpen && (
+      <IdentityBar
+        title={title}
+        who={who}
+        pending={pending}
+        pcOnline={pcOnline}
+        state={state}
+        whoOpen={whoOpen}
+        onAvatar={() => setWhoOpen((v) => !v)}
+        pcOpen={pcOpen}
+        onPc={() => setPcOpen((v) => !v)}
+        settingsActive={isActive('/social/settings', false)}
+        /* The switcher stays with the shell: it reads the profile list, the
+           switch in flight and the note a refused switch leaves behind. The
+           bar only lends it the corner under the face. */
+        menu={
+          whoOpen && (
             <>
               {/* absolute, not fixed: this bar has a backdrop-filter, which
                   makes it the containing block for fixed children — a fixed
@@ -847,121 +1081,9 @@ export function SocialShell({
                 </Link>
               </div>
             </>
-          )}
-          <Link href="/social" className="flex min-h-11 min-w-0 items-center rounded-xl">
-            <span className="min-w-0">
-              <span dir="auto" className="block truncate text-[14px] font-extrabold leading-[18px] text-mist-100">
-                {greetingNow()}
-                {who ? `, ${firstName(who.name)}` : ''} 👋
-              </span>
-              {state && (
-                <span className="mt-0.5 flex items-center gap-1.5">
-                  <span aria-hidden className={`h-2 w-2 shrink-0 rounded-full ${DOT_FILL[state.tone]}`} />
-                  <span dir="auto" className={`truncate text-[11.5px] font-bold leading-[14px] ${TONE_TEXT[state.tone]}`}>
-                    {state.label}
-                  </span>
-                </span>
-              )}
-            </span>
-          </Link>
-          </div>
-          <div className="flex shrink-0 items-center gap-0.5">
-            {/*
-              THE PAUSE BUTTON IS GONE FROM HERE — "למעלה ב-header יש כפתור
-              עצירה ומתחת גם … לא צריך שיהיה פעמיים, תמחק למעלה".
-              *
-              * It was put here so that stopping everything would be reachable
-              * from any screen, and that reasoning was sound in isolation. On
-              * the screen the owner actually opens it produced two controls for
-              * one switch, 300px apart, one of them a bare icon — and two
-              * buttons for one fact is the thing this module keeps removing,
-              * not adding.
-              *
-              * It is still reachable in two places, both of them named: the
-              * "השהה פרסום" card at the top of the dashboard, and "עצירת
-              * חירום" in settings, which is one tap from here.
-              *
-              * The pause FLAG is still read on this bar. It is what the line
-              * under the greeting says when everything is stopped — "הפרסום
-              * מושהה" — and that line is now the only thing here that speaks
-              * about it. Saying it beats having a second button for it.
-            */}
-            {/*
-              THE COMPUTER, AND WHETHER IT IS RUNNING.
-              *
-              * This replaces the "התוכנה במחשב פועלת ומחוברת" strip that sat
-              * on the dashboard: one fact, on every screen, in the corner
-              * where the other state lives — "למחוק את זה ובמקום להוסיף
-              * אייקון של מחשב למעלה".
-              *
-              * GREEN WHEN IT IS RUNNING, AND NEVER RED — asked for in those
-              * words. Off is the muted grey every other inactive control in
-              * this bar wears, not an alarm: the PC being off in the evening
-              * is the normal state of this product, and a red badge that is
-              * red most nights is a red badge nobody reads. What actually
-              * needs doing still arrives as an alert on the dashboard, in
-              * words, with a button.
-              *
-              * It goes to the connection card, which is where "התחבר
-              * לפייסבוק" now lives.
-            */}
-            <button
-              type="button"
-              onClick={() => setPcOpen((v) => !v)}
-              aria-expanded={pcOpen}
-              aria-controls="pc-panel"
-              aria-label={pcOnline ? 'המחשב מחובר — פרטי החיבור' : 'המחשב לא מחובר — פרטי החיבור'}
-              /* A column, not a grid, and still exactly 44px tall: the icon
-                 (20) plus a 9px label on a 10px line plus the 1px gap is 31px
-                 inside the 44 the touch floor already required, so the word
-                 costs the header no height at all. Rounded-2xl rather than
-                 -full because the box is no longer a circle. */
-              className={`flex h-11 min-w-11 shrink-0 flex-col items-center justify-center gap-px rounded-2xl px-1.5 transition-colors ${
-                pcOpen
-                  ? 'bg-brand-300/12 text-brand-400'
-                  : pcOnline
-                    ? 'text-success-400 hover:bg-success-400/10'
-                    : 'text-mist-500 hover:bg-ink-800 hover:text-mist-100'
-              }`}
-            >
-              <MonitorIcon className="h-5 w-5" />
-              {/*
-                THE WORD, NOT ONLY THE COLOUR — "שיהיה רשום גם מתחת … שזה דלוק
-                או מכובה".
-                *
-                * Colour alone is the wrong carrier for this on its own: it is
-                * the fact people check at a glance, and green-vs-grey is
-                * exactly the distinction that disappears for a colour-blind
-                * reader, in sunlight, or on a dimmed phone at night. The word
-                * says it outright and the colour agrees with it.
-                *
-                * "בודק" while the first read is in flight rather than a blank
-                * or a dash: the slot keeps its width so nothing jumps when the
-                * answer lands, and the button never claims "כבוי" about a
-                * machine nobody has asked about yet.
-              */}
-              <span aria-hidden className="text-[9px] font-extrabold leading-[10px]">
-                {pcOnline === null ? 'בודק' : pcOnline ? 'פועל' : 'כבוי'}
-              </span>
-            </button>
-            <NotificationBell />
-            {/* Settings had a tab on desktop and lived two taps deep behind
-                "עוד" on a phone, which is where the owner goes after a run
-                goes wrong. It is one tap from every screen now; the route is
-                the existing one. */}
-            <Link
-              href="/social/settings"
-              aria-label="הגדרות"
-              aria-current={isActive('/social/settings', false) ? 'page' : undefined}
-              className={`grid h-11 w-11 shrink-0 place-items-center rounded-full transition-colors ${
-                isActive('/social/settings', false) ? 'bg-brand-300/12 text-brand-400' : 'text-mist-500 hover:bg-ink-800 hover:text-mist-100'
-              }`}
-            >
-              <GearIcon className="h-5 w-5" />
-            </Link>
-          </div>
-        </div>
-
+          )
+        }
+      >
         {/*
           THE CONNECTION, AS A PANEL THAT DROPS FROM THE BAR.
           *
@@ -1045,7 +1167,7 @@ export function SocialShell({
             })}
           </ul>
         </nav>
-      </header>
+      </IdentityBar>
       {/*
         The structural net. Four separate bugs in this module were one long
         child widening a track and taking the whole page sideways with it, so
@@ -1055,7 +1177,7 @@ export function SocialShell({
         column shrink in the first place. Sheets are portalled to <body>, so
         nothing that must escape the page is clipped by this.
       */}
-      <main className={`crm-page mx-auto min-w-0 max-w-6xl overflow-x-clip px-4 ${hideTitle ? 'pb-5 pt-3' : 'py-5'}`}>
+      <main className={`crm-page mx-auto min-w-0 max-w-6xl overflow-x-clip px-4 ${hideTitle ? 'pb-4 pt-1' : 'py-5'}`}>
         {/* The screen's own title, sized against the content rather than
             squeezed into a coloured bar, with its primary action beside it.
             Hidden on the dashboard, where the first card carries the heading —

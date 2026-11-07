@@ -1943,7 +1943,7 @@ export function StatStrip({ items }: { items: StatStripItem[] }) {
           >
             <Link
               href={it.href}
-              className="flex flex-1 flex-col items-center px-1 pb-1 pt-1.5 text-center transition-transform focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-300 active:scale-[0.985]"
+              className="flex flex-1 flex-col items-center px-1 pb-0.5 pt-1 text-center transition-transform focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-300 active:scale-[0.985]"
             >
               <span className={`inline-flex ${TONE_TEXT[it.tone]}`}>{it.icon}</span>
               {/* The figure leads the column — the label is read second, to

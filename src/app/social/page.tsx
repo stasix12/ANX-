@@ -1721,7 +1721,7 @@ export default function SocialDashboard() {
         /* The silhouette of what is about to land, not a spinner over a
            different shape: the first block is a full-width card now, and a
            skeleton of four tiles alone made the page jump when the data came. */
-        <div className="space-y-5">
+        <div className="space-y-3">
           <Skeleton className="h-[248px] rounded-card" />
           {/* ONE panel, 86px — the shape that is about to land. Four skeleton
               boxes here made the page jump when the data came and the strip
@@ -1735,7 +1735,7 @@ export default function SocialDashboard() {
            <main> a 340ms crm-child-in with staggered delays; promoting these
            blocks to direct children would opt every one of them into an
            entrance outside this product's 150-250ms band. */
-        <div className="space-y-5">
+        <div className="space-y-3">
           {/*
             The only alert bar left.
             `paused`, `stalled` and `needsHuman` all moved into the system
@@ -1772,7 +1772,7 @@ export default function SocialDashboard() {
             way two independent polls would.
           */}
           <div className="grid grid-cols-2 gap-2.5 [&>*]:min-w-0">
-            <ButtonLink href="/social/posts/new" size="lg" variant={data.control.paused ? 'secondary' : 'primary'} className="flex-col !items-start gap-0 py-3">
+            <ButtonLink href="/social/posts/new" size="lg" variant={data.control.paused ? 'secondary' : 'primary'} className="flex-col !items-start gap-0 !py-2">
               <span className="flex items-center gap-1.5 text-[15px] font-extrabold leading-5">
                 <PlusIcon aria-hidden className="h-4 w-4" />
                 פוסט חדש
@@ -1783,7 +1783,7 @@ export default function SocialDashboard() {
               size="lg"
               variant={data.control.paused ? 'primary' : 'secondary'}
               busy={busy === 'pause-all' || busy === 'resume'}
-              className="flex-col !items-start gap-0 py-3"
+              className="flex-col !items-start gap-0 !py-2"
               onClick={() =>
                 data.control.paused
                   ? act('resume', () => setPaused(false), 'הפרסום חודש.')

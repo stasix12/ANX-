@@ -371,6 +371,21 @@ export function SpinnerIcon(props: IconProps) {
   );
 }
 
+/**
+ * A stack of three plates — the mark the dashboard reference puts beside
+ * "לוח בקרה", and the same glyph the publishing queue's own heading already
+ * draws inline inside LiveFlow. One definition now, two callers.
+ */
+export function LayersIcon(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <path d="m12 3 9 4.6-9 4.6-9-4.6z" />
+      <path d="m3 12.4 9 4.6 9-4.6" />
+      <path d="m3 16.9 9 4.6 9-4.6" />
+    </svg>
+  );
+}
+
 export function HomeIcon(props: IconProps) {
   return (
     <svg {...base} {...props}>

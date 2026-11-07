@@ -125,7 +125,11 @@ export function NotificationBell() {
            a filled grey puck around all three turned the corner into a row of
            identical buttons and the bell stopped reading as an alert at all.
            brand-700 on the bar measures 8.9:1. */
-        className={`relative grid h-11 w-11 shrink-0 place-items-center rounded-full text-brand-700 transition-colors ${
+        /* h-11 → h-10, with the gear and the computer beside it: the bar the
+           dashboard reference draws is 50px tall and 44px controls do not fit
+           in it with the white the image leaves around them. 40 is the floor
+           this product hit-tests every control against. */
+        className={`relative grid h-10 w-10 shrink-0 place-items-center rounded-full text-brand-700 transition-colors ${
           unread > 0 ? 'bg-brand-300/12' : 'hover:bg-ink-800'
         }`}
       >

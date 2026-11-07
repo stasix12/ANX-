@@ -1860,7 +1860,15 @@ body:has(.social-theme) .site-backdrop {
 .anxf {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  /*
+   * 12px → 8px, with the rest of the dashboard's air.
+   *
+   * "יש לצמצם את השטח האנכי של לוח הבקרה בכ־20%–30% ככל שניתן, בלי לפגוע
+   *  בקריאות או בנוחות השימוש." Five blocks stand in this column, so every
+   * pixel of this gap is four on the screen. Nothing inside them moved for
+   * it and no block was removed.
+   */
+  gap: 8px;
 }
 
 /* ── 1: the banner ───────────────────────────────────────────────────── */
@@ -1882,7 +1890,7 @@ body:has(.social-theme) .site-backdrop {
      it, which is where the reference has him. */
   align-items: end;
   gap: 8px;
-  padding: 10px 12px 0;
+  padding: 8px 10px 0;
   border-radius: var(--radius-card);
   background: linear-gradient(
     118deg,
@@ -1917,8 +1925,8 @@ body:has(.social-theme) .site-backdrop {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 7px;
-  padding-bottom: 12px;
+  gap: 4px;
+  padding-bottom: 6px;
 }
 .anxf h2 {
   margin: 0;
@@ -1927,9 +1935,9 @@ body:has(.social-theme) .site-backdrop {
      "פרסום אחד" — so it is allowed to wrap, balanced, rather than shrink to
      fit a number nobody can predict. */
   text-wrap: balance;
-  font-size: clamp(16px, 4.8vw, 22px);
+  font-size: clamp(15px, 4.4vw, 20px);
   font-weight: 800;
-  line-height: 1.2;
+  line-height: 1.16;
   letter-spacing: -0.4px;
   color: var(--color-on-brand);
 }
@@ -1937,8 +1945,8 @@ body:has(.social-theme) .site-backdrop {
   margin: 0;
   display: flex;
   align-items: center;
-  gap: 7px;
-  padding: 3px 11px 4px;
+  gap: 6px;
+  padding: 2px 10px 3px;
   border-radius: 999px;
   font-size: clamp(10px, 2.9vw, 12.5px);
   font-weight: 700;
@@ -2031,8 +2039,8 @@ body:has(.social-theme) .site-backdrop {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 5px;
-  padding: 10px 2px 9px;
+  gap: 3px;
+  padding: 6px 2px 5px;
   border-radius: var(--radius-lg);
   background: var(--color-ink-850);
   border: 1px solid var(--color-ink-700);
@@ -2040,8 +2048,8 @@ body:has(.social-theme) .site-backdrop {
   transition: background 220ms ease, border-color 220ms ease, box-shadow 220ms ease;
 }
 .anxf-ic {
-  width: 24px;
-  height: 24px;
+  width: 20px;
+  height: 20px;
   color: var(--color-mist-300);
 }
 .anxf-ic svg { width: 100%; height: 100%; }
@@ -2108,7 +2116,7 @@ body:has(.social-theme) .site-backdrop {
   background: var(--color-ink-850);
   border: 1px solid color-mix(in oklab, var(--color-brand-500) 26%, transparent);
   box-shadow: 0 2px 6px rgba(40, 20, 80, 0.04), 0 10px 26px rgba(40, 20, 80, 0.07);
-  padding: 10px 11px 11px;
+  padding: 8px 10px 9px;
 }
 .anxf-now-top {
   display: flex;
@@ -2124,6 +2132,7 @@ body:has(.social-theme) .site-backdrop {
 .anxf-now-kicker {
   margin: 0;
   font-size: 10.5px;
+  line-height: 1.25;
   font-weight: 700;
   color: var(--color-mist-500);
 }
@@ -2133,6 +2142,7 @@ body:has(.social-theme) .site-backdrop {
   align-items: center;
   gap: 5px;
   font-size: clamp(13px, 3.9vw, 16px);
+  line-height: 1.25;
   font-weight: 800;
   color: var(--color-mist-100);
 }
@@ -2140,12 +2150,13 @@ body:has(.social-theme) .site-backdrop {
 .anxf-now-step {
   margin: 1px 0 0;
   font-size: clamp(10.5px, 3.1vw, 12.5px);
+  line-height: 1.25;
   font-weight: 600;
   color: var(--color-mist-300);
 }
 .anxf-now-cover {
-  width: 66px;
-  height: 52px;
+  width: 62px;
+  height: 48px;
   flex: none;
   border-radius: 9px;
   overflow: hidden;
@@ -2155,10 +2166,10 @@ body:has(.social-theme) .site-backdrop {
   color: color-mix(in oklab, var(--color-brand-500) 60%, transparent);
 }
 .anxf-now-cover img { width: 100%; height: 100%; object-fit: cover; }
-.anxf-now-cover svg { width: 30px; height: 30px; }
+.anxf-now-cover svg { width: 28px; height: 28px; }
 
 .anxf-bar {
-  margin-top: 9px;
+  margin-top: 7px;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -2170,7 +2181,7 @@ body:has(.social-theme) .site-backdrop {
      the figure at the start of the row — so the track carries its own
      direction rather than inheriting the page's. */
   direction: ltr;
-  height: 19px;
+  height: 16px;
   border-radius: 999px;
   background: var(--color-ink-800);
   overflow: hidden;
@@ -2225,14 +2236,14 @@ body:has(.social-theme) .site-backdrop {
   background: var(--color-ink-850);
   border: 1px solid var(--color-ink-700);
   box-shadow: 0 2px 6px rgba(40, 20, 80, 0.03), 0 10px 26px rgba(40, 20, 80, 0.06);
-  padding: 9px 10px 10px;
+  padding: 7px 9px 8px;
 }
 .anxf-qtop {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  margin-bottom: 8px;
+  margin-bottom: 6px;
 }
 .anxf-all {
   display: inline-flex;
@@ -2280,7 +2291,7 @@ body:has(.social-theme) .site-backdrop {
    * inside it as it was always meant to.
    */
   grid-template-columns: minmax(0, 1fr);
-  gap: 7px;
+  gap: 5px;
 }
 .anxf-queue li {
   border-radius: var(--radius-lg);
@@ -2296,7 +2307,11 @@ body:has(.social-theme) .site-backdrop {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 9px 10px;
+  /* "צמצם רווחים מיותרים והשתמש בשורות קומפקטיות" — 9px → 6px. The row holds
+     a name over a time, which is 32px of text; the 44px floor below is what
+     still decides the row's height, so this is air coming off and not a tap
+     target. */
+  padding: 5px 9px;
   min-height: 44px;
 }
 .anxf-row-go {
@@ -2365,8 +2380,10 @@ body:has(.social-theme) .site-backdrop {
   color: #fff;
 }
 .anxf-fb svg { width: 17px; height: 17px; }
-.anxf-fb-lg { width: 60px; height: 60px; border-radius: 17px; }
-.anxf-fb-lg svg { width: 38px; height: 38px; }
+/* 60 → 46: the mark is decoration and it was the tallest thing in the row,
+   so it alone set the height of the card around a 52px picture. */
+.anxf-fb-lg { width: 46px; height: 46px; border-radius: 14px; }
+.anxf-fb-lg svg { width: 29px; height: 29px; }
 /* The banner's own, which the reference draws as a lit app tile rather than
    a flat square: Facebook's blue lifted towards white at the top-left. */
 .anxf-fb-xl {

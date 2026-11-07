@@ -191,8 +191,14 @@ export function IdentityBar({
         * the 4px of padding round them is the white the reference leaves.
         * 44 would have made this bar taller than the one it replaces.
       */}
-      <div className="mx-auto flex max-w-6xl items-center gap-1 rounded-[20px] border border-ink-700 bg-ink-850 px-1.5 py-1 shadow-[0_4px_14px_-6px_rgba(46,16,101,0.18)]">
-        <div className="relative flex shrink-0 items-center">
+      <div className="mx-auto flex max-w-6xl items-center gap-1 rounded-[20px] border border-ink-700 bg-ink-850 py-1 pe-1.5 ps-3 shadow-[0_4px_14px_-6px_rgba(46,16,101,0.18)]">
+        {/* me-2.5 on the face, and only on the face. Measured off the
+            reference: its avatar stands 16px clear of the hairline beside it
+            while every other group in the row is 4px from its neighbour — the
+            portrait is the one round thing in a row of squares and it needs
+            the margin to read as one. At the row's own gap-1 it sat 3.5px
+            off the rule and the two read as a single object. */}
+        <div className="relative me-2.5 flex shrink-0 items-center">
           <button
             type="button"
             onClick={onAvatar}
@@ -278,7 +284,7 @@ export function IdentityBar({
                 started returning the title AND the pill as one string. A
                 probe that finds the wrong element cannot fail for the right
                 reason. */}
-            <span data-bar-title dir="auto" className="min-w-0 truncate text-[15px] font-extrabold leading-[19px] text-mist-100">
+            <span data-bar-title dir="auto" className="min-w-0 truncate text-[17px] font-extrabold leading-[21px] text-mist-100">
               {title}
             </span>
             {/* The mark the reference puts beside the title, after the words
@@ -407,7 +413,7 @@ export function IdentityBar({
               aria-label="הגדרות"
               aria-current={settingsActive ? 'page' : undefined}
               className={`grid h-10 w-10 shrink-0 place-items-center rounded-full transition-colors ${
-                settingsActive ? 'bg-brand-300/12 text-brand-400' : 'text-mist-500 hover:bg-ink-800 hover:text-mist-100'
+                settingsActive ? 'bg-brand-300/12 text-brand-400' : 'text-mist-300 hover:bg-ink-800 hover:text-mist-100'
               }`}
             >
               <GearIcon className="h-5 w-5" />
@@ -424,7 +430,12 @@ export function IdentityBar({
  * no second shadow and no box around any control.
  */
 function Rule() {
-  return <span aria-hidden className="h-6 w-px shrink-0 bg-ink-700" />;
+  /* 28×1.5, off the reference: its rules measure 97–98px of a 167px bar
+     (0.58 of its height) and 5px wide at that scale, which is 29 and 1.5 on
+     the 50px bar here. They were h-6 w-px — a fifth shorter and a third
+     thinner than the image draws them, which is what made the four groups
+     read as three. */
+  return <span aria-hidden className="h-7 w-[1.5px] shrink-0 bg-ink-700" />;
 }
 
 /**

@@ -129,7 +129,12 @@ export function NotificationBell() {
            dashboard reference draws is 50px tall and 44px controls do not fit
            in it with the white the image leaves around them. 40 is the floor
            this product hit-tests every control against. */
-        className={`relative grid h-10 w-10 shrink-0 place-items-center rounded-full text-brand-700 transition-colors ${
+        /* brand-700 → brand-600. Sampled off the dashboard reference, the
+           bell's stroke is rgb(0,56,165); brand-700 is #0e3686 and brand-600
+           is #1244ab, which is the nearer of the two by a wide margin. It is
+           still 8:1 on this bar, so the reason brand-700 was chosen — the one
+           coloured mark in the row has to read as one — is unchanged. */
+        className={`relative grid h-10 w-10 shrink-0 place-items-center rounded-full text-brand-600 transition-colors ${
           unread > 0 ? 'bg-brand-300/12' : 'hover:bg-ink-800'
         }`}
       >

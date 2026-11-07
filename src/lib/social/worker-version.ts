@@ -1178,4 +1178,4 @@ export const WORKER_VERSION = '4.52.0';
    on an older build publishes exactly as it did, from a queue whose instants
    the dashboard has corrected. Bumping the version would make every
    customer's machine download and restart for code it cannot reach. */
-export const WORKER_FINGERPRINT = 'b3587bb7d45906c5';
+export const WORKER_FINGERPRINT = '444502dab96db476';

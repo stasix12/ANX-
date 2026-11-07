@@ -469,12 +469,24 @@ export function windowedStagger(
  * A LATER day is never at risk, so it needs no guard: an opening that has not
  * happened yet cannot already have been used.
  *
- * THE DAY IS STILL THE ROUND'S WHEN NOTHING EARLIER IS OPEN. `headAt` is the
- * earliest row still waiting, so a round planned for tomorrow morning whose
- * hour merely moved stays tomorrow morning — today's opening is behind us by
- * then, and nextOpeningAt() skips it. Anchoring at `now` instead of at an
- * OPENING would have dragged that round into tonight, which is why the
- * pull-back is expressed in openings and not in "the first legal moment".
+ * THE DAY IS STILL THE ROUND'S WHEN TODAY IS NOT AVAILABLE — when today is
+ * not a chosen day, when its window is switched off, or when the day is
+ * spent. Then there is no earlier day to come back to and `headAt`'s own
+ * answer stands.
+ *
+ * AND THIS PARAGRAPH USED TO SAY THE OPPOSITE OF THE CODE BELOW IT, which is
+ * worth leaving a mark about. It read: "a round planned for tomorrow morning
+ * whose hour merely moved stays tomorrow morning — today's opening is behind
+ * us by then, and nextOpeningAt() skips it … the pull-back is expressed in
+ * openings and not in 'the first legal moment'." Every clause of that
+ * belonged to the first draft, which an adversarial review broke by running
+ * it: expressing the pull-back in openings is exactly what lost a day whose
+ * opening had already passed, nextOpeningAt() has been deleted, and the
+ * pull-back IS now "the first legal moment, if it falls on today". A round
+ * planned for tomorrow whose hour merely moved therefore DOES come to today
+ * when today is chosen, open and unspent — deliberately, and the cost of that
+ * is named further down. A stale comment in this file is not cosmetic: it is
+ * the thing the next reader trusts instead of reading the four lines.
  *
  * TWO CONDITIONS AND NOT ONE MORE, because a guard that cannot fire is a
  * guard no test can hold — and three of them could not. Mutation testing

@@ -220,7 +220,13 @@ const is = (c: unknown, msg: string) => { checks += 1; assert.ok(c, msg); };
  * — and the gate the engine actually consults does not. Nothing on any screen
  * disagrees with anything else. It is simply not true.
  *
- * There are three writers of this pair in the product. All three are checked.
+ * There were three writers of this pair in the product, and as of 07.11.2026
+ * there are TWO for the group half. The settings screen stopped being one when
+ * "מרווח נוסף בין קבוצות" was deleted at the owner's request: a screen
+ * with no box for a number has no business writing it, and while it still did,
+ * it wrote a MOUNT-TIME copy that reverted a floor the campaign panel had just
+ * lowered. It is still a writer of the ACCOUNT half, which it does have a box
+ * for, and that is checked below in full.
  * ───────────────────────────────────────────────────────────────────────── */
 {
   const client = readFileSync(new URL('../../src/lib/social/client.ts', import.meta.url), 'utf8');
@@ -241,8 +247,41 @@ const is = (c: unknown, msg: string) => { checks += 1; assert.ok(c, msg); };
   );
 
   const settings = readFileSync(new URL('../../src/app/social/settings/page.tsx', import.meta.url), 'utf8');
-  is(/minGapSeconds: gapFields\.minGapSeconds/.test(settings), 'the settings screen writes the seconds too');
-  is(/groupMinGapSeconds: gapFields\.groupMinGapSeconds/.test(settings), 'both halves there as well');
+  is(/minGapSeconds: keepOrDerive\(/.test(settings), 'the settings screen writes the seconds beside its minutes box, or that box stops governing');
+  /*
+   * AND THE GROUP HALF IS NOT WRITTEN FROM THERE AT ALL ANY MORE.
+   *
+   * This asked for `groupMinGapSeconds: gapFields.groupMinGapSeconds` and
+   * called it "both halves there as well". That was right while the screen
+   * had a box for the group surcharge. The box is gone, and the write went
+   * with it — because what was left was not a control, it was a snapshot
+   * taken when the screen mounted, spread over the freshly re-read row: a
+   * campaign panel set to "30 שניות" came back as 20 minutes on the next
+   * שמור. The invariant this section defends — every writer of the pair
+   * writes both units — is kept by REMOVING a writer, which is the one way to
+   * keep it that cannot drift.
+   */
+  is(!/saveSetting\('browser'/.test(settings), 'and it is no longer a writer of the group half in any form');
+  /*
+   * AND THE SAVE'S KEY SET, READ OUT RATHER THAN GREPPED FOR. Three pins in
+   * this change were written as "the name must not appear" and all three
+   * matched a COMMENT instead of code — including, twice, the page's own
+   * explanation of what had been removed. The question is never whether a
+   * name is mentioned; it is which keys the write actually carries. So this
+   * lists them.
+   */
+  {
+    const from = settings.indexOf("await saveSetting('limits', {");
+    is(from > 0, 'the limits save was located');
+    const body = settings.slice(from, settings.indexOf('});', from));
+    const keys = [...body.matchAll(/^\s{8}([A-Za-z][A-Za-z0-9]*):/gm)].map((m) => m[1]).sort();
+    eq(
+      keys.join(','),
+      'dedupeDays,maxPerDay,maxPerTargetPerDay,minGapMinutes,minGapSeconds',
+      'the settings save carries exactly its four boxes and the account seconds — no group half, and nothing it has no control for',
+    );
+    is(body.includes('...curLimits,'), 'onto the row as it is now, so every other key survives untouched');
+  }
 
   /*
    * ─── AND IT IS A ONE-WAY RATCHET IF IT DERIVES THEM BLINDLY ────────────

@@ -90,14 +90,49 @@ for (const key of ['concurrentJobs', 'maxPerCampaignPerDay', 'groupMinGapMinutes
   is(!settings.includes(`setBrowser({ ...browser, ${key}:`), `and nothing writes ${key} from this screen`);
 }
 /*
- * BUT THE SAVE STILL CARRIES THEM. The screen loads `browser` whole and
- * writes it whole, so a field with no input keeps the number already stored
- * — a save made from this screen must not quietly reset a customer's pacing
- * to the shipped defaults. groupMinGapMinutes is still read here for exactly
- * that reason, and the seconds column is still derived from it.
+ * ───── AND THE SAVE NO LONGER TOUCHES THE ROW AT ALL ──────────────────
+ *
+ * THIS PIN USED TO BE WRONG, and the way it was wrong is the lesson.
+ *
+ * It said "the screen loads `browser` whole and writes it whole, so a field
+ * with no input keeps the number already stored", and asserted
+ * `groupMinGapSeconds: keepOrDerive(browser.groupMinGapMinutes, ...)`. That
+ * line is in the gapFields object, NOT in the write — so the pin was green
+ * while the write itself said `{ ...DEFAULT_BROWSER }`. It was tested: the
+ * whole suite passed on a save that resets every customer's pacing to the
+ * shipped defaults.
+ *
+ * Worse, the sentence it was defending had stopped being true. `...browser`
+ * was safe only while an input wrote that state. With the inputs deleted it
+ * is a mount-time snapshot, and spreading it over the freshly re-read row
+ * REVERTS anything written there while the screen sat open — a campaign panel
+ * set to "30 שניות" came back as 20 minutes on the next שמור. The save's own
+ * docblock in the page was written to prevent exactly that, and removing the
+ * inputs re-created it underneath the docblock.
+ *
+ * So the invariant changed from "writes it whole" to "does not write it",
+ * which is the one a pin can actually hold: a screen with no input for a row
+ * has no business writing that row.
  */
-is(/groupMinGapSeconds: keepOrDerive\(browser\.groupMinGapMinutes, curBrowser\.groupMinGapSeconds\)/.test(settings),
-  'and a save still carries the stored pacing through untouched, so removing the inputs cannot reset it');
+is(!/saveSetting\('browser'/.test(settings),
+  'the settings screen does not write the browser row at all — nothing on it edits one field of it');
+is(!/saveSetting\('business'/.test(settings),
+  'nor the business row, whose tab went the same way');
+/* And the one row it does write, it writes BY NAME — four fields, each of
+   which is a box on this screen. A spread of the whole form state is what
+   carried the stale snapshot, so its absence is the pin. */
+is(!/saveSetting\('limits', \{ \.\.\.curLimits, \.\.\.limits/.test(settings),
+  'and the limits save no longer spreads the whole form over the stored row');
+for (const key of ['maxPerDay', 'maxPerTargetPerDay', 'minGapMinutes', 'dedupeDays']) {
+  is(new RegExp(`${key}: limits\\.${key},`).test(settings), `${key} is still saved, by name`);
+}
+/* The two keys whose inputs were deleted must NOT be named in the save — if
+   they were, the screen would be writing a value nobody can see or change. */
+for (const key of ['blockRepeatToSameTarget', 'repeatFloorHours']) {
+  is(!new RegExp(`${key}: limits\\.${key}`).test(settings), `${key} is not written from this screen either`);
+}
+is(/minGapSeconds: keepOrDerive\(limits\.minGapMinutes, curLimits\.minGapSeconds\)/.test(settings),
+  'the one gap box still carries its seconds half, so typing minutes cannot silently double a 30-second floor');
 
 const worker = read('worker/social-worker.ts');
 const types = read('src/lib/social/types.ts');

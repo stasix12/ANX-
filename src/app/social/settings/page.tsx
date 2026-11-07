@@ -5,8 +5,8 @@ import { Stamp } from '@/components/social/DateTime';
 import { ScreenProbe } from '@/components/social/ScreenProbe';
 import { SocialShell } from '@/components/social/SocialShell';
 import { Button, Card, Field, Loading, Notice, SegmentedControl, inputClass, useToast } from '@/components/social/ui';
-import { getBrowserSettings, getBusiness, getControl, getLimits, loadAdminPresence, saveSetting } from '@/lib/social/client';
-import { DEFAULT_BROWSER, DEFAULT_BUSINESS, DEFAULT_LIMITS, type AdminPresence, type BrowserSettings, type BusinessSettings, type ControlSettings, type LimitsSettings } from '@/lib/social/types';
+import { getBrowserSettings, getControl, getLimits, loadAdminPresence, saveSetting } from '@/lib/social/client';
+import { DEFAULT_BROWSER, DEFAULT_LIMITS, type AdminPresence, type BrowserSettings, type ControlSettings, type LimitsSettings } from '@/lib/social/types';
 import { accountGapLabel, accountGapSeconds } from '@/lib/social/rules';
 import { friendlyMessage } from '@/lib/social/errors';
 
@@ -29,7 +29,6 @@ export default function SettingsPage() {
   const [tab, setTab] = useState<Tab>('limits');
   const [limits, setLimits] = useState<LimitsSettings>(DEFAULT_LIMITS);
   const [control, setControl] = useState<ControlSettings>({ paused: false, rateLimitedUntil: null });
-  const [business, setBusiness] = useState<BusinessSettings>(DEFAULT_BUSINESS);
   const [browser, setBrowser] = useState<BrowserSettings>(DEFAULT_BROWSER);
   const [loaded, setLoaded] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -73,7 +72,6 @@ export default function SettingsPage() {
     Promise.all([
       getLimits(),
       getControl(),
-      getBusiness(),
       getBrowserSettings(),
       /* Swallowed on purpose: a customer, or a deployment with no allowlist
          configured, must not see "טעינה נכשלה" over a panel they were never
@@ -82,11 +80,10 @@ export default function SettingsPage() {
          simply does not appear and nothing on this screen is wrong. */
       loadAdminPresence().catch(() => null),
     ])
-      .then(([l, c, b, br, pres]) => {
+      .then(([l, c, br, pres]) => {
         setPresence(pres);
         setLimits(l);
         setControl(c);
-        setBusiness(b);
         setBrowser(br);
         setLoaded(true);
       })
@@ -130,9 +127,24 @@ export default function SettingsPage() {
    * un-paused the account, erased a live cooldown and undid a gap the owner
    * had just tuned, with no way for them to know it had.
    *
-   * So: re-read, then spread this form's fields over what came back. `control`
-   * is not here at all — its two controls write themselves on the tap, since a
-   * stop that waits for a second tap on שמור is not a stop.
+   * SO IT NO LONGER SPREADS A FORM OBJECT. It re-reads the row and writes
+   * back the FOUR FIELDS THIS SCREEN STILL HAS A BOX FOR, by name.
+   *
+   * That is not tidiness, it is the bug above. `...limits` was safe only while
+   * every key in it had an input, because then the stale copy WAS the owner's
+   * decision. Once the six controls were deleted (07.11.2026) two of these
+   * three rows had no live field left at all, and spreading a mount-time
+   * snapshot over a fresh re-read is exactly the ten-minutes-open defect this
+   * docblock was written to prevent — re-created, silently, by removing the
+   * inputs. It was caught by review before anyone met it.
+   *
+   * `browser` and `business` are therefore NOT WRITTEN FROM HERE AT ALL. No
+   * box on this screen edits either one. `browser` is still READ, for the
+   * sub-minute notice below; nothing reads `business`.
+   *
+   * `control` is not here either: its one remaining write (the Meta hold)
+   * happens on the tap, since a stop that waits for a second tap on שמור is
+   * not a stop.
    */
   /*
    * A REF, BECAUSE `busy` IS A RENDER TOO LATE.
@@ -143,8 +155,8 @@ export default function SettingsPage() {
    * the first click — the second and third handlers run before it exists.
    *
    * It matters more than a wasted request. save() is a read-modify-write: it
-   * re-reads limits, business and browser, merges the form over them and
-   * writes back. Three of those interleaving can land a merge built on a row
+   * re-reads the limits row, puts this screen's four numbers onto it and
+   * writes it back. Two of those interleaving can land a write built on a row
    * that a sibling save has already replaced. And there are two "שמור"
    * buttons on this screen, both calling this, so it does not even take a
    * double-tap.
@@ -161,12 +173,13 @@ export default function SettingsPage() {
     saving.current = true;
     setBusy(true);
     try {
-      const [curLimits, curBrowser, curBusiness] = await Promise.all([getLimits(), getBrowserSettings(), getBusiness()]);
+      const curLimits = await getLimits();
       /*
        * ─── THE MINUTE FIELDS CARRY THEIR SECONDS WITH THEM ────────────────
        *
-       * The two gap boxes on this screen are whole minutes, and the pair they
-       * write also has a `*Seconds` half that accountGapSeconds() PREFERS when
+       * The gap box on this screen is whole minutes (there were two until the
+       * group-pacing card was deleted; this is the account one), and the pair it
+       * writes also has a `*Seconds` half that accountGapSeconds() PREFERS when
        * it is present. So once anything has written seconds — the campaign
        * panel lowering the floor to 30s does — typing "45" here and pressing
        * שמור would say "ההגדרות נשמרו", show 45, and leave the engine on
@@ -201,15 +214,20 @@ export default function SettingsPage() {
         if (Number.isFinite(stored) && stored >= 0 && Math.ceil(stored / 60) === minutes) return stored;
         return minutes * 60;
       };
-      const gapFields = {
+      /*
+       * BY NAME, AND ONLY THESE FOUR. Each one is a box a few hundred pixels
+       * above; every other key in the row — blockRepeatToSameTarget and
+       * repeatFloorHours among them — comes through from `curLimits`
+       * untouched, because this screen has nothing to say about them.
+       */
+      await saveSetting('limits', {
+        ...curLimits,
+        maxPerDay: limits.maxPerDay,
+        maxPerTargetPerDay: limits.maxPerTargetPerDay,
+        minGapMinutes: limits.minGapMinutes,
+        dedupeDays: limits.dedupeDays,
         minGapSeconds: keepOrDerive(limits.minGapMinutes, curLimits.minGapSeconds),
-        groupMinGapSeconds: keepOrDerive(browser.groupMinGapMinutes, curBrowser.groupMinGapSeconds),
-      };
-      await Promise.all([
-        saveSetting('limits', { ...curLimits, ...limits, minGapSeconds: gapFields.minGapSeconds }),
-        saveSetting('business', { ...curBusiness, ...business }),
-        saveSetting('browser', { ...curBrowser, ...browser, groupMinGapSeconds: gapFields.groupMinGapSeconds }),
-      ]);
+      });
       toast('ההגדרות נשמרו.');
     } catch (err) {
       toast(friendlyMessage(err, 'השמירה נכשלה.'), 'error');
@@ -224,8 +242,10 @@ export default function SettingsPage() {
    *
    * The emergency stop that used to live beside it is gone with the other five
    * controls — it wrote the same control.paused as the dashboard's own
-   * "השהה פרסום / הפעל פרסום" button, which is now the only writer of
-   * that field in the product.
+   * "השהה פרסום / הפעל פרסום" button. The dashboard is now the only
+   * SCREEN that can pause, through four calls in that one file: page.tsx:1792
+   * and :1793 are the button itself, :741 is the stop that "בטל הכל" does on
+   * the way to discarding, and :1973 is the resume on the stopped-run card.
    *
    * This one stays because nothing else can do it: it clears a hold FACEBOOK
    * put on the account, which the system can enter on its own and which the
@@ -274,11 +294,14 @@ export default function SettingsPage() {
        * connection, or on a failed first read (which leaves `loaded` false and
        * renders nothing but a red banner and this button), one tap ran save()
        * — which merges the form state over the stored rows. That form state is
-       * still DEFAULT_LIMITS / DEFAULT_BUSINESS / DEFAULT_BROWSER at that
-       * point, so the tap wrote the factory defaults over everything: testMode
-       * back to true (every later publish capped at one group), the phone and
-       * the WhatsApp link wiped out of every future post, and the gap reset.
-       * The toast then said "ההגדרות נשמרו".
+       * still DEFAULT_LIMITS at that point, so the tap wrote the factory
+       * defaults over the owner's own numbers and the toast said
+       * "ההגדרות נשמרו". It was worse when this was written: the save also
+       * carried `business` and `browser`, so one tap also wiped the phone and
+       * the WhatsApp link out of every future post and put testMode back to
+       * true. Those two rows are no longer written from this screen at all,
+       * which narrows the blast radius — it does not remove it, and this gate
+       * is still the thing that stops it.
        *
        * Hidden rather than disabled, because while the body is not on screen
        * there is nothing to save; it comes back with the form.
@@ -311,9 +334,12 @@ export default function SettingsPage() {
             * BrowserStatusCard, and it already drops from the computer icon in
             * the header on every screen — so "המשך סבב", "התחבר לפייסבוק" and
             * "בדוק שוב" are one tap from anywhere, which is nearer than they
-            * were. The two cards on that tab that actually did something — the
-            * safety switches and the group pacing — moved up into
-            * "קצב ומגבלות", which is what they are.
+            * were. The two cards on that tab that did real work — the safety
+            * switches and the group pacing — were moved up into
+            * "קצב ומגבלות" when that tab went, and then DELETED from there
+            * on 07.11.2026 at the owner's explicit request. The values they
+            * edited are still read by the engine; the long note further down
+            * this file is the record. Nothing on this screen edits them now.
             *
             * A segmented control with one option is a decoration, so a
             * customer never sees one.
@@ -367,17 +393,25 @@ export default function SettingsPage() {
                   numbers.
 
                   Shown only when the two genuinely differ, so an account whose
-                  floor IS a whole number of minutes sees nothing new. And it
-                  names the two halves separately, because they are two boxes
-                  on two tabs and the engine only ever compares against the
-                  sum.
+                  floor IS a whole number of minutes sees nothing new.
+
+                  AND IT NO LONGER OFFERS A REMEDY, because the remedy was a
+                  box that has been deleted. It used to end "שינוי של אחת
+                  התיבות למעלה ושמירה יחזירו את המרווח לדקות שלמות", which was true
+                  while "מרווח נוסף בין קבוצות" was on this screen AND the save
+                  wrote the browser row. Both are gone: the sub-minute half
+                  lives in browser.groupMinGapSeconds, and this screen does not
+                  write that row any more. An instruction that cannot work is
+                  worse than none, so the notice now says only what is true —
+                  the real number, where it is changed, and that saving here
+                  will not touch it.
                 */}
                 {accountGapSeconds(limits, browser, true) !== (Math.max(0, Math.round(limits.minGapMinutes)) + Math.max(0, Math.round(browser.groupMinGapMinutes))) * 60 && (
                   <Notice tone="info">
                     המרווח שהמערכת באמת שומרת בין שני פרסומים לקבוצה הוא{' '}
-                    <strong>{accountGapLabel(accountGapSeconds(limits, browser, true))}</strong> — פחות ממה שהתיבות למעלה יכולות להציג, כי הן
-                    מציגות דקות שלמות. זה נקבע כשבחרתם הפרש בשניות בתזמון של קמפיין. שינוי של אחת התיבות למעלה ושמירה יחזירו את המרווח לדקות
-                    שלמות.
+                    <strong>{accountGapLabel(accountGapSeconds(limits, browser, true))}</strong> — פחות ממה שהתיבה למעלה יכולה להציג, כי היא
+                    מציגה דקות שלמות. זה נקבע כשבחרתם הפרש בשניות בתזמון של קמפיין, ושם גם משנים את זה. שמירה מהמסך הזה לא תיגע
+                    במספר הזה.
                   </Notice>
                 )}
 
@@ -398,10 +432,20 @@ export default function SettingsPage() {
                     browser.groupMinGapMinutes       0
                     control.paused                   false
 
-                  The save still writes `browser` and `limits` whole, so the
-                  stored numbers survive every save made from this screen with
-                  no field to show them. Nothing about publishing changed on
-                  the day this was removed.
+                  HOW THAT IS GUARANTEED CHANGED WITHIN THE HOUR, and the
+                  reason is worth recording. The first version of this deletion
+                  left the save writing `browser` and `limits` WHOLE, and said
+                  so here — which preserved the stored numbers only while the
+                  object it spread was the owner's own typed decision. With no
+                  inputs left, that object is a mount-time snapshot, and
+                  spreading it over the fresh re-read reverted anything written
+                  into those rows while the screen sat open: a campaign panel
+                  set to "30 שניות" became 20 minutes again on the next שמור.
+                  Review caught it before anyone met it. The save now writes
+                  the four fields that still have boxes, by name, and does not
+                  write the `browser` row at all — so the guarantee is
+                  structural rather than a promise in a comment. Nothing about
+                  publishing changed on the day this was removed.
 
                   THREE OF THEM GOVERNED NOTHING AT HIS NUMBERS and were the
                   clutter he meant: one browser window is what the hint itself
@@ -434,9 +478,18 @@ export default function SettingsPage() {
                       "השהה פרסום / הפעל פרסום" button writes the same
                       control.paused (page.tsx:1792-1798), on the screen he
                       opens first. The capability did not move, the second
-                      copy did — and after this deletion those few lines are
-                      the ONLY writer of control.paused left in the product,
-                      so they are load-bearing.
+                      copy did.
+
+                      AN EARLIER DRAFT OF THIS LINE CALLED those few lines
+                      "the ONLY writer of control.paused left in the product".
+                      That is false and is corrected here: setPaused() is also
+                      called at page.tsx:741 (the "בטל הכל" path, which stops
+                      as well as discards) and at page.tsx:1973 (resume on the
+                      stopped-run card). What IS true, and is the part worth
+                      knowing, is that all four calls live in that one file:
+                      the dashboard is the only screen in the product that can
+                      pause. PublishingToggle.tsx calls setPaused too and is
+                      mounted nowhere, so it cannot.
                     • the two duplicate guards are now editable NOWHERE. An
                       earlier draft of this comment claimed they moved to the
                       campaign's own panel; that was false and is corrected
@@ -598,9 +651,3 @@ export default function SettingsPage() {
   );
 }
 
-function splitList(value: string): string[] {
-  return value
-    .split(',')
-    .map((s) => s.trim())
-    .filter(Boolean);
-}

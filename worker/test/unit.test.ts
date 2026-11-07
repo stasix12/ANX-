@@ -5720,9 +5720,28 @@ const scenario: { step: string; line: string }[] = [];
    * So this asks the opposite of what it used to, in the same shape the
    * safety card's pins take: gone from the screen, still in force underneath.
    */
+  /*
+   * PINNED ON THE SHAPE THE CONTROL ACTUALLY HAD. The first version of this
+   * looked for `value={limits.blockRepeatToSameTarget}` and
+   * `on={limits.blockRepeatToSameTarget` — two prop spellings this file has
+   * NEVER used, in any revision. It was a tautology: restoring the deleted
+   * <Toggle> verbatim left it green, which was tested and confirmed. The real
+   * control was `<Toggle checked={limits.blockRepeatToSameTarget !== false}
+   * onChange={(v) => setLimits({ ...limits, blockRepeatToSameTarget: v })} />`,
+   * so the write is what is pinned: a control that cannot set the field is
+   * not a control.
+   */
   assert.ok(
-    !/value=\{limits\.blockRepeatToSameTarget\}|on=\{limits\.blockRepeatToSameTarget/.test(settings),
-    'the settings screen no longer offers the switch',
+    !/setLimits\(\{ \.\.\.limits, blockRepeatToSameTarget/.test(settings),
+    'nothing on the settings screen can set blockRepeatToSameTarget any more',
+  );
+  assert.ok(
+    !/checked=\{limits\.blockRepeatToSameTarget/.test(settings),
+    'and no toggle reads it to draw itself — the pair is what a switch is',
+  );
+  assert.ok(
+    !/<Toggle/.test(settings),
+    'there is no Toggle left on the screen at all, which is the simplest way to say it',
   );
   assert.ok(
     !settings.includes('blockRepeatToSameTarget === false'),
@@ -5733,16 +5752,47 @@ const scenario: { step: string; line: string }[] = [];
     'nor the info dot that explained it',
   );
   /*
-   * BUT THE SAVE MUST STILL CARRY THE STORED VALUE. The screen loads `limits`
-   * whole and writes it whole, so a key with no input keeps what is already
-   * saved. Every one of the eight live accounts has blockRepeatToSameTarget
-   * false in its row; a save made from this screen must not reset that to the
-   * shipped default and switch a customer's rule back on behind their back.
+   * AND THE SAVE MUST NOT CARRY IT EITHER WAY. Every one of the eight live
+   * accounts has blockRepeatToSameTarget false in its row, so a save from
+   * this screen must not reset that to the shipped default and switch a
+   * customer's rule back on behind their back.
+   *
+   * The first version of this pin asked for `{ ...curLimits, ...limits,` and
+   * called that the guarantee. It was the opposite: `...limits` is the form
+   * state, which now holds a MOUNT-TIME copy of this key — nothing on screen
+   * can change it — so spreading it over the fresh re-read writes a stale
+   * value back over whatever the row says now. The save was rewritten to name
+   * its four fields instead, and the guarantee is that this key is not among
+   * them: what the screen never writes, the screen cannot reset.
    */
+  /*
+   * BOUNDED TO THE SAVE, because a pin on the whole file is how the two
+   * versions before this one went wrong: `!/\.\.\.limits,/` matched the input
+   * handler `setLimits({ ...limits, [key]: ... })`, which is legitimate and
+   * must stay, and `!/blockRepeatToSameTarget:/` matched the page's own
+   * explanatory comment. The question is only ever what the SAVE writes.
+   */
+  const saveBody = (() => {
+    const from = settings.indexOf("await saveSetting('limits', {");
+    assert.ok(from > 0, 'the save must write the limits row by name, starting from the stored one');
+    const to = settings.indexOf('});', from);
+    assert.ok(to > from, 'and that object literal must end');
+    return settings.slice(from, to);
+  })();
   assert.ok(
-    /saveSetting\('limits', \{ \.\.\.curLimits, \.\.\.limits,/.test(settings),
-    'a save still writes the whole limits row over the stored one, so a field with no input keeps its saved value',
+    !saveBody.includes('...limits'),
+    'the limits save no longer spreads the form state, which is where the stale snapshot got in',
   );
+  assert.ok(
+    saveBody.includes('...curLimits,'),
+    'it starts from the row as it is NOW, so a key this screen never mentions survives the write',
+  );
+  for (const key of ['maxPerDay', 'maxPerTargetPerDay', 'minGapMinutes', 'dedupeDays']) {
+    assert.ok(saveBody.includes(`${key}: limits.${key},`), `${key} is written by name — it is a box on this screen`);
+  }
+  for (const key of ['blockRepeatToSameTarget', 'repeatFloorHours']) {
+    assert.ok(!saveBody.includes(key), `and ${key} is not written at all, so the save cannot reset it either way`);
+  }
   /*
    * AND THE DELETION LEFT ONE THING OPEN, pinned so it cannot be forgotten:
    * with no switch anywhere, DEFAULT_LIMITS decides for every account that

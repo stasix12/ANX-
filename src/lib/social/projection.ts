@@ -1,4 +1,4 @@
-import { nextAllowedAt, nextPublishAt, type CampaignSchedule } from './campaign-schedule';
+import { nextAllowedAt, nextOpeningAt, nextPublishAt, startOfNextZonedDay, type CampaignSchedule } from './campaign-schedule';
 import { TIMEZONE } from './types';
 import { zonedDateISO, zonedToUtc } from './time';
 import { accountGapSeconds } from './rules';
@@ -426,12 +426,62 @@ export function windowedStagger(
  * re-stamp symmetric — earlier, later, tighter, wider, all the same
  * arithmetic.
  *
- * THE DAY IS THE ROUND'S, NOT TODAY'S. `headAt` is the earliest row still
- * waiting, so a round planned for tomorrow morning stays tomorrow morning and
- * only its hour moves. Anchoring at `now` instead would drag tomorrow's round
- * into tonight, which is not what changing an hour means.
+ * ───── AND THE SAME ASYMMETRY, ONE LEVEL UP: THE DAY ───────────────────
  *
- * `floor` is the earliest instant that may be written at all — a minute from
+ * "אני מפעיל את הקמפיין גם ביום שבת בשעה 18:45, למה הוא מתכוון לפרסם רק
+ *  מחרתיים?" · "תתקן את זה שלא יחזור." — 07.11.2026, read off his own database.
+ *
+ * THE EXACT CHAIN, from social_activity_log. 06:14, Saturday not among the
+ * campaign's days: a re-stamp runs, nextAllowedAt() correctly refuses Saturday
+ * and the whole 231-row round goes to Sunday. 10:18, Saturday back on: a
+ * re-stamp runs again — and `headAt` is now a SUNDAY row, so `opens` was built
+ * from Sunday's date, and nextAllowedAt() cannot move an instant back. 10:19
+ * the hour moves to 18:45, 10:37 the switch goes off and on again, 10:58 the
+ * repeat window changes. Every one of them re-stamped 231 rows and every one
+ * of them landed on Sunday. **Nothing he could reach from the panel could
+ * bring the round back to the day he had just re-chosen**, and the day itself
+ * — a Saturday whose 18:45 was still eight hours away — went by empty.
+ *
+ * So the anchor now asks a second question: is there an OPENING of this
+ * window, at or after `floor`, EARLIER than the day the round is sitting on?
+ * If there is, that is where the round belongs, because the owner has just
+ * told us these are its hours and that day is one of its days.
+ *
+ * ── AND THE GUARD THAT KEEPS THIS FROM PUBLISHING A ROUND TWICE IN A DAY ──
+ *
+ * `todayIsFree` is the whole safety of it, and it defaults to FALSE.
+ *
+ * The dangerous shape is the mirror image of his: today's round has ALREADY
+ * gone out, tomorrow's is waiting at 18:45, and he nudges the gap from 40
+ * seconds to 30. Pulling to "the soonest opening" would drag tomorrow's 231
+ * publications into tonight on top of the ones that already published — the
+ * same post to the same groups twice in one day, which is the one mistake
+ * this product may never make on its own initiative.
+ *
+ * Only the caller can tell those two apart, and only by reading the queue:
+ * rescheduleCampaignQueue() asks whether this campaign has published (or is
+ * publishing) anything at all on `floor`'s own calendar day. Nothing today
+ * → the round may come back to today. Something today → the pull-back starts
+ * from tomorrow's first instant instead, which for a round already sitting on
+ * tomorrow is no change at all. A caller that does not know passes nothing
+ * and gets the conservative answer.
+ *
+ * A LATER day is never at risk, so it needs no guard: an opening that has not
+ * happened yet cannot already have been used.
+ *
+ * THE DAY IS STILL THE ROUND'S WHEN NOTHING EARLIER IS OPEN. `headAt` is the
+ * earliest row still waiting, so a round planned for tomorrow morning whose
+ * hour merely moved stays tomorrow morning — today's opening is behind us by
+ * then, and nextOpeningAt() skips it. Anchoring at `now` instead of at an
+ * OPENING would have dragged that round into tonight, which is why the
+ * pull-back is expressed in openings and not in "the first legal moment".
+ *
+ * AN OVERDUE ROUND IS NOT PULLED ANYWHERE. When `headAt` has already gone by,
+ * the round is late rather than misplaced and `floor` — a settle's worth from
+ * now — is the honest answer; sending it to tonight's opening instead would
+ * be this function inventing a delay the owner never asked for.
+ *
+ * `floor` is the earliest instant that may be written at all — a settle from
  * now, so the worker cannot claim a row before the write that moved it has
  * landed. A round whose day has already begun starts from there instead.
  *
@@ -442,6 +492,13 @@ export function roundAnchor(
   schedule: CampaignSchedule | null | undefined,
   headAt: Date,
   floor: Date,
+  /**
+   * Whether `floor`'s own calendar day is still unused by this campaign —
+   * nothing published on it and nothing publishing on it right now. FALSE
+   * unless the caller has read the queue and knows, because the cost of
+   * guessing wrong in that direction is a round published twice in one day.
+   */
+  todayIsFree = false,
 ): Date {
   const from = new Date(Math.max(headAt.getTime(), floor.getTime()));
   if (!schedule?.enabled) return from;
@@ -454,7 +511,16 @@ export function roundAnchor(
      the first legal moment after it. Null only when no day is chosen at all,
      and then the rows stay where they are rather than being moved somewhere
      impossible. */
-  return nextAllowedAt(schedule, want) ?? from;
+  const onItsOwnDay = nextAllowedAt(schedule, want) ?? from;
+
+  /* An overdue round is late, not misplaced. */
+  if (headAt.getTime() <= floor.getTime()) return onItsOwnDay;
+
+  /* The pull-back, from today when today is still free and from tomorrow's
+     first instant when it is not. */
+  const searchFrom = todayIsFree ? floor : startOfNextZonedDay(floor, TIMEZONE);
+  const soonest = nextOpeningAt(schedule, searchFrom, TIMEZONE);
+  return soonest && soonest.getTime() < onItsOwnDay.getTime() ? soonest : onItsOwnDay;
 }
 
 /**

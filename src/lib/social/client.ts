@@ -4,7 +4,7 @@ import { supabase } from '@/lib/supabase';
 import { campaignState, type CampaignQueueRow, type CampaignState } from './campaign';
 import { detectCity } from './cities';
 import { addDaysISO, counted, startOfZonedDay, zonedDateISO, zonedToUtc } from './time';
-import { DEFAULT_CAMPAIGN_REPEAT, MIN_GAP_SECONDS, MIN_REPEAT_HOURS, repeatWindowSentence, gapChoiceLabel, readRounds, readSchedule, readRepeat, repeatColumns, roundsColumn, roundsWindowFix, weeklyPlanFor, type RoundsVerdict, type CampaignRepeat, type CampaignRound, type CampaignSchedule, type RoundFields, type ScheduleFields } from './campaign-schedule';
+import { DEFAULT_CAMPAIGN_REPEAT, MIN_GAP_SECONDS, MIN_REPEAT_HOURS, dayRelativeHe, repeatWindowSentence, gapChoiceLabel, readRounds, readSchedule, readRepeat, repeatColumns, roundsColumn, roundsWindowFix, weeklyPlanFor, type RoundsVerdict, type CampaignRepeat, type CampaignRound, type CampaignSchedule, type RoundFields, type ScheduleFields } from './campaign-schedule';
 import { projectQueue, roundAnchor, spacingFrom, windowedCascade, type AccountSpacing, type CampaignGate } from './projection';
 import { JOINED_QUERY, normalizeQuery } from './discovery';
 import { dedupeKey, renderPostText } from './compose';
@@ -17,6 +17,7 @@ import {
   NEEDS_HUMAN_STATUSES,
   TERMINAL_STATUSES,
   CANCELLABLE_STATUSES,
+  IN_FLIGHT_STATUSES,
   OPEN_STATUSES,
   summarizeQueue,
   type QueueSummary,
@@ -4194,6 +4195,116 @@ export async function queueGates(
 }
 
 /**
+ * HAS THIS CAMPAIGN PUBLISHED ANYTHING TODAY — asked the other way round,
+ * because the answer roundAnchor() needs is "may the round still come back to
+ * this day".
+ *
+ * "אני מפעיל את הקמפיין גם ביום שבת בשעה 18:45" · "תתקן את זה שלא
+ *  יחזור." — 07.11.2026.
+ *
+ * SPENT MEANS A PUBLICATION REALLY LEFT, so the window is 'published' and the
+ * in-flight statuses, on the calendar day `at` falls in, in the zone. Three
+ * things are deliberately NOT spent:
+ *
+ *   • a SKIPPED row — his Saturday carried seven of them, all reading
+ *     "הסבב נעצר" and all marked two days before the day itself. A day
+ *     whose only publications were cancelled is a day on which nothing
+ *     published, and refusing to use it would be the bug wearing a new coat;
+ *   • a FAILED row — nothing reached the group, and the owner re-timing his
+ *     round is entitled to today;
+ *   • a row still WAITING today — that is the round this function is being
+ *     asked about, and counting it would make every pull-back impossible.
+ *
+ * THE SAME ROW SET THE RE-STAMP ITSELF MOVES, by the same two-part match:
+ * rules.ts resolves a row's campaign as `item.campaign_id ?? post.campaign_id`,
+ * so a row stamped before its post joined this campaign carries a null id and
+ * still belongs to this round. Counting only the id column would read a day
+ * as free that this campaign had in fact already published on.
+ *
+ * FAIL CLOSED: an error, or any doubt, returns false — "today is not free" —
+ * which leaves the re-stamp behaving exactly as it did before the pull-back
+ * existed. The opposite default would turn one dropped read into the same
+ * post going out to the same groups twice in a day.
+ */
+async function dayIsUnspent(campaignId: string, postIds: string[], at: Date): Promise<boolean> {
+  const dayStart = startOfZonedDay(at, TIMEZONE).toISOString();
+  const dayEnd = zonedToUtc(addDaysISO(zonedDateISO(at, TIMEZONE), 1), '00:00', TIMEZONE).toISOString();
+  try {
+    /*
+     * scheduled_at, AND NOT published_at — AND THIS WAS WRITTEN THE OTHER WAY
+     * ROUND FIRST, SO HERE IS THE ROW THAT SETTLED IT.
+     *
+     * The question is not "did anything publish between midnight and
+     * midnight". It is "has THIS DAY'S ROUND already gone out", and a row's
+     * scheduled_at is which day's round it belongs to. The rest of this file
+     * counts "today" with published_at (rules.ts's quotas, the account
+     * ceiling, the history reads) and that is right for those: they are
+     * rate limits, and a rate limit cares when a thing happened. This is not
+     * a rate limit.
+     *
+     * On his own database, 07.11.2026, one row of this very campaign:
+     *
+     *     scheduled_at  06.11 22:02:36   published_at  07.11 00:00:10
+     *
+     * Friday's round, delivered ten seconds past midnight. Counted by
+     * published_at it makes Saturday "spent" and refuses to bring the round
+     * back to the Saturday he was asking about — the bug, reintroduced by the
+     * fix. Counted by scheduled_at it is what it is: Friday's.
+     *
+     * SAFE TO READ, because a published row's scheduled_at never moves again:
+     * writeNewInstants() filters on PENDING, so only 'scheduled' and 'paused'
+     * rows are ever re-stamped. The instant on a finished row is the instant
+     * its round was planned for.
+     *
+     * AND IT CARRIES ITS OWN FILTER FOR THE OPPOSITE CASE: a row stamped for
+     * TODAY that has not gone yet is 'scheduled', not 'published', so it does
+     * not spend the day it is waiting on — which is the round this function
+     * is being asked about, and counting it would make every pull-back
+     * impossible.
+     *
+     * IN FLIGHT COUNTS TOO, under the same day filter: a publication the
+     * worker is holding has written no published_at yet, and today's round
+     * having STARTED is as much a reason not to pull another one onto today
+     * as today's round having finished. A row in flight from yesterday's
+     * round is yesterday's, by the same reading as above.
+     *
+     * THREE THINGS ARE DELIBERATELY NOT SPENT:
+     *   • a SKIPPED row — his Saturday carried seven, all reading
+     *     "הסבב נעצר" and all marked two days before the day itself. A
+     *     day whose only publications were cancelled is a day on which
+     *     nothing published, and refusing to use it would be this bug
+     *     wearing a new coat;
+     *   • a FAILED row — nothing reached the group;
+     *   • a row still waiting, as above.
+     *
+     * THE SAME TWO-PART MATCH THE RE-STAMP USES: rules.ts resolves a row's
+     * campaign as `item.campaign_id ?? post.campaign_id`, so a row stamped
+     * before its post joined this campaign carries a null id and still
+     * belongs to this round. The id column alone would read a day as free
+     * that this campaign had in fact already published on.
+     *
+     * FAIL CLOSED: an error, or a count that cannot be read, returns false —
+     * "today is not free" — which leaves the re-stamp behaving exactly as it
+     * did before the pull-back existed. The opposite default would turn one
+     * dropped read into the same post going out to the same groups twice in
+     * one day.
+     */
+    let q = db()
+      .from('social_queue')
+      .select('id', { count: 'exact', head: true })
+      .in('status', ['published', ...IN_FLIGHT_STATUSES])
+      .gte('scheduled_at', dayStart)
+      .lt('scheduled_at', dayEnd);
+    q = postIds.length ? q.or(`campaign_id.eq.${campaignId},post_id.in.(${postIds.join(',')})`) : q.eq('campaign_id', campaignId);
+    const { count, error } = await q;
+    if (error) return false;
+    return (count ?? 1) === 0;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * ───────── THE HOURS CHANGED, SO THE QUEUE MOVES WITH THEM ─────────
  *
  * "שיניתי את תחילת הפרסום ל-10:00, אבל התור ממשיך להציג שעות ישנות."
@@ -4242,7 +4353,7 @@ export async function queueGates(
 export async function rescheduleCampaignQueue(
   campaignId: string,
   schedule: CampaignSchedule,
-): Promise<{ moved: number; waiting: number; capped: boolean }> {
+): Promise<{ moved: number; waiting: number; capped: boolean; movedTo?: string }> {
   /*
    * NOTHING MOVES WHEN THE WINDOW IS SWITCHED OFF.
    *
@@ -4300,7 +4411,29 @@ export async function rescheduleCampaignQueue(
    */
   const floor = new Date(Date.now() + writeSettleMs(pending.length));
   const head = new Date(Date.parse(pending[0].scheduled_at) || floor.getTime());
-  const anchor = roundAnchor(schedule, head, floor);
+
+  /*
+   * ───── AND WHETHER TODAY IS STILL THE ROUND'S TO TAKE ──────────────────
+   *
+   * "אני מפעיל את הקמפיין גם ביום שבת בשעה 18:45, למה הוא מתכוון לפרסם רק
+   *  מחרתיים?" — the one fact roundAnchor() cannot work out for itself, and
+   * the only thing standing between pulling a misplaced round back to today
+   * and publishing today's round a second time.
+   *
+   * SPENT MEANS SOMETHING LEFT THE BUILDING: a row of this campaign that
+   * PUBLISHED on `floor`'s calendar day, or one in flight on it right now.
+   * Skipped and failed rows are not spent — his Saturday held seven rows
+   * marked "הסבב נעצר" from two days earlier, and a day whose only
+   * publications were cancelled is a day on which nothing was published.
+   *
+   * FAIL CLOSED. A read that errors leaves `todayIsFree` false, which only
+   * ever means "do not pull the round back" — the queue then behaves exactly
+   * as it did before this was written. The opposite default would turn a
+   * dropped read into a second round in one day.
+   */
+  const todayIsFree = await dayIsUnspent(campaignId, postIds, floor);
+
+  const anchor = roundAnchor(schedule, head, floor, todayIsFree);
   const gapMs = Math.max(0, Math.round(schedule.gapSeconds)) * 1000;
   const bases = pending.map((_, i) => new Date(anchor.getTime() + i * gapMs));
   const rolled = windowedCascade(bases, schedule.gapSeconds, schedule);
@@ -4313,21 +4446,45 @@ export async function rescheduleCampaignQueue(
   const { moved, failed, firstError } = await writeNewInstants(work);
 
   const capped = pending.length >= LIVE_QUEUE_LIMIT;
+  /*
+   * WHERE THE ROUND WENT, IN WORDS — "היום (שבת) בשעה 18:45", not "משעה 18:45".
+   *
+   * The entry he had to diagnose from read "שעות הפרסום של הסבב השתנו
+   * (משעה 11:00) — 231 פרסומים הוזזו לשעות החדשות" — and the round had
+   * just left Saturday for Sunday. An hour with no day beside it cannot say
+   * the one thing that mattered.
+   */
+  const roundMovedTo = `${dayRelativeHe(anchor, floor, TIMEZONE)} בשעה ${schedule.start}`;
   await logClientActivity(
     failed ? 'warn' : 'info',
     'queue_rescheduled',
-    `שעות הפרסום של הסבב השתנו (משעה ${schedule.start}) — ${counted(moved, 'פרסום אחד הוזז', 'פרסומים הוזזו', 'שני פרסומים הוזזו')} לשעות החדשות${
+    `שעות הפרסום של הסבב השתנו — ${counted(moved, 'פרסום אחד הוזז', 'פרסומים הוזזו', 'שני פרסומים הוזזו')} ל${roundMovedTo}${
       capped ? ` (רק ${LIVE_QUEUE_LIMIT} הפרסומים הקרובים בתור)` : ''
     }`,
-    { campaignId, start: schedule.start, gapSeconds: schedule.gapSeconds, days: schedule.days, moved, failed },
+    {
+      campaignId,
+      start: schedule.start,
+      gapSeconds: schedule.gapSeconds,
+      days: schedule.days,
+      moved,
+      failed,
+      /* THE DAY, IN THE LOG, BECAUSE ITS ABSENCE IS HALF THE BUG. His 06:14
+         entry read "שעות הפרסום של הסבב השתנו (משעה 11:00) — 231 פרסומים הוזזו"
+         and said nothing about the round having left Saturday altogether, so
+         the only way to find out was to notice an empty day four hours later. */
+      from: head.toISOString(),
+      to: anchor.toISOString(),
+      dayChanged: zonedDateISO(anchor, TIMEZONE) !== zonedDateISO(head, TIMEZONE),
+      todayIsFree,
+    },
   );
 
   /* Half-applied is a real outcome and the owner is told the real numbers,
      through the same classifier every other failure here goes through. */
   if (failed) {
-    throw new Error(`${moved} פרסומים הוזזו לשעות החדשות, אבל ${failed} לא זזו: ${friendlyMessage(firstError)}`);
+    throw new Error(`${moved} פרסומים הוזזו ל${roundMovedTo}, אבל ${failed} לא זזו: ${friendlyMessage(firstError)}`);
   }
-  return { moved, waiting: pending.length, capped };
+  return { moved, waiting: pending.length, capped, movedTo: roundMovedTo };
 }
 
 /** One row's move: where it is, and where it is going. */

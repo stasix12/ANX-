@@ -1221,7 +1221,10 @@ export default function SocialDashboard() {
           const queue = await rescheduleCampaignQueue(campaign.id, next);
           if (queue.moved) {
             toast(
-              `${counted(queue.moved, 'פרסום אחד הוזז', 'פרסומים הוזזו', 'שני פרסומים הוזזו')} לשעות החדשות${
+              /* THE DAY, NOT ONLY THE HOUR — "היום (שבת) בשעה 18:45". A round that
+                 has just changed DAY is the one thing this line never said, and
+                 the owner spent a Saturday finding that out from an empty queue. */
+              `${counted(queue.moved, 'פרסום אחד הוזז', 'פרסומים הוזזו', 'שני פרסומים הוזזו')} ל${queue.movedTo ?? 'שעות החדשות'}${
                 queue.capped ? ` (רק ${queue.waiting} הקרובים בתור)` : ''
               }`,
               'success',

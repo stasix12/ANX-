@@ -1007,6 +1007,53 @@ export function nextAllowedAt(s: CampaignSchedule, from: Date, tz = TIMEZONE): D
 }
 
 /**
+ * WHEN THIS WINDOW NEXT *OPENS* — which is not the same question as the one
+ * above, and the difference is a round that lost a day.
+ *
+ * "אני מפעיל את הקמפיין גם ביום שבת בשעה 18:45, למה הוא מתכוון לפרסם רק מחרתיים?" — 07.11.2026.
+ *
+ * nextAllowedAt() answers "the first instant permitted at or after `from`",
+ * and when `from` is itself permitted that answer IS `from`. For the engine
+ * that is exactly right. For moving a ROUND it is useless: a round has to
+ * start where its window starts, not wherever the clock happens to be when
+ * the owner taps save, or a queue re-timed at 14:00 would begin at 14:00 on a
+ * campaign whose owner wrote 18:45.
+ *
+ * So this returns only OPENINGS: the first chosen day's `start`, at or after
+ * `from`, skipping a day whose opening has already gone by. Null when no day
+ * is chosen at all — the same contract nextAllowedAt() has, read the same way
+ * by its callers.
+ *
+ * EIGHT DAYS, for nextAllowedAt()'s reason: today can be the only chosen day
+ * with its opening already past, and then the answer is the same weekday next
+ * week. Calendar dates in the zone throughout, so neither Israeli clock
+ * change can move an opening by an hour.
+ */
+export function nextOpeningAt(s: CampaignSchedule, from: Date, tz = TIMEZONE): Date | null {
+  if (!s.enabled) return null;
+  if (!s.days.length) return null;
+  const fromISO = zonedDateISO(from, tz);
+  for (let i = 0; i < 8; i += 1) {
+    const dayISO = addDaysISO(fromISO, i);
+    /* Noon, so the instant used to ask "which weekday is this date" is never
+       close enough to a boundary for a DST shift to answer with its neighbour. */
+    if (!s.days.includes(zonedWeekday(zonedToUtc(dayISO, '12:00', tz), tz))) continue;
+    const opens = zonedToUtc(dayISO, s.start, tz);
+    if (opens >= from) return opens;
+  }
+  return null;
+}
+
+/**
+ * THE FIRST INSTANT OF TOMORROW, in the zone — the floor a pull-back is given
+ * when today has already been used. Exported because roundAnchor() needs it
+ * and this file is the only place calendar arithmetic is allowed to live.
+ */
+export function startOfNextZonedDay(from: Date, tz = TIMEZONE): Date {
+  return zonedToUtc(addDaysISO(zonedDateISO(from, tz), 1), '00:00', tz);
+}
+
+/**
  * IS THE WINDOW OPEN RIGHT NOW, AND UNTIL WHEN — the close of the window
  * `from` falls inside, or null when it falls inside none.
  *

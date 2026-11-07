@@ -14,7 +14,7 @@ import {
   type ProjectableRow,
 } from '../../src/lib/social/projection';
 import { scheduleReadout } from '../../src/lib/social/schedule-readout';
-import { readSchedule, type CampaignSchedule } from '../../src/lib/social/campaign-schedule';
+import { nextOpeningAt, readSchedule, type CampaignSchedule } from '../../src/lib/social/campaign-schedule';
 import type { CampaignState } from '../../src/lib/social/campaign';
 
 /**
@@ -749,7 +749,15 @@ const row = (id: string, scheduledAt: string, extra: Partial<ProjectableRow> = {
    */
   is(/const PENDING: QueueItem\['status'\]\[\] = AUTOMATIC_WAITING_STATUSES;/.test(client), 'and PENDING is still the automatic-waiting set, which excludes a row in flight');
   is(/windowedCascade\(bases, schedule\.gapSeconds, schedule\)/.test(client), 'the new instants come from the same roll the screens and the planner use');
-  is(/const anchor = roundAnchor\(schedule, head, floor\);/.test(client), 'anchored on the WINDOW, so the re-stamp works in both directions');
+  /*
+   * RE-POINTED, NOT WEAKENED — roundAnchor() takes a fourth argument now and
+   * the old pattern would have gone green on a call that passed nothing,
+   * which is exactly the call that loses a day. What it protected (the anchor
+   * comes from the WINDOW, not from the rows) is still protected; what it now
+   * also protects is that the pull-back is actually asked for. Section 18
+   * proves what the argument does.
+   */
+  is(/const anchor = roundAnchor\(schedule, head, floor, todayIsFree\);/.test(client), 'anchored on the WINDOW, so the re-stamp works in both directions — and told whether today is still free');
   /* The cushion is sized off the BATCH now, not fixed at a minute: a minute
      was one slot when a minute was the fastest this product went, and is two
      slots of dead air at the head of a thirty-second round. */
@@ -858,6 +866,184 @@ const row = (id: string, scheduledAt: string, extra: Partial<ProjectableRow> = {
   is(/if \(campaignId && snap\?\.campaign && snap\.window\) \{/.test(tuner), 'the account-wide tuner is unchanged — this only applies when a round is in scope');
   /* And the campaign columns still have exactly one writer. */
   is(!/schedule_gap_seconds:/.test(client), 'client.ts never writes the gap columns directly — scheduleColumns() is still their one writer');
+}
+
+/* ───── 18. THE DAY HE RE-CHOSE, AND THE ROUND THAT WOULD NOT COME BACK ── */
+{
+  /*
+   * "אני מפעיל את הקמפיין גם ביום שבת בשעה 18:45, למה הוא מתכוון לפרסם רק
+   *  מחרתיים? תבדוק לי את זה לפי נתוני סאפ בייס בלי לנחש" · "תתקן את זה שלא
+   *  יחזור." — 07.11.2026.
+   *
+   * THE CHAIN, READ OFF social_activity_log AND social_queue, not guessed. The
+   * campaign is "סבב פרסום", 231 waiting rows, every day chosen, 18:45, 40s.
+   *
+   *   06:14  a re-stamp runs with days [0–5] — Saturday NOT chosen. Correct,
+   *          and the round leaves Saturday for Sunday 11:00.
+   *   10:18  Saturday back on, days [0–6]. 231 rows re-stamped … onto Sunday.
+   *   10:19  the hour becomes 18:45. 231 rows re-stamped … onto Sunday 18:45.
+   *   10:37  the switch off and on again. 231 rows … Sunday 18:45.
+   *   10:58  the repeat window changes. 231 rows … Sunday 18:45.
+   *
+   * Four re-stamps, 231 rows each, and not one of them could reach a Saturday
+   * whose 18:45 was still eight hours away: `headAt` was a Sunday row, so the
+   * window was built from Sunday's date, and nextAllowedAt() cannot move an
+   * instant backwards. The queue held 231 rows for Sunday and ZERO for today
+   * — the whole account held seven rows for that Saturday, all 'skipped',
+   * all reading "הסבב נעצר" and all marked two days earlier.
+   */
+  const satMorning = at('2026-11-07T10:38');
+  const satFloor = new Date(satMorning.getTime() + 10_000);
+  const everyDay: CampaignSchedule = { enabled: true, days: [0, 1, 2, 3, 4, 5, 6], start: '18:45', gapSeconds: 40 };
+
+  /* ── 06:14, the push. This was never the bug and must not change. ──────── */
+  const noSaturday: CampaignSchedule = { ...everyDay, days: [0, 1, 2, 3, 4, 5], start: '11:00' };
+  const pushFloor = new Date(at('2026-11-07T06:14').getTime() + 10_000);
+  eq(
+    roundAnchor(noSaturday, at('2026-11-07T11:00'), pushFloor, true).toISOString(),
+    iso('2026-11-08T11:00'),
+    'a round on a day he has un-chosen still leaves for the next day he did choose',
+  );
+
+  /* ── 10:18, the pull-back. THIS is the bug, and this is the fix. ───────── */
+  const head = at('2026-11-08T18:45');
+  eq(
+    roundAnchor(everyDay, head, satFloor, true).toISOString(),
+    iso('2026-11-07T18:45'),
+    'and re-choosing the day brings it BACK — to today\u2019s opening, which has not happened yet',
+  );
+
+  /* The whole round, not its head: 231 rows at 40s from 18:45 is 2h33m, so
+     every one of them lands on the Saturday he asked for. */
+  {
+    const anchor = roundAnchor(everyDay, head, satFloor, true);
+    const rows = Array.from({ length: 231 }, (_, i) => new Date(anchor.getTime() + i * 40_000));
+    const rolled = windowedCascade(rows, 40, everyDay).map((d) => d.toISOString());
+    eq(rolled[0], iso('2026-11-07T18:45'), 'the first of the 231 goes out at the hour on the panel');
+    eq(rolled[230], iso('2026-11-07T21:18:20'), 'and the last of them 2h33m later, still on the same day');
+    is(rolled.every((x) => x.slice(0, 10) === iso('2026-11-07T18:45').slice(0, 10)), 'not one row is left on the day the round had been pushed to');
+    is(rolled.every((x, i) => i === 0 || x > rolled[i - 1]), 'in order, as the groups were queued');
+    is(new Set(rolled).size === rolled.length, 'and no two on one instant, which the unique index would reject');
+  }
+
+  /*
+   * ── AND THE GUARD, which is the whole reason the caller has to read the
+   * queue rather than the clock.
+   *
+   * THE DANGEROUS SHAPE IS THE MIRROR IMAGE OF HIS: today's round has already
+   * published, tomorrow's is waiting, and he nudges the gap. Pulling to "the
+   * soonest opening" there would put the same post into the same 231 groups
+   * twice in one day.
+   */
+  eq(
+    roundAnchor(everyDay, head, satFloor, false).toISOString(),
+    iso('2026-11-08T18:45'),
+    'a day this campaign has ALREADY published on is not taken a second time',
+  );
+  eq(
+    roundAnchor(everyDay, head, satFloor).toISOString(),
+    iso('2026-11-08T18:45'),
+    'and a caller that has not read the queue gets that same conservative answer',
+  );
+
+  /*
+   * ── THE OTHER HALF OF THE OLD COMMENT, WHICH STILL STANDS ────────────
+   *
+   * "Anchoring at `now` instead would drag tomorrow's round into tonight,
+   * which is not what changing an hour means." It would — which is why the
+   * pull-back is expressed in OPENINGS and not in "the first legal moment":
+   * at 14:00 on a 10:00 window today's opening is behind us, so there is
+   * nothing earlier to come back to and the round keeps its day.
+   */
+  const thu = new Date(at('2026-11-05T14:00').getTime() + 10_000);
+  const tenAM: CampaignSchedule = { enabled: true, days: [0, 1, 2, 3, 4, 5, 6], start: '10:00', gapSeconds: 60 };
+  eq(
+    roundAnchor(tenAM, at('2026-11-06T08:00'), thu, true).toISOString(),
+    iso('2026-11-06T10:00'),
+    'a round planned for tomorrow whose HOUR moved stays tomorrow, even with today free',
+  );
+  /* An overdue round is late, not misplaced: it goes as soon as it may, which
+     inside an open window is now — never forward to tonight's opening. */
+  eq(
+    roundAnchor(tenAM, at('2026-11-05T06:00'), thu, true).toISOString(),
+    thu.toISOString(),
+    'and a round whose stamp has gone goes out as soon as the window allows, not at the next opening',
+  );
+  /* A day neither today nor the head's: the pull-back is to the first OPENING
+     in between, not to the head and not to now. */
+  eq(
+    roundAnchor({ ...everyDay, days: [0, 1, 6] }, at('2026-11-09T18:45'), satFloor, true).toISOString(),
+    iso('2026-11-07T18:45'),
+    'with several openings in between, the round comes back to the FIRST of them',
+  );
+
+  /* ── nextOpeningAt itself ─────────────────────────────────────────────── */
+  eq(nextOpeningAt({ ...everyDay, enabled: false }, satFloor), null, 'a switched-off window has no opening');
+  eq(nextOpeningAt({ ...everyDay, days: [] }, satFloor), null, 'and neither has one with no day chosen');
+  eq(
+    nextOpeningAt(everyDay, at('2026-11-07T18:45'))?.toISOString(),
+    iso('2026-11-07T18:45'),
+    'the opening itself counts as at-or-after it',
+  );
+  eq(
+    nextOpeningAt(everyDay, at('2026-11-07T18:46'))?.toISOString(),
+    iso('2026-11-08T18:45'),
+    'a minute past it is tomorrow\u2019s — this answers OPENINGS, never "now"',
+  );
+  /* EIGHT DAYS, NOT SEVEN: Saturday is the only chosen day and its opening has
+     gone, so the answer is the same weekday next week. */
+  eq(
+    nextOpeningAt({ ...everyDay, days: [6] }, at('2026-11-07T20:00'))?.toISOString(),
+    iso('2026-11-14T18:45'),
+    'and the only chosen day whose window has closed is that day next week',
+  );
+
+  /* ── THE CALLER'S SIDE: the one fact roundAnchor cannot work out alone ── */
+  const strip = (src: string) => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  const client = strip(readFileSync('src/lib/social/client.ts', 'utf8'));
+  is(/const todayIsFree = await dayIsUnspent\(campaignId, postIds, floor\);/.test(client), 'the re-stamp asks the queue whether today has been used');
+  is(/async function dayIsUnspent\(campaignId: string, postIds: string\[\], at: Date\): Promise<boolean>/.test(client), 'and that question has one function');
+  /*
+   * WHICH DAY'S ROUND A ROW BELONGS TO IS scheduled_at, NOT published_at —
+   * and this is pinned because the fix was first written the other way round.
+   *
+   * The rest of the product counts "today" with published_at, correctly: those
+   * are rate limits, and a rate limit cares when a thing happened. This is not
+   * a rate limit, it asks whether THIS DAY'S round has gone out. One row of
+   * his own campaign settles it:
+   *
+   *     scheduled_at  06.11 22:02:36    published_at  07.11 00:00:10
+   *
+   * Friday's round, ten seconds past midnight. By published_at it makes
+   * Saturday spent and refuses the Saturday he was asking about — the bug,
+   * reintroduced by the fix.
+   */
+  /* BOUNDED TO THE FUNCTION, not sliced to the end of the file: dayIsUnspent
+     sits immediately above rescheduleCampaignQueue, whose own two-part match
+     is spelled the same way — an open-ended slice let the id-column pin below
+     pass on a dayIsUnspent that had lost it. */
+  const unspentFrom = client.indexOf('async function dayIsUnspent');
+  const unspent = client.slice(unspentFrom, client.indexOf('\n}\n', unspentFrom));
+  is(unspent.length > 200 && !unspent.includes('rescheduleCampaignQueue'), 'the slice these pins read is dayIsUnspent alone');
+  is(/\.gte\('scheduled_at', dayStart\)\s*\.lt\('scheduled_at', dayEnd\)/.test(unspent), 'a day is spent by the round STAMPED for it, which is what scheduled_at says');
+  is(!/published_at/.test(unspent), 'and never by published_at — a row that crossed midnight belongs to the day it was planned for');
+  /* PUBLISHED OR IN FLIGHT, and nothing else: 'skipped' and 'failed' never
+     spent a day, and a row still WAITING is the round being asked about. */
+  is(/\.in\('status', \['published', \.\.\.IN_FLIGHT_STATUSES\]\)/.test(unspent), "counted over what left or is leaving — 'skipped' and 'failed' do not spend a day, and nor does one still waiting");
+  is(/campaign_id\.eq\.\$\{campaignId\},post_id\.in\./.test(unspent), 'over the same rows the re-stamp moves, including one whose post joined the campaign later');
+  /* FAIL CLOSED, in both directions a read can fail. */
+  is(/if \(error\) return false;/.test(unspent), 'a failed read says "not free", which is the answer that changes nothing');
+  is(/\} catch \{\s*return false;\s*\}/.test(unspent), 'and so does a thrown one');
+  is(/return \(count \?\? 1\) === 0;/.test(unspent), 'and a count that cannot be read counts as "something", never as an empty day');
+
+  /* ── AND THE DAY IS SAID OUT LOUD, which is the other half of the bug ── */
+  is(/dayChanged: zonedDateISO\(anchor, TIMEZONE\) !== zonedDateISO\(head, TIMEZONE\),/.test(client), 'the activity entry records whether the round changed DAY');
+  is(/const roundMovedTo = `\$\{dayRelativeHe\(anchor, floor, TIMEZONE\)\} בשעה \$\{schedule\.start\}`;/.test(client), 'and names where it went in words, not only an hour');
+  is(!/לשעות החדשות`/.test(client), 'the old hour-only sentence is gone from the log line — it is what he had to diagnose from');
+  for (const [what, file] of [['the dashboard', 'src/app/social/page.tsx'], ['the campaigns list', 'src/app/social/campaigns/page.tsx']] as const) {
+    const src = strip(readFileSync(file, 'utf8'));
+    is(/\$\{queue\.movedTo \?\? 'שעות החדשות'\}/.test(src), `${what} tells him which DAY the round moved to`);
+  }
 }
 
 console.log(`projection OK — ${checks} assertions over the four gates, the cascade, the writers’ roll and both clock changes`);

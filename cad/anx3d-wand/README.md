@@ -11,6 +11,7 @@ Saved here so the CAD files survive cloud-session resets.
 | `v60_preview.png` | Close-up cut-away of one ring end: v59 attempt (top) vs v60 (bottom). |
 | `v60_changes_vs_v58.png` | v60 with the only material removed from v58 shown in red. |
 | `ANX3D_v62_HEAD_WIDE-113mm.3mf` | Suction head v62: nozzle widened 88 -> 113 mm (12.5 mm per side), suction slot 75.9 -> 100.9 mm long (gap 4.2 mm unchanged), flare sides kept straight. Neck, thread spigot, shutter track, logo, back spray channel and its panel untouched (centre +-17 mm and everything above the flare). Same thread as v48: screws into v60 and stops at the same angle. Print upside down (spigot on the bed). |
+| `ANX3D_v62_HEAD+v60_SHORT_HANDLE_print.3mf` | Print plate (Bambu H2D 350x320): head v62 upside down on its thread end + handle v60 on its ring end, separate objects (one colour each). Preview `v62_plate.png`. |
 | `ANX3D_v48_HEAD_rebuilt.3mf` | Head v48 rebuilt from the v34 source (volume 149755 mm3 = original). Backup. |
 | `v62_vs_v48_head.png`, `v62_assembled.png` | Old vs new head (front / back / side) and both mounted on handle v60. |
 | `source/ANX3D_handle_SHORT_v34_WIDE_print.stl` | One-piece v34 wand (user's file) - source of the head. |

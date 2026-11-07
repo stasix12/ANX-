@@ -1,5 +1,5 @@
 #!/bin/bash
-# Rebuild head v48 from the v34 one-piece print STL, then widen it (v61). Needs python with trimesh, manifold3d, cadquery.
+# Rebuild head v48 from the v34 one-piece print STL, then widen it (v63). Needs python with trimesh, manifold3d, cadquery.
 # Run from this folder:  bash run.sh /path/to/python
 set -e; P=${1:-python3}; mkdir -p v41 v45 v48 wide out
 # v34 print frame -> old work frame (axis at x=y=0, top at z=-21); found by aligning the grip with handle v58
@@ -20,4 +20,4 @@ $P -I scripts/v44.py v45/deco_tmp_SHORT.stl v45/deco_SHORT.stl   # ticks -> arro
 $P -I scripts/fillholes.py v45/deco_SHORT.stl v45/deco47_SHORT.stl   # (log: filled 428.7 mm3)
 $P -I scripts/extend48.py v45/deco47_SHORT.stl v48/ext_SHORT.stl
 $P -I scripts/thread47.py v48/ext_SHORT.stl v48/v48S             # head: vol 149755, bbox [-44,-82.6,-295.4,44,22.6,-123]  (same as the log)
-$P -I scripts/widen_head2.py v48/v48S_head.stl wide/head_w25.stl 25   # v62: nozzle 88 -> 113 mm
+$P -I scripts/widen_head5.py v48/v48S_head.stl wide/head_v63.stl 25 67 -32   # v63: nozzle 88 -> 113 mm, window frame proportional

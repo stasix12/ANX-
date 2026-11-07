@@ -11,9 +11,8 @@ import { TargetPicker } from '@/components/social/TargetPicker';
 import { PostPreview } from '@/components/social/PostPreview';
 import { PreLaunchReview } from '@/components/social/PreLaunchReview';
 import { SchedulePicker, planFor, targetsLabel, type ScheduleDraft, scheduleDraftToInput } from '@/components/social/SchedulePicker';
-import { AiPostComposer } from '@/components/social/AiPostComposer';
 import { SocialShell } from '@/components/social/SocialShell';
-import { Button, Card, Field, Loading, Notice, SegmentedControl, inputClass, useConfirm, useToast } from '@/components/social/ui';
+import { Button, Card, Field, Loading, Notice, inputClass, useConfirm, useToast } from '@/components/social/ui';
 import {
   archivePost,
   callSocialApi,
@@ -155,24 +154,6 @@ export function PostEditor({ postId }: { postId?: string }) {
    * PublishingToggle, the dashboard). This was the one left.
    */
   const launching = useRef(false);
-  /*
-   * ─── AI OR BY HAND, AND IT IS ONE PIECE OF STATE ──────────────────────
-   *
-   * "המעבר בין המצבים חייב להיות מיידי, ללא רענון עמוד וללא מחיקת תוכן
-   *  שהמשתמש כבר כתב."
-   *
-   * This flag hides and shows the generator. It does NOT unmount the text
-   * box: "טקסט בסיסי" is rendered in both modes, below, exactly as the
-   * reference shows it. That is what makes the switch free of consequence —
-   * React keeps the textarea and its value mounted the whole time, so there
-   * is no state to preserve and nothing to restore.
-   *
-   * A post being EDITED opens by hand: its text already exists, and putting
-   * a generator above it would push the thing the owner came to change off
-   * the screen. A new post opens on the generator, which is what was asked
-   * for.
-   */
-  const [writeMode, setWriteMode] = useState<'ai' | 'manual'>(postId ? 'manual' : 'ai');
   const [previewKey, setPreviewKey] = useState<string>('base');
   const [schedule, setSchedule] = useState<ScheduleDraft>({ mode: 'now', date: '', time: '09:00', weekly: {}, intervalDays: 2, intervalTime: '09:00', dripPerDay: 0, dripGapMinutes: 20, dripStart: '09:00', dripEnd: '20:00' });
   const [loading, setLoading] = useState(true);
@@ -696,45 +677,9 @@ export function PostEditor({ postId }: { postId?: string }) {
                 and reused after that (library.ts quickPublish). Choosing a
                 container before you may publish is the step the owner called
                 confusing, and it is not a decision the post needs. */}
-            {/*
-              THE TWO WAYS TO WRITE, as the reference puts them: a segmented
-              control directly under the card's title, AI first.
-
-              The generator is mounted only in 'ai' mode, which is what makes
-              the switch instant — there is nothing to tear down but a form
-              whose values are its own. What it produced is held inside it, so
-              a trip to "נוסח ידני" and back does not lose the version the
-              model wrote either.
-            */}
-            <SegmentedControl
-              value={writeMode}
-              onChange={setWriteMode}
-              label="איך לכתוב את הפוסט"
-              options={[
-                { value: 'ai', label: '✨ יצירת פוסט עם AI' },
-                { value: 'manual', label: '✏️ נוסח ידני' },
-              ]}
-            />
-            {writeMode === 'ai' && (
-              <AiPostComposer
-                business={business}
-                hasText={Boolean(post.base_text.trim())}
-                onAccept={(text) => {
-                  update('base_text', text);
-                  /* Straight to the field it filled, so the owner SEES where
-                     the text landed rather than being told. The post now
-                     continues down the ordinary path from here. */
-                  setWriteMode('manual');
-                  setMessage({ tone: 'success', text: 'הפוסט נכנס לטקסט הבסיסי. אפשר לערוך ולהמשיך כרגיל.' });
-                }}
-              />
-            )}
-
-            <div className="mt-4">
             <Field label="שם פנימי" hint="לזיהוי בלוח הבקרה, לא מתפרסם">
               <input className={inputClass} value={post.title} onChange={(e) => update('title', e.target.value)} placeholder="למשל: ניקוי ספות באר שבע — ספטמבר" />
             </Field>
-            </div>
             <div className="mt-4">
               <Field label="טקסט בסיסי" hint="הטקסט שיתפרסם כשאין גרסאות. הטלפון וקישור ה-WhatsApp מצורפים אוטומטית בסוף.">
                 <textarea className={`${inputClass} min-h-36`} value={post.base_text} onChange={(e) => update('base_text', e.target.value)} dir="auto" />

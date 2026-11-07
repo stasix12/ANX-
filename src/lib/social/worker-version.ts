@@ -1231,51 +1231,29 @@ export const WORKER_VERSION = '4.53.0';
    07.11.2026 GitHub's newest published tag was v4.52.0, so 4.53.0 is free.
    This file cannot answer that question and must not be trusted to. */
 /*
- * ─── 07.11.2026 — RE-PINNED WITHOUT A VERSION BUMP, AND HERE IS THE PROOF ──
+ * ─── 07.11.2026 — THE AI POST GENERATOR CAME AND WENT ────────────────────
  *
- * The AI post generator added src/lib/social/ai-post.ts, which is under this
- * fingerprint's ROOTS — so the hash moved and the gate fired, exactly as it
- * should. The gate's own question is "does this have to reach the PC?", and
- * it demands an answer from the build rather than from an argument.
+ * An AI post generator was added to the new-post screen and then deleted the
+ * same evening at the owner's word: "תמחק את כל העניין עם ה-AI בפוסטים."
+ * Both moves touched src/lib/social (ai-post.ts arrived, then left), so this
+ * fingerprint moved twice and is back to covering the same file set as before
+ * the feature existed.
  *
- * THE BUILD WAS ASKED, which took one step this file's first draft skipped.
- * `npm run build:app` fails until `electron-updater` is installed, and that
- * package is DELIBERATELY absent from package.json — package.test.ts explains
- * why (in the manifest it reaches Vercel and takes the website down) and
- * prints the exact command: `npm install --no-save electron-updater@6`. With
- * it installed for the run, the bundle builds and answers directly.
+ * WORKER_VERSION NEVER MOVED, through either change, and the bundle was asked
+ * rather than reasoned at with each one. `npm run build:app` needs
+ * electron-updater, which package.test.ts explains is deliberately absent from
+ * package.json and prints the install command for; with it installed for the
+ * run, the bundle answered: every AI symbol 0, against dedupeKey 4 as a
+ * control. The generator ran on Vercel and in a browser, never on a
+ * customer's PC, so there was never anything for an installed copy to
+ * download — and nothing to un-download now.
  *
- * AND AGAIN FOR THE FREE TEMPLATE PATH (same day). compose.ts IS bundled —
- * the worker calls dedupeKey() from it — so a change there is not obviously
- * web-only and the bundle was asked a second time. generateVariantSeeds and
- * the Hebrew drafts are tree-shaken out: the worker publishes posts, it never
- * writes them. Measured in the rebuilt bundle:
- *
- *     generateVariantSeeds  0        "היי שכנים"      0
- *     Script=Hebrew         0        dedupeKey        4   ← control
- *
- * One grep for `prefixed` came back 1 and was chased down rather than waved
- * through: it is the English word inside a comment in the Supabase realtime
- * library (worker.cjs:5022), not the new helper. A hit that is not read is
- * not evidence.
- *
- * Grepped in dist/app/worker.cjs, 1.19 MB, built from this tree:
- *
- *     validateAiRequest   0        AiPostComposer      0
- *     AI_POST_KINDS       0        ANTHROPIC           0
- *     AI_POST_TONES       0        "מחולל פוסטים חכם"  0
- *     serviceLabel        0        liveTargetIds       4   ← control
- *
- * The control line is the point: a symbol that DOES ship appears four times
- * in the same grep, so the zeros are an answer and not a broken search.
- *
- * The import graph says the same and is short enough to state: `ai-post.ts`
- * is imported by the server route (runs on Vercel), the screen (runs in a
- * browser) and its own test. Nothing under worker/ or desktop/ touches it.
- *
- * WORKER_VERSION therefore stays at 4.53.0: no code that runs on a customer's
- * PC changed, so there is nothing for an installed copy to download. Bumping
- * it would have burned a release number on a web-only change and told every
- * machine to update to a build identical to the one it has.
+ * WHAT SURVIVED THE DELETION, on purpose: prefixed() in compose.ts. The
+ * personal variant template wrote `אני מ${business.name}`, which is right for
+ * a Hebrew name and produced "אני מANX" for a Latin one — in text that
+ * publishes to fifty groups. It was found by running the generator and
+ * reading its output, it has nothing to do with AI, and the four-variants
+ * button that has always been on this screen still emits that sentence.
+ * Reverting it would have put the broken form back.
  */
-export const WORKER_FINGERPRINT = '6854f402f31f6e59';
+export const WORKER_FINGERPRINT = '0d363c0002dfdc42';

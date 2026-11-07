@@ -100,7 +100,17 @@ async function main(): Promise<void> {
   await new Promise<void>((r) => server.listen(0, '127.0.0.1', () => r()));
   const port = (server.address() as { port: number }).port;
 
-  const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
+  /*
+   * THE RUNNER'S OWN BROWSER, NOT THIS SANDBOX'S PATH.
+   *
+   * This read a bare '/opt/pw-browsers/chromium' and went red on the first CI
+   * run after it was written: the GitHub runner installs its Chromium under
+   * the repository and exports PLAYWRIGHT_CHROMIUM to say where. Every other
+   * measured suite in this folder already reads that variable first — see
+   * stat-strip, dashboard-hero, crm-shell — and package.test.ts now refuses a
+   * launch written any other way, so this cannot be the next file's bug too.
+   */
+  const browser = await chromium.launch({ executablePath: process.env.PLAYWRIGHT_CHROMIUM ?? '/opt/pw-browsers/chromium' });
 
   /*
    * THE CEILING, PER WIDTH.

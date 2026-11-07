@@ -572,6 +572,53 @@ is(!existsSync(path.join(out, 'node_modules', 'playwright-core', '.local-browser
   );
 }
 
+/*
+ * ─── EVERY MEASURED SUITE MUST ASK THE RUNNER WHERE ITS BROWSER IS ─────────
+ *
+ * worker/test/dashboard-size.test.ts was written with a bare
+ * `executablePath: '/opt/pw-browsers/chromium'` — the path this sandbox keeps
+ * Chromium at. It passed here and went red on the GitHub runner, which
+ * installs its own under the repository and exports PLAYWRIGHT_CHROMIUM to
+ * say where. The whole suite died at that line with 98 suites already green,
+ * and the only thing that caught it was the gate itself, after a push.
+ *
+ * Every other measured file already reads the variable first. This makes that
+ * the rule rather than the habit: a launch in worker/test/ either reads
+ * PLAYWRIGHT_CHROMIUM on the same line, or goes through findChromium(), which
+ * is the helper the worker's own tests use and which already looks the
+ * variable up.
+ */
+{
+  const testDir = path.join(root, 'worker', 'test');
+  const offenders: string[] = [];
+  for (const name of readdirSync(testDir)) {
+    /* Dot-files here are scratch probes somebody left behind, never shipped
+       and never run by the chain in package.json. */
+    if (name.startsWith('.')) continue;
+    if (!name.endsWith('.ts') && !name.endsWith('.tsx')) continue;
+    const src = readFileSync(path.join(testDir, name), 'utf8');
+    for (const line of src.split('\n')) {
+      if (!/chromium\.launch\(/.test(line)) continue;
+      /*
+       * A STRING LITERAL IS THE WHOLE BUG, so a string literal is what this
+       * looks for. `executablePath: exe`, `{ executablePath }` and
+       * `executablePath: process.env.PLAYWRIGHT_CHROMIUM ?? '…'` all resolve
+       * the path at run time from the environment — only a quote straight
+       * after the colon hard-codes one machine's layout into the suite.
+       */
+      if (!/executablePath:\s*['"`]/.test(line)) continue;
+      if (/PLAYWRIGHT_CHROMIUM/.test(line)) continue;
+      offenders.push(`${name}: ${line.trim().slice(0, 90)}`);
+    }
+  }
+  checks += 1;
+  assert.deepEqual(
+    offenders,
+    [],
+    `a browser launch here hard-codes this sandbox's Chromium path, so it cannot run on the CI runner. Read process.env.PLAYWRIGHT_CHROMIUM first:\n  ${offenders.join('\n  ')}`,
+  );
+}
+
 const mb = files.reduce((n, f) => n + statSync(f).size, 0) / 1024 / 1024;
 is(mb < 40, `the payload beside Electron must stay small (it is ${mb.toFixed(1)} MB)`);
 

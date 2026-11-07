@@ -14,6 +14,8 @@ Saved here so the CAD files survive cloud-session resets.
 | `ANX3D_v63_HEAD+v60_SHORT_HANDLE_print.3mf` | Print plate (Bambu H2D 350x320): head v63 upside down on its thread end + handle v60 on its ring end, separate objects (one colour each). |
 | `ANX3D_v64_ONE-PIECE_WIDE-113mm.3mf` | One-piece wand: head v63 (113 mm) + handle v60 fused in the screwed-home position, thread zone filled solid (no thread). Outside identical to the screwed pair; air bore (514 mm2) and spray-tube slot unchanged. 296.4 mm tall, printed nozzle down like the original white v34. |
 | `ANX3D_v64_ONE-PIECE_WIDE-113mm_2-colours.3mf` | Same, split at the ring bottom into HEAD_colour-1 + HANDLE_colour-2 (Assemble in Bambu Studio; one filament change). Preview `v64_one-piece.png`. |
+| `ANX3D_v65_SHORT_one-piece_WIDE-113mm_2-colours.3mf` | One-piece wand v55 (no ring, like the original white wand, WESTPAK screw holes kept) with the head widened to 113 mm exactly like v63 (window frame proportional). Two touching parts for two colours: HEAD (pink) / GRIP (black), split at the collar top as in v55. Same print placement as the user's v55 file. Preview `v65_one-piece.png`. |
+| `source/ANX3D_v55_SHORT_one-piece_2-colours.3mf` | User's v55 one-piece two-colour file (source of v65). |
 | `ANX3D_v48_HEAD_rebuilt.3mf` | Head v48 rebuilt from the v34 source (volume 149755 mm3 = original). Backup. |
 | `v63_vs_v48_head.png`, `v63_window_frame.png` | Old vs new head (front / back / side) and the window frame: original / v62 (stretched) / v63 (proportional). |
 | `source/ANX3D_handle_SHORT_v34_WIDE_print.stl` | One-piece v34 wand (user's file) - source of the head. |

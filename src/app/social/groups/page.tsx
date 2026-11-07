@@ -45,6 +45,7 @@ import { formatDayMonthHe } from '@/lib/social/time';
 import { projectQueue, spacingFrom } from '@/lib/social/projection';
 import { readSchedule, type CampaignSchedule } from '@/lib/social/campaign-schedule';
 import { KNOWN_CITIES, detectCity, sortCities } from '@/lib/social/cities';
+import { cannotPublishTo } from '@/lib/social/status';
 import { RUSSIAN_CATEGORY, needsRussianCategory, russianNamed } from '@/lib/social/language';
 import { SNAPSHOT, readSnapshot, writeSnapshot } from '@/lib/social/snapshot';
 import {
@@ -56,7 +57,7 @@ import {
 import { friendlyMessage } from '@/lib/social/errors';
 import { ChartIcon, ChevronIcon, CloseIcon, MapPinIcon, PauseIcon, PencilIcon, PlayIcon, RepeatIcon, SearchIcon, StarIcon, TagIcon, TrashIcon, UsersIcon } from '@/components/icons';
 
-type StatusFilter = 'all' | 'active' | 'paused' | 'favorites' | 'recent' | 'new';
+type StatusFilter = 'all' | 'active' | 'paused' | 'favorites' | 'recent' | 'new' | 'blocked';
 type View = 'grid' | 'list';
 
 const RECENT_DAYS = 14;
@@ -254,6 +255,7 @@ export default function GroupsPage() {
       if (status === 'favorites') return Boolean(g.favorite);
       if (status === 'recent') return Boolean(g.last_published_at && g.last_published_at > recentCutoff);
       if (status === 'new') return Boolean(g.created_at && g.created_at > addedCutoff);
+      if (status === 'blocked') return cannotPublishTo(g);
       return true;
     },
     [status, recentCutoff, addedCutoff],
@@ -324,6 +326,11 @@ export default function GroupsPage() {
     [cities, page, visible, cityOf],
   );
 
+  /* The groups the card and the chip both act on — one list, so the number
+     on the chip and the number the button touches cannot disagree. */
+  const blocked = useMemo(() => all.filter(cannotPublishTo), [all]);
+  const blockedOn = useMemo(() => blocked.filter((g) => g.enabled), [blocked]);
+
   const statusCounts = useMemo(
     () => ({
       all: all.length,
@@ -332,8 +339,11 @@ export default function GroupsPage() {
       favorites: all.filter((g) => g.favorite).length,
       recent: all.filter((g) => g.last_published_at && g.last_published_at > recentCutoff).length,
       added: all.filter((g) => g.created_at && g.created_at > addedCutoff).length,
+      /* From the SAME list the card acts on, not a second pass — the number
+         on the chip and the number the button touches cannot disagree. */
+      blocked: blocked.length,
     }),
-    [all, recentCutoff, addedCutoff],
+    [all, blocked, recentCutoff, addedCutoff],
   );
 
   async function act(key: string, fn: () => Promise<unknown>, done?: string) {
@@ -574,6 +584,82 @@ export default function GroupsPage() {
         )}
 
         {/*
+          ───── THE GROUPS THERE IS NO POINT PUBLISHING TO ────────────────
+
+          "תוסיף קטגוריה חדשה בקבוצות של הקבוצות שלא ניתן לפרסם בהם ותציע לי
+           בתוך הקטגוריה הזאת גם למחוק אותם."
+
+          TWO BUTTONS, AND THE ORDER IS THE POINT. Switching off is the primary
+          one because it is the reversible one: the same switch on the card puts
+          a group back, and the queue history stays. Deleting is secondary and
+          goes through the same warning the bulk bar uses, because it takes the
+          group's whole publication history with it — which is also the only
+          evidence of WHY it was in here.
+
+          IT NAMES THE ONES IT WILL NOT TOUCH. The count on the buttons is the
+          groups still switched ON; any already off are left alone and said out
+          loud, so pressing twice cannot read as "it did nothing".
+
+          AND IT LINKS TO THE LIST RATHER THAN HIDING IT. The owner verified
+          these by hand once already — the card's job is to get him to the
+          filtered list, not to be trusted instead of it.
+        */}
+        {groups && blocked.length > 0 && (
+          <Card padded={false} className="px-3 py-2.5">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="min-w-0">
+                <p className="text-sm font-extrabold text-mist-100">
+                  {blocked.length === 1 ? 'קבוצה אחת שלא ניתן לפרסם בה' : `${blocked.length} קבוצות שלא ניתן לפרסם בהן`}
+                </p>
+                <p className="mt-0.5 text-xs leading-relaxed text-mist-500">
+                  אף פרסום לא עלה מהן מעום, והניסיון האחרון נכשל — בדרוך כלל קבוצות מכירת פריטים,
+                  שבהן פייסבוק מחליפה את תיבת הכתיבה במסלול של העלאת פריט.{' '}
+                  <button type="button" className="font-bold text-brand-400 underline" onClick={() => { setStatus('blocked'); setQuery(''); setCityFilter(''); setCategoryFilter(''); }}>
+                    הצג אותן
+                  </button>
+                  {blockedOn.length < blocked.length && ` ${blocked.length - blockedOn.length} כבר מושהות ולא ייגעו.`}
+                </p>
+              </div>
+              <div className="flex shrink-0 flex-wrap gap-2">
+                <Button
+                  variant="secondary"
+                  busy={busy === 'blocked-off'}
+                  disabled={blockedOn.length === 0}
+                  className="shrink-0 whitespace-nowrap"
+                  onClick={() =>
+                    act(
+                      'blocked-off',
+                      () => bulkUpdateTargets(blockedOn.map((g) => g.id), { enabled: false }),
+                      blockedOn.length === 1 ? 'הקבוצה הושהתה — לא ייכנסו אליה פרסומים חדשים.' : `${blockedOn.length} קבוצות הושהו — לא ייכנסו אליהן פרסומים חדשים.`,
+                    )
+                  }
+                >
+                  <PauseIcon className="h-4 w-4" />
+                  {blockedOn.length > 1 ? `השהה את ${blockedOn.length}` : 'השהה אותה'}
+                </Button>
+                <Button
+                  variant="danger"
+                  busy={busy === 'blocked-del'}
+                  className="shrink-0 whitespace-nowrap"
+                  onClick={async () => {
+                    const ok = await confirm.ask({
+                      title: blocked.length === 1 ? 'למחוק קבוצה אחת?' : `למחוק ${blocked.length} קבוצות?`,
+                      body: DELETE_GROUP_WARNING,
+                      confirmLabel: 'מחק ומחק היסטוריה',
+                      danger: true,
+                    });
+                    if (ok) await act('blocked-del', () => bulkDeleteTargets(blocked.map((g) => g.id)).then(() => setSelected([])), 'נמחקו.');
+                  }}
+                >
+                  <TrashIcon className="h-4 w-4" />
+                  {blocked.length > 1 ? `מחק את ${blocked.length}` : 'מחק אותה'}
+                </Button>
+              </div>
+            </div>
+          </Card>
+        )}
+
+        {/*
           Search + the filter dimensions, at about half the height they cost
           before.
 
@@ -620,6 +706,13 @@ export default function GroupsPage() {
                 { value: 'favorites', label: 'מועדפות', count: groups ? statusCounts.favorites : undefined },
                 { value: 'recent', label: 'פורסם לאחרונה', count: groups ? statusCounts.recent : undefined },
                 { value: 'paused', label: 'מושהות', count: groups ? statusCounts.paused : undefined },
+                /* LAST IN THE ROW, and only when there is one. A chip reading
+                   "לא ניתן לפרסם 0" on a healthy account is a worry with
+                   nothing behind it; the filter itself stays reachable because
+                   the card below links to it. */
+                ...(groups && statusCounts.blocked > 0
+                  ? [{ value: 'blocked' as const, label: 'לא ניתן לפרסם', count: statusCounts.blocked }]
+                  : []),
               ]}
             />
             <SegmentedControl

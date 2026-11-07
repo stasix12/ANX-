@@ -1,4 +1,4 @@
-import type { QueueStatus } from './types';
+import type { QueueStatus, SocialTarget } from './types';
 
 /**
  * THE classification of queue statuses. One place, one answer.
@@ -209,4 +209,54 @@ export function summarizeQueue(counts: Record<QueueStatus, number>): QueueSummar
     open: waiting + inFlight,
     cancellable: sum(CANCELLABLE_STATUSES),
   };
+}
+
+/* =======================================================================
+ * AND ONE CLASSIFICATION THAT IS NOT ABOUT social_queue.status — it is about
+ * social_targets.last_status, which is a different column with a different
+ * meaning (a high-water mark since each group’s last success, cleared only by
+ * a publication). It lives here because this file is where "what does this
+ * status mean" is answered once, and because the screen is not its only
+ * caller for long: the quarantine the worker will grow needs the same rule,
+ * and two copies of it would drift towards deleting a working group.
+ * ===================================================================== */
+
+/**
+ * ───── A GROUP THERE IS NO POINT PUBLISHING TO, AND HOW WE KNOW ───────
+ *
+ * "תוסיף קטגוריה חדשה בקבוצות של הקבוצות שלא ניתן לפרסם בהם ותציע לי
+ *  בתוך הקטגוריה הזאת גם למחוק אותם" — 07.11.2026, after he checked them
+ * himself: "באמת לא ניתן לפרסם בקבוצות האלה זה קבוצות של מכירת פריטים".
+ *
+ * THE MEASUREMENT THIS CAME FROM, over his own database: 2,446 of the
+ * product's 2,480 failures ever — 98.6% — are one sentence, "לא מצאתי את
+ * תיבת כתבו משהו… בקבוצה", and they sit on 143 groups. Split by whether
+ * the group has EVER published: 53 never have (1,424 failures), 47 published
+ * once and stopped (929), and 43 published within three days and merely fail
+ * sometimes (93). The last group is the one that matters most here — they are
+ * fine, the box is simply slow to render, and a filter that swept them up
+ * would offer to delete 43 working groups to solve 4% of the problem.
+ *
+ * SO THE RULE IS THE NARROW ONE: never published, and the last attempt
+ * FAILED. Not 'needs_attention', which status.ts reserves for "a person must
+ * act" — an expired login is not the group's fault and comes back by itself.
+ * Checked against the 53 he verified: this catches 52 of them and admits
+ * nothing that is not one of them.
+ *
+ * WHY THE SCREEN HAS TO ANSWER THIS AND NOT THE NIGHTLY SWEEP. The worker
+ * already disables a group when Facebook says it cannot be posted to
+ * (social-worker.ts:2016), and that check runs — 590 of his 596 groups were
+ * swept the same day. It has fired three times in the product's life, because
+ * it asks whether a restriction BANNER is on screen within 1.2 seconds, and a
+ * selling group shows no banner at all: it replaces the composer with a "list
+ * an item" flow. `isVisible()` returns false on timeout, so "no banner" is
+ * read as proof that posting works — and the line below it then CLEARS
+ * last_error. That is why 222 of his 223 failing groups carry no reason: it
+ * is not missing, it is erased nightly. Until the worker asks the right
+ * question (the presence of the composer, which is the thing publishing
+ * actually needs), the queue's own history is the only honest witness, and
+ * last_status + last_published_at are what reach this screen.
+ */
+export function cannotPublishTo(g: SocialTarget): boolean {
+  return !g.last_published_at && g.last_status === 'failed';
 }

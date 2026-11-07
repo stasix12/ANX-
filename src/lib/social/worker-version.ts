@@ -1177,5 +1177,27 @@ export const WORKER_VERSION = '4.52.0';
    saves the schedule. It takes effect the moment Vercel finishes — a PC still
    on an older build publishes exactly as it did, from a queue whose instants
    the dashboard has corrected. Bumping the version would make every
-   customer's machine download and restart for code it cannot reach. */
-export const WORKER_FINGERPRINT = '444502dab96db476';
+   customer's machine download and restart for code it cannot reach.
+
+   ─── AND AGAIN, for the groups screen's new category. 4.52.0 still stays.
+
+   "תוסיף קטגוריה חדשה בקבוצות של הקבוצות שלא ניתן לפרסם בהם" — 07.11.2026.
+
+   status.ts gained cannotPublishTo(), a pure predicate over two columns of a
+   social_targets row, and the groups screen filters and counts by it. The
+   file is bundled, so the function rides along; nothing in worker/ or
+   desktop/ calls it:
+
+     grep -rn 'cannotPublishTo' worker/ desktop/ --include=*.ts → (none)
+
+   DOES THIS HAVE TO REACH THE PC? No. The category is a view over data the
+   worker already writes (last_status, last_published_at) and the actions
+   behind it are the screen's own existing writes — bulkUpdateTargets and
+   bulkDeleteTargets, both browser-side. A machine that never updates keeps
+   publishing exactly as it does now.
+
+   IT WILL, THOUGH, AND DELIBERATELY. The predicate was put in status.ts
+   rather than in the page because the quarantine this is the manual version
+   of belongs in the worker, and two copies of the rule would drift towards
+   deleting a working group. When that lands, the version bumps with it. */
+export const WORKER_FINGERPRINT = '848fbc73a01b1bcb';

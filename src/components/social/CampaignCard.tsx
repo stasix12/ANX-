@@ -7,7 +7,7 @@ import { scheduleReadout, type AccountSpacing } from '@/lib/social/schedule-read
 import { accountGapSeconds } from '@/lib/social/rules';
 import { counted, formatDayMonthHe } from '@/lib/social/time';
 import { ltr } from './DateTime';
-import type { Campaign, MediaItem } from '@/lib/social/types';
+import type { Campaign, MediaItem, PaceId } from '@/lib/social/types';
 import {
   AlertCircleIcon,
   BoltIcon,
@@ -101,7 +101,9 @@ export function CampaignCard({
   repeat,
   onRepeatChange,
   spacing,
-  onAccountGapChange,
+  pace,
+  onPaceChange,
+  paceRestUntil,
   floorHours,
   scheduleBusy = false,
 }: {
@@ -201,7 +203,16 @@ export function CampaignCard({
   /** Writes the ACCOUNT's gap — the only one the engine enforces. Without it
       this card shows the account's number and writes the campaign's, which is
       the two screens disagreeing. See the panel's prop of the same name. */
-  onAccountGapChange?: (seconds: number) => void;
+  /**
+   * מצב פרסום חכם — which publishing mode the ACCOUNT is on, and the handler
+   * that changes it. Straight through to CampaignSchedulePanel, which
+   * explains at length what field this replaced and why the mode writes the
+   * account's own gap rather than the campaign's column.
+   */
+  pace?: PaceId | null;
+  onPaceChange?: (id: PaceId) => void;
+  /** When the current automatic rest ends, if one is running. */
+  paceRestUntil?: string | null;
   /** How close two publications of one post to one group may be, in hours —
       the account's setting, defaulted by the panel when absent. */
   floorHours?: number;
@@ -686,7 +697,9 @@ export function CampaignCard({
             disabled={scheduleBusy}
             busy={scheduleBusy}
             accountFloorSeconds={spacing ? accountGapSeconds(spacing, spacing, true) : undefined}
-            onAccountGapChange={onAccountGapChange}
+            pace={pace}
+            onPaceChange={onPaceChange}
+            restUntil={paceRestUntil}
             /* The account's own repeat floor, so the card judges the rounds
                against the number in Settings rather than a constant. */
             floorHours={floorHours}

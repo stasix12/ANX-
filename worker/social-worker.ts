@@ -6,7 +6,7 @@ import { detectCity } from '@/lib/social/cities';
 import { JOINED_QUERY, mergeDiscovered, normalizeQuery, type DiscoveredGroup, type StoredGroup } from '@/lib/social/discovery';
 import { renderPostText } from '@/lib/social/compose';
 import { planQueue } from '@/lib/social/plan';
-import { PREP_LEAD_MS, accountGapLabel, accountGapSeconds, evaluateQueueItem } from '@/lib/social/rules';
+import { PREP_LEAD_MS, accountGapLabel, accountGapSeconds, evaluateQueueItem, paceProfile, paceRestLabel, paceRestRemainingMs, type PaceProfile } from '@/lib/social/rules';
 import { Admission, laneCountFor } from './admission';
 import { CHORE_NEEDS_MS, choreFits, roomBeforeNextPublish } from './chore-window';
 import { OPEN_STATUSES } from '@/lib/social/status';
@@ -752,7 +752,7 @@ async function spacingGate(
   db: SupabaseClient,
   limits: LimitsSettings,
   browser: BrowserSettings,
-): Promise<{ open: boolean; waitMs: number; gapMs: number; gapSeconds: number; nextAt: string | null }> {
+): Promise<{ open: boolean; waitMs: number; gapMs: number; gapSeconds: number; nextAt: string | null; restMs: number; pace: PaceProfile | null }> {
   /*
    * THE SAME FUNCTION rules.ts USES, and that is the point of importing it
    * rather than repeating the arithmetic. These two gates have drifted
@@ -761,7 +761,23 @@ async function spacingGate(
    */
   const gapSeconds = accountGapSeconds(limits, browser, true);
   const gapMs = gapSeconds * 1000;
-  if (!gapMs) return { open: true, waitMs: 0, gapMs: 0, gapSeconds, nextAt: null };
+  /*
+   * ─── AND THE REST, THROUGH THE SAME FUNCTION rules.ts USES ──────────────
+   *
+   * The pacing pattern adds exactly one thing to this gate: after a run of
+   * `burst` publications the engine owes a rest, and during it nothing may be
+   * claimed. rules.ts enforces it per row regardless — it is the authority —
+   * but a gate that did not know about it would claim a row every tick for
+   * the length of the rest — up to thirty minutes on the slow mode — and have
+   * each one handed straight back with a "נדחה" line, which is precisely the
+   * burst this gate exists to prevent.
+   *
+   * paceRestRemainingMs() is imported rather than reimplemented. These two
+   * gates have drifted over the GAP before; this is that lesson applied the
+   * first time rather than the second.
+   */
+  const pace = paceProfile(limits.pace);
+  if (!gapMs && !pace) return { open: true, waitMs: 0, gapMs: 0, gapSeconds, nextAt: null, restMs: 0, pace };
   /*
    * DELIBERATELY NOT SCOPED BY ACCOUNT, and that is a reversal.
    *
@@ -783,14 +799,16 @@ async function spacingGate(
    *
    * It goes back with the change that scopes rules.ts:209, where it belongs.
    */
-  const { data: last, error: lastError } = await db
+  const { data: rows, error: lastError } = await db
     .from('social_queue')
     .select('published_at')
     .eq('status', 'published')
     .not('published_at', 'is', null)
     .order('published_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();
+    /* One row without a pattern, exactly as before; `burst` rows with one,
+       because telling a run from a stretch already broken by a rest needs
+       them. The pattern changes the limit and nothing else about this read. */
+    .limit(pace ? Math.max(1, pace.burst) : 1);
   /*
    * A SPACING READ THAT FAILED MEANS WAIT, NOT GO.
    *
@@ -799,12 +817,18 @@ async function spacingGate(
    * wide and every due row went out back to back with no gap at all. That is
    * how an account gets flagged, arrived at through a network blip.
    */
-  if (lastError) return { open: false, waitMs: gapMs, gapMs, gapSeconds, nextAt: null };
-  const at = (last as { published_at?: string } | null)?.published_at;
-  if (!at) return { open: true, waitMs: 0, gapMs, gapSeconds, nextAt: null };
-  const nextMs = new Date(at).getTime() + gapMs;
-  const waitMs = nextMs - Date.now();
-  return { open: waitMs <= 0, waitMs, gapMs, gapSeconds, nextAt: new Date(nextMs).toISOString() };
+  if (lastError) return { open: false, waitMs: gapMs, gapMs, gapSeconds, nextAt: null, restMs: 0, pace };
+  const stamps = ((rows ?? []) as { published_at?: string | null }[])
+    .map((r) => Date.parse(String(r.published_at ?? '')))
+    .filter((t) => Number.isFinite(t));
+  if (!stamps.length) return { open: true, waitMs: 0, gapMs, gapSeconds, nextAt: null, restMs: 0, pace };
+  const nowMs = Date.now();
+  const restMs = paceRestRemainingMs(pace, stamps, nowMs);
+  /* The LATER of the two, which is the same composition rules.ts makes: the
+     gap counts from the last publication, the rest counts from now. */
+  const nextMs = Math.max(stamps[0] + gapMs, nowMs + restMs);
+  const waitMs = nextMs - nowMs;
+  return { open: waitMs <= 0, waitMs, gapMs, gapSeconds, nextAt: new Date(nextMs).toISOString(), restMs, pace };
 }
 
 /**
@@ -1070,10 +1094,27 @@ async function tick(state: WorkerState): Promise<void> {
    * they fit in the wait.
    */
   const holdingForGap = Boolean(due?.length) && !gate.open && gate.waitMs > PREP_LEAD_MS;
-  if (holdingForGap && Date.now() - state.spacingNoticeAt > gate.gapMs / 2) {
-    /* Once per gap, not once per row per tick. */
+  /*
+   * ONCE PER WAIT, and the wait is whichever of the two is holding the queue.
+   *
+   * This was `gate.gapMs / 2` on its own, which is right for a gap and wrong
+   * for a rest: the fast mode's 45-second gap beside the slow mode's
+   * thirty-minute rest would have put the same line into the activity log
+   * every 22 seconds for half an hour — eighty rows saying one thing, in the
+   * log the owner reads to find out whether anything is broken.
+   */
+  if (holdingForGap && Date.now() - state.spacingNoticeAt > Math.max(gate.gapMs, gate.restMs) / 2) {
     state.spacingNoticeAt = Date.now();
-    await logActivity('info', 'deferred', `ממתין למרווח של ${accountGapLabel(gate.gapSeconds)} בין פרסומים`, { until: gate.nextAt });
+    await logActivity(
+      'info',
+      'deferred',
+      /* A rest and a gap are not the same fact and must not read as one: "ממתין
+         למרווח" on a resting queue tells the owner his gap is twenty minutes. */
+      gate.restMs > 0 && gate.pace
+        ? `הפסקה אחרי ${gate.pace.burst} פרסומים רצופים — ממשיכים בעוד ${paceRestLabel(gate.restMs)}`
+        : `ממתין למרווח של ${accountGapLabel(gate.gapSeconds)} בין פרסומים`,
+      { until: gate.nextAt },
+    );
   }
 
   /*

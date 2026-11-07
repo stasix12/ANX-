@@ -24,6 +24,9 @@ import {
   countPublishedSince,
   getControl,
   getLimits,
+  applyPace,
+  readPaceRest,
+  type PaceRestState,
   listActivity,
   listCampaigns,
   commentTotals,
@@ -50,7 +53,6 @@ import {
   setCampaignRepeat,
   repeatRefusedText,
   syncWeeklyHours,
-  applyGapFloor,
   sendWorkerCommand,
   setPaused,
   stopCampaign,
@@ -68,7 +70,7 @@ import { SNAPSHOT, readSnapshot, writeSnapshot } from '@/lib/social/snapshot';
 import { addDaysISO, agree, counted, formatTimeHe, ltr, startOfZonedDay, startOfZonedWeek, zonedDateISO, zonedToUtc } from '@/lib/social/time';
 import { stampText } from '@/components/social/DateTime';
 import type { FlowRow } from '@/components/social/LiveFlow';
-import { QUEUE_STEP_LABEL, type ActivityEntry, type BrowserSettings, type Campaign, type ControlSettings, type LimitsSettings, type MediaItem, type QueueStatus, type QueueStep } from '@/lib/social/types';
+import { QUEUE_STEP_LABEL, type ActivityEntry, type BrowserSettings, type Campaign, type ControlSettings, type LimitsSettings, type MediaItem, type PaceId, type QueueStatus, type QueueStep } from '@/lib/social/types';
 import { friendlyMessage } from '@/lib/social/errors';
 import { AlertTriangleIcon, MessageIcon, PauseIcon, PlayIcon, PlusIcon, RepeatIcon, SendIcon, TrashIcon, UsersIcon } from '@/components/icons';
 
@@ -182,6 +184,13 @@ interface DashboardData {
      listCommentsNeedingHuman. */
   commentsAttention: QueueRow[];
   limits: LimitsSettings;
+  /**
+   * מצב פרסום חכם's current rest, if it is serving one — derived on every poll
+   * from the queue's own published rows by readPaceRest(), which asks the same
+   * paceRestRemainingMs() both publishing gates ask. Nothing about it is
+   * stored, so a refresh or a restart cannot lose it.
+   */
+  paceRest: PaceRestState;
   /** For the account-wide spacing rule the cards must respect — see scheduleReadout. */
   browser: BrowserSettings;
   lastPublished: string | null;
@@ -497,6 +506,13 @@ export default function SocialDashboard() {
         countWaitingWithin(zonedToUtc(addDaysISO(zonedDateISO(now), 1), '00:00').toISOString())
       ]);
       if (queue.summary.total > 0) setupDone.current = true;
+      /*
+       * AFTER the batch and not inside it, because it needs `limits` to know
+       * how long a run is — and it returns without touching the database at
+       * all when no mode is picked, which is every account that has not been
+       * near the new card. One indexed read on the polls where it does run.
+       */
+      const paceRest = await readPaceRest(limits);
       const next: DashboardData = {
         counts: queue.counts,
         summary: queue.summary,
@@ -516,6 +532,7 @@ export default function SocialDashboard() {
         commentsDone,
         commentsAttention,
         limits,
+        paceRest,
         browser,
         lastPublished,
         /* Done plus still to come. Never smaller than what has gone out,
@@ -1372,49 +1389,58 @@ export default function SocialDashboard() {
    * that wrote only the first would show two rounds and publish one.
    */
   /*
-   * ─── THE GAP, WRITTEN WHERE THE ENGINE READS IT ────────────────────────
+   * ─── WHAT WAS HERE: changeAccountGap ────────────────────────────────────
    *
-   * "קודם כל שאני משיק קמפיין אני מגדיר מרווח פרסום 30 שניות ומסך ראשי מופיע
-   *  לי 10 דק זה לא מסונכרן זה בעיה ראשונה."
-   *
-   * Three numbers wore that name and the card showed the only inert one; the
-   * panel's onAccountGapChange prop records the whole anatomy. The part that
-   * belongs here is the WRITE, and why it is two calls:
-   *
-   *   applyGapFloor()  — the account's own gap, in BOTH directions. This is
-   *     the number spacingGate() and rules.ts compare against, and the number
-   *     the launch sheet already writes. changeSchedule's own matchAccountTo
-   *     can only LOWER it, and only while the schedule flag is up, which is
-   *     exactly how 30 seconds went in at launch and ten minutes afterwards
-   *     were refused in silence.
-   *   changeSchedule() — everything else that has always happened on a gap
-   *     change: the column, the re-arm, the re-stamp of rows already queued.
-   *     Reused rather than reimplemented, because that path is tested.
-   *
-   * The campaign's own column is written too, to the same number. It governs
-   * nothing today, but plan.ts takes max(account, campaign) when a schedule
-   * flag is up, and the two disagreeing is how a card comes to promise an
-   * hour the queue will never use.
+   * The handler behind the deleted "הפרש בין פרסומים" field: applyGapFloor()
+   * for the account's own gap, then changeSchedule() for the campaign column
+   * and the re-stamp. Deleted 07.11.2026 with its control — "אין להשאיר אותו
+   * במקום אחר ואין ליצור הגדרה כפולה" — and changePace() below is the same
+   * two calls behind the mode picker that replaced it. An unreachable writer
+   * for a number this product has already had three disagreeing copies of is
+   * exactly the thing to delete rather than leave lying about.
    */
-  const changeAccountGap = useCallback(
-    async (campaign: Campaign, seconds: number) => {
+  /*
+   * ─── PICK A PUBLISHING MODE — מצב פרסום חכם ──────────────────────────────
+   *
+   * THE SAME TWO WRITES changeAccountGap MADE, plus the mode itself:
+   *
+   *   applyPace()      — the account's gap, through applyGapFloor(), in BOTH
+   *     directions, exactly as the deleted gap field wrote it; and
+   *     `limits.pace`, which is the rest and is new. client.ts explains why
+   *     the order of those two matters.
+   *   changeSchedule() — everything that has always happened on a gap change:
+   *     the campaign's own column, the re-arm, and the RE-STAMP of rows
+   *     already in the queue. Reused rather than reimplemented, because that
+   *     path is the tested one — and without it the rows already written keep
+   *     the old cadence and the new mode governs only what is queued next.
+   *
+   * The campaign's own column is written to the same number. It governs
+   * nothing at publish time, but plan.ts takes max(account, campaign) while a
+   * schedule flag is up, and the two disagreeing is how a card comes to
+   * promise an interval the queue will never use.
+   */
+  const changePace = useCallback(
+    async (campaign: Campaign, id: PaceId) => {
+      setScheduleBusy((b) => ({ ...b, [campaign.id]: true }));
       try {
-        const floor = await applyGapFloor(seconds);
-        await changeSchedule(campaign, { ...readSchedule(campaign), gapSeconds: seconds });
+        const { pace, gap } = await applyPace(id);
+        await changeSchedule(campaign, { ...readSchedule(campaign), gapSeconds: pace.gapSeconds });
+        await load();
         /* The SUM is what the engine compares against — minGap plus the group
-           surcharge — so that is the number the toast names, not the one he
-           picked. They differ whenever the surcharge had to absorb part of it,
-           and a toast naming the other one would be the same lie this whole
-           change is here to end. */
+           surcharge — so that is the number the toast names, not the one the
+           mode nominally asked for. They differ whenever the surcharge had to
+           absorb part of it. */
         toast(
-          `המרווח בין פרסומים עודכן ל-${accountGapLabel(floor.minGapSeconds + floor.groupMinGapSeconds)} — זה חל על כל הסבבים בחשבון, לא רק על זה.`,
+          `מצב "${pace.label}" הופעל — פרסום כל ${accountGapLabel(gap.minGapSeconds + gap.groupMinGapSeconds)}, והפסקה של ${pace.restMinutes} דקות אחרי ${pace.burst} פרסומים ברצף. חל על כל החשבון.`,
           'info',
         );
       } catch (err) {
-        toast(friendlyMessage(err, 'עדכון המרווח נכשל.'), 'error');
+        toast(friendlyMessage(err, 'החלפת מצב הפרסום נכשלה.'), 'error');
+      } finally {
+        setScheduleBusy((b) => ({ ...b, [campaign.id]: false }));
       }
     },
-    [changeSchedule, toast],
+    [changeSchedule, load, toast],
   );
 
   const changeRepeat = useCallback(
@@ -2024,9 +2050,14 @@ export default function SocialDashboard() {
                      the campaign's own row; the write is the block above. */
                   schedule={scheduleOf(run.campaign)}
                   onScheduleChange={(next) => changeSchedule(run.campaign, next)}
-                  /* The gap is the ACCOUNT's, so it does not travel through
-                     onScheduleChange — see changeAccountGap. */
-                  onAccountGapChange={(sec) => void changeAccountGap(run.campaign, sec)}
+                  /* מצב פרסום חכם. The mode is the ACCOUNT's, so it does not
+                     travel through onScheduleChange — see changePace. */
+                  pace={data.limits.pace}
+                  onPaceChange={(id) => void changePace(run.campaign, id)}
+                  /* `?.` because a dashboard restored from an older snapshot
+                     has no such key: no rest is the safe reading, and the
+                     next poll fills it in. */
+                  paceRestUntil={data.paceRest?.until ?? null}
                   spacing={{
                     minGapMinutes: data.limits.minGapMinutes,
                     groupMinGapMinutes: data.browser.groupMinGapMinutes,

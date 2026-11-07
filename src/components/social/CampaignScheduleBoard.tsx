@@ -1,13 +1,13 @@
 'use client';
 
-import { CalendarIcon, ClockIcon, RepeatIcon } from '@/components/icons';
+import { CalendarIcon, ClockIcon, RocketIcon } from '@/components/icons';
+import { type PaceProfile } from '@/lib/social/rules';
 import { NextPublication } from './NextPublication';
 import { type ScheduleReadout } from '@/lib/social/schedule-readout';
 import {
   DAY_LABELS,
   DAY_NAMES,
   daysLabel,
-  gapLabel,
   shownSchedule,
   type CampaignSchedule,
 } from '@/lib/social/campaign-schedule';
@@ -60,6 +60,8 @@ export function CampaignScheduleBoard({
   onEdit,
   readout,
   campaignName,
+  pace = null,
+  restUntil = null,
   workerOnline,
   frozenUntil = null,
   neverLaunched = false,
@@ -93,6 +95,13 @@ export function CampaignScheduleBoard({
   /** For the accessible names — the dashboard draws one of these, lists draw many. */
   campaignName: string;
   /**
+   * מצב פרסום חכם, already resolved to its row by the caller — the readout
+   * box that used to show "הפרש בין פרסומים" shows this instead. Null/absent
+   * draws "לא נבחר", which is the honest state of every account that has not
+   * picked one yet.
+   */
+  pace?: PaceProfile | null;
+  /**
    * Whether the PC that publishes has sent a heartbeat — passed straight
    * through to <NextPublication>, which draws the connection caveat under the
    * instant rather than instead of it. Undefined means not known and draws
@@ -102,6 +111,9 @@ export function CampaignScheduleBoard({
   /** Publishing is frozen until this instant — passed through to
       <NextPublication>, which draws the countdown. Null means it is not. */
   frozenUntil?: string | null;
+  /** Straight through to NextPublication: the automatic rest מצב פרסום חכם is
+      serving, if it is serving one. */
+  restUntil?: string | null;
   /** The round has never gone out — passed through to <NextPublication>. */
   neverLaunched?: boolean;
   /**
@@ -291,18 +303,35 @@ export function CampaignScheduleBoard({
           </Box>
 
           <Box
-            /* "הפרש בין פרסומים", the words the second reference image uses
-               and the words the editor under this block uses. They were
-               "פוסטים" here and "פוסט לפוסט" there, for one setting. */
-            label="הפרש בין פרסומים"
-            aria={`הפרש בין פרסומים: ${gapLabel(shown)}. פתיחת עריכת התזמון של ${campaignName}`}
+            /*
+              ─── IT SAYS WHICH MODE, NOT WHICH GAP ──────────────────────────
+
+              This box read "הפרש בין פרסומים" with a gap in it. "יש להסיר
+              לחלוטין מהממשק את השדה הישן: הפרש בין פרסומים. אין להשאיר אותו
+              במקום אחר ואין ליצור הגדרה כפולה… במקומו יש להשתמש במנגנון החדש
+              של שלושת מצבי הפרסום." — 07.11.2026.
+
+              The box stays, because the readout's whole job is to show the
+              three settings the editor under it holds and the third of them
+              is now the MODE. The gap itself is said once, on the mode's own
+              card inside the editor, where it is chosen.
+
+              "מצב פרסום" is also two characters SHORTER than the label it
+              replaces, which was the widest of the three — so the row this
+              block is measured at (360/390/430, dashboard-hero.test.ts) can
+              only have got easier, never tighter.
+            */
+            label="מצב פרסום"
+            aria={`מצב פרסום: ${pace ? pace.label : 'לא נבחר'}. פתיחת עריכת התזמון של ${campaignName}`}
             onClick={onEdit}
             disabled={disabled}
             editing={editing}
           >
             <span className="flex w-full min-w-0 items-center justify-center gap-[3px]">
-              <RepeatIcon aria-hidden className="h-3 w-3 shrink-0 text-brand-400" />
-              <span data-must-fit className="min-w-0 truncate text-[11px] font-extrabold leading-4 text-mist-100">{gapLabel(shown)}</span>
+              <RocketIcon aria-hidden className="h-3 w-3 shrink-0 text-brand-400" />
+              <span data-must-fit className="min-w-0 truncate text-[11px] font-extrabold leading-4 text-mist-100">
+                {pace ? pace.label : 'לא נבחר'}
+              </span>
             </span>
           </Box>
 
@@ -378,6 +407,7 @@ export function CampaignScheduleBoard({
         /* Straight through to the line that answers "when does the next one
            go out" — see the prop's own note. */
         frozenUntil={frozenUntil}
+        restUntil={restUntil}
         className="mt-1"
       />
     </div>

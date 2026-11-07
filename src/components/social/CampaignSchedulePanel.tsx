@@ -5,10 +5,7 @@ import { useState } from 'react';
 import {
   DAY_LABELS,
   DAY_NAMES,
-  GAP_CHOICES,
-  gapChoiceLabel,
   daysLabel,
-  gapLabel,
   scheduleSummary,
   MAX_EXTRA_ROUNDS,
   MIN_REPEAT_HOURS,
@@ -26,11 +23,11 @@ import {
   shownSchedule,
 } from '@/lib/social/campaign-schedule';
 import { roundState, type RoundState } from '@/lib/social/campaign';
-import { EMPTY_PROGRESS, type CampaignProgress } from '@/lib/social/types';
-import { accountGapLabel } from '@/lib/social/rules';
+import { EMPTY_PROGRESS, type CampaignProgress, type PaceId } from '@/lib/social/types';
 import { type ScheduleReadout } from '@/lib/social/schedule-readout';
-import { CalendarIcon, CheckIcon, ChevronDownIcon, ClockIcon, MoreIcon, PlusIcon, RepeatIcon, TrashIcon } from '@/components/icons';
+import { CalendarIcon, CheckIcon, ClockIcon, MoreIcon, PlusIcon, RepeatIcon, TrashIcon } from '@/components/icons';
 import { NextPublication } from './NextPublication';
+import { SmartPaceCard } from './SmartPaceCard';
 import { InfoDot, Toggle, WorkingNote } from './ui';
 
 /**
@@ -154,7 +151,9 @@ export function CampaignSchedulePanel({
   onRepeatChange,
   roundProgress,
   accountFloorSeconds,
-  onAccountGapChange,
+  pace,
+  onPaceChange,
+  restUntil,
   floorHours = MIN_REPEAT_HOURS,
   neverLaunched = false,
   showHeader = true,
@@ -244,34 +243,41 @@ export function CampaignSchedulePanel({
    */
   accountFloorSeconds?: number;
   /**
-   * WRITES THE ACCOUNT'S OWN GAP, which is the only gap the engine enforces.
+   * ─── WHICH PUBLISHING MODE IS ON, AND THE CALLBACK THAT CHANGES IT ──────
    *
-   * "קודם כל שאני משיק קמפיין אני מגדיר מרווח פרסום 30 שניות ומסך ראשי מופיע
-   *  לי 10 דק זה לא מסונכרן."
+   * "יש להסיר לחלוטין מהממשק את השדה הישן: הפרש בין פרסומים… במקומו יש
+   *  להשתמש במנגנון החדש של שלושת מצבי הפרסום." — 07.11.2026.
    *
-   * He was right, and it was worse than unsynchronised. Three numbers carried
-   * the name "מרווח בין פרסומים":
+   * WHAT THE FIELD THAT USED TO BE HERE WAS, because the anatomy is worth
+   * keeping: three different numbers wore the name "מרווח בין פרסומים" —
    *
-   *   1. the launch sheet's — written to the ACCOUNT settings by
+   *   1. the launch sheet's, written to the ACCOUNT settings by
    *      applyGapFloor(), and therefore the real one;
-   *   2. this card's — `schedule_gap_seconds` on the campaign row, read only
-   *      by plan.ts while the schedule flag is UP, and by nothing at publish
+   *   2. this card's, `schedule_gap_seconds` on the campaign row, read only
+   *      by plan.ts while the schedule flag is UP and by nothing at publish
    *      time, so with the flag down it governed nothing at all;
-   *   3. the account settings, which is what spacingGate() and rules.ts both
-   *      actually compare against.
+   *   3. the account settings, which spacingGate() and rules.ts both compare
+   *      against.
    *
-   * And the write was asymmetric: respaceQueue() calls applyGapFloor with
-   * `lowerOnly` when the change comes from a campaign, so his 30 seconds went
-   * in at launch and the 10 minutes he set here afterwards were refused
-   * silently. The card promised ten minutes over a queue publishing every
-   * thirty seconds.
+   * The field showed (2) and the engine obeyed (3). It was fixed by making
+   * the field write the account's gap in both directions; it is now DELETED,
+   * and a mode writes that same account gap — through the same applyGapFloor()
+   * — plus the rest that the gap alone could never express.
    *
-   * The owner's decision: "את המספר האמיתי" — this field shows and writes the
-   * account's gap, in both directions, exactly as the launch sheet does. One
-   * number, one meaning. The handler is the caller's because it is the caller
-   * that owns the write and the reload.
+   * `pace` is undefined/null on every account that has never picked a mode,
+   * which is all of them until somebody taps: the card draws that state
+   * honestly rather than lighting up the nearest mode. The handler belongs to
+   * the caller because the caller owns the write and the reload.
    */
-  onAccountGapChange?: (seconds: number) => void;
+  pace?: PaceId | null;
+  onPaceChange?: (id: PaceId) => void;
+  /**
+   * WHEN THE CURRENT REST ENDS, if one is running — an ISO instant the caller
+   * derived through paceRestRemainingMs(), the same function both publishing
+   * gates use. Null while nothing is resting. Optional: a caller that cannot
+   * read the queue shows no rest rather than guessing at one.
+   */
+  restUntil?: string | null;
   /**
    * HOW CLOSE TWO PUBLICATIONS OF ONE POST TO ONE GROUP MAY BE, in hours.
    *
@@ -366,14 +372,13 @@ export function CampaignSchedulePanel({
    */
   const starts = roundStarts(shown, []);
   /*
-   * THE GAP ON SCREEN IS THE ACCOUNT'S, NOT THE CAMPAIGN'S — see
-   * onAccountGapChange. Falls back to the campaign's stored value only for a
-   * caller that does not hand the account floor down (the campaigns list
-   * before its own wiring), so nothing renders blank.
+   * THE GAP ON SCREEN IS THE ACCOUNT'S, NOT THE CAMPAIGN'S, and it is no
+   * longer a field — only a fact the mode card states while no mode is
+   * picked. Falls back to the campaign's stored value for a caller that
+   * cannot read the account's settings, so nothing renders blank.
    */
   const effectiveGapSeconds =
     typeof accountFloorSeconds === 'number' && Number.isFinite(accountFloorSeconds) ? accountFloorSeconds : shown.gapSeconds;
-  const gapShown = { ...shown, gapSeconds: effectiveGapSeconds };
   const verdict = repeat ? roundsVsRepeat(starts, repeat, floorHours) : null;
   /* The window that would let these rounds publish, from the ONE copy of that
      arithmetic the writer also uses — see repeatFitFor(). Null for every
@@ -394,12 +399,6 @@ export function CampaignSchedulePanel({
     set({ days: shown.days.includes(day) ? shown.days.filter((d) => d !== day) : [...shown.days, day].sort((a, b) => a - b) });
 
   const noDays = shown.days.length === 0;
-
-  /* Shown only while the two genuinely disagree, which makes it self-clearing:
-     once the write lands the floor equals the gap and the line goes away on
-     its own rather than sitting there as a permanent warning about nothing. */
-  const willLowerFloor =
-    typeof accountFloorSeconds === 'number' && Number.isFinite(accountFloorSeconds) && accountFloorSeconds > schedule.gapSeconds;
 
   return (
     /*
@@ -569,8 +568,35 @@ export function CampaignSchedulePanel({
           })}
         </div>
 
-        {/* ─── 3. the two fields, in the reference's own order ────────────── */}
-        <div className="mt-1 grid grid-cols-2 gap-2 [&>*]:min-w-0">
+        {/* ─── 3. שעת התחלה — one horizontal row, title at the start ─────── */}
+        {/*
+          "יש להעביר את שעת התחלה לכרטיסייה אופקית נפרדת… בצד ימין: כותרת
+           'שעת התחלה'. טקסט הסבר קצר. בצד שמאל: בורר שעות קומפקטי עם אייקון
+           שעון." — 07.11.2026, and this is that row.
+
+          IT IS A ROW NOW BECAUSE IT IS ALONE. The field used to be half of a
+          two-column grid whose other half was "הפרש בין פרסומים"; that field
+          is deleted, and a single stacked field in a half-width column beside
+          an empty one is not a layout. Full width also buys the explanation
+          line the brief asks for, which the stacked version had no room for.
+
+          WHERE THE REFERENCE PUTS IT. The image draws this row inside the
+          "תזמון פרסום" block, directly under the day chips and ABOVE
+          "מצב פרסום חכם" — days and hour together, which is also the only
+          grouping that makes sense of the heading above them. §4 of the brief
+          says "מתחת למצבי הפרסום" in words; §1 says the image is the design
+          source of truth and §4 itself ends "בדיוק כמו בתמונה", so the image
+          decides. Nothing about the scheduling mechanism changes either way.
+        */}
+        <div className="mt-1 flex min-w-0 items-center gap-2 rounded-2xl bg-ink-900 p-1.5 [&>*]:min-w-0">
+          <span aria-hidden className="grid h-7 w-7 shrink-0 place-items-center rounded-xl bg-brand-300/15">
+            <ClockIcon className="h-3.5 w-3.5 text-brand-400" />
+          </span>
+          <span className="min-w-0 grow">
+            <span className="block text-[12.5px] font-extrabold leading-4 text-mist-100">שעת התחלה</span>
+            <span className="mt-px block text-[10px] font-bold leading-[13px] text-mist-300">הסבב פותח בשעה הזו בכל יום פרסום</span>
+          </span>
+          <span aria-hidden className="h-7 w-px shrink-0 bg-ink-700" />
           {/*
             ─── ANY MINUTE, NOT EVERY HALF HOUR ──────────────────────────────
             *
@@ -579,34 +605,18 @@ export function CampaignSchedulePanel({
             *
             * This was a <select> over TIME_CHOICES: 48 options, every half
             * hour. Nothing underneath ever needed that grid — the column is
-            * plain 'HH:MM' text, normaliseTime() accepts any minute, and the
-            * rounds editor inside this very panel has used <input type="time">
-            * since the day it was written. The list was the only thing
-            * rounding him off, and it was rounding him to the nearest thirty
-            * minutes on the one field that decides when his day starts.
-            */}
+            * plain 'HH:MM' text and normaliseTime() accepts any minute. The
+            * list was the only thing rounding him off, on the one field that
+            * decides when his day starts.
+          */}
           <TimePick
-            label="שעת התחלה"
             aria={`שעת התחלה ב${campaignName}`}
-            icon={<ClockIcon aria-hidden className="h-3 w-3 shrink-0 text-brand-400" />}
             value={shown.start}
             disabled={disabled}
             /* While the wheel moves: the panel's own draft, no write. */
             onDraft={setStartDraft}
             /* When the picker closes: one write, if anything actually moved. */
             onCommit={commitStart}
-          />
-          <Pick
-            label="הפרש בין פרסומים"
-            aria={`הפרש בין פרסומים ב${campaignName}`}
-            icon={<RepeatIcon aria-hidden className="h-3 w-3 shrink-0 text-brand-400" />}
-            value={String(effectiveGapSeconds)}
-            disabled={disabled}
-            onChange={(v) => (onAccountGapChange ? onAccountGapChange(Number(v)) : set({ gapSeconds: Number(v) }))}
-            /* Seconds, so the three sub-minute steps the owner asked for can
-               exist at all. gapChoiceLabel does the spelling, here and in the
-               summary line, so the two cannot drift. */
-            options={GAP_CHOICES.map((sec) => ({ value: String(sec), label: gapChoiceLabel(sec) }))}
           />
         </div>
 
@@ -666,8 +676,6 @@ export function CampaignSchedulePanel({
                       a neutral character, so each run around it keeps its own
                       direction and the hour stays inside its LTR island. */}
                   {' | '}משעה <span dir="ltr" className="inline-block tabular-nums">{shown.start}</span>
-                  {' | '}
-                  {gapLabel(gapShown)}
                 </>
               )}
             </span>
@@ -682,33 +690,44 @@ export function CampaignSchedulePanel({
               so one sentence covers both and the reader is never asked to
               know which.
             */
-            <span className="min-w-0">מפרסם בכל יום, בכל שעה | {gapLabel(gapShown)}</span>
+            <span className="min-w-0">מפרסם בכל יום, בכל שעה</span>
           )}
         </div>
 
-        {/* ─── 4b. the floor this gap is about to move, if it is about to ─ */}
-        {willLowerFloor && (
-          /* mist-300 on the white strip rather than amber: this is not a risk,
-             it is a fact about scope. The amber on this panel is reserved for
-             חזרה יומית, which is the one control here that can cost him his
-             account. */
-          <p className="mt-1.5 rounded-xl bg-ink-900 px-2 py-1.5 text-[10.5px] font-bold leading-4 text-mist-300">
-            המרווח המינימלי של כל החשבון הוא כרגע {accountGapLabel(accountFloorSeconds as number)}, והוא זה שקובע. בשמירה הוא ירד ל-
-            {accountGapLabel(shown.gapSeconds)} <span className="text-brand-400">לכל הסבבים</span>, לא רק לזה.
-          </p>
-        )}
+        {/*
+          ─── 4b. WHAT WAS HERE: "the floor this gap is about to move" ───────
+
+          A line that appeared while the campaign's chosen gap was below the
+          account floor, warning that saving would lower the floor for every
+          round. It belonged to a field that no longer exists: the gap is not
+          chosen per campaign any more, so there is no moment at which one
+          campaign's choice is about to move the account's number without the
+          owner being told. מצב פרסום חכם says "המצב חל על כל החשבון ועל כל
+          הסבבים" on its own summary line, permanently, rather than as a
+          warning that appears and disappears.
+        */}
       </div>
 
-      {/* ─── 5. "הפרסום הבא" — under the settings, above the repeat ─────── */}
-      {readout && (
-        <NextPublication
-          readout={readout}
-          scheduleOn={schedule.enabled}
-          workerOnline={workerOnline}
-          neverLaunched={neverLaunched}
-          targetName={nextTargetName}
-          targetImage={nextTargetImage}
+      {/* ─── 4c. מצב פרסום חכם ────────────────────────────────────────────── */}
+      {/*
+        OUTSIDE THE LAVENDER BLOCK, because it is its own card in the
+        reference — the image draws three stacked blocks under this heading,
+        each with its own fill, and this is the second of them.
+
+        Drawn only when a caller can actually write it. A panel handed no
+        handler would otherwise show three buttons that do nothing, which is
+        the decorative-control failure this product has a standing rule
+        against ("יש לממש את הפונקציונליות בפועל ולא ליצור כפתורים
+        דקורטיביים").
+      */}
+      {onPaceChange && (
+        <SmartPaceCard
           className="mt-1.5"
+          pace={pace}
+          onChange={onPaceChange}
+          disabled={disabled || busy}
+          currentGapSeconds={effectiveGapSeconds}
+          restUntil={restUntil}
         />
       )}
 
@@ -842,82 +861,47 @@ export function CampaignSchedulePanel({
           </div>
         </div>
       )}
+      {/* ─── 7. "הפרסום הבא" — LAST, which is where the reference puts it ── */}
+      {/*
+        IT MOVED DOWN ONE BLOCK. The previous reference put it between the
+        settings and the repeat ("יש למקם את אזור הפרסום הבא מתחת להגדרות
+        התזמון ולפני החזרה היומית"); the 07.11.2026 image draws תזמון פרסום,
+        מצב פרסום חכם, חזרה יומית and THEN הפרסום הבא, immediately above the
+        three round buttons — which is also the better reading order, since
+        it is the one block that is an ANSWER rather than a control.
+
+        Drawn only when a caller hands over a readout: the dashboard's run
+        card already draws the same component above this panel, and two copies
+        of one answer on one screen is a fault this product keeps making.
+      */}
+      {readout && (
+        <NextPublication
+          readout={readout}
+          scheduleOn={schedule.enabled}
+          workerOnline={workerOnline}
+          neverLaunched={neverLaunched}
+          targetName={nextTargetName}
+          targetImage={nextTargetImage}
+          /* The same rest the mode card above counts down, so this block does
+             not promise an instant the engine is holding. The dashboard's own
+             copy of this component is handed it through the board. */
+          restUntil={restUntil}
+          className="mt-1.5"
+        />
+      )}
     </div>
   );
 }
 
-/**
- * One field: a label with its own icon, and a native select under it.
+/*
+ * ─── WHAT WAS HERE: <Pick>, THE PANEL'S DROPDOWN FIELD ────────────────────
  *
- * NATIVE, not a custom listbox. The gap offers thirty-three options and the
- * start time offers forty-eight, and on the owner's phone a native select
- * opens as iOS's own wheel — searchable, scrollable with a thumb, and
- * dismissable the way every other list on his phone is. A hand-rolled dropdown
- * inside a card in a scrolling list is the version of this that gets stuck
- * under the next card.
- *
- * `appearance-none` plus our own chevron, because the native arrow is drawn in
- * a different place and a different weight by every browser, and the reference
- * draws one thin chevron at the field's leading edge.
- *
- * TWO FIELDS, NOT THREE, so each is half the panel instead of a third. That is
- * what buys the reference's roomier box and its larger figure — and it is why
- * the label no longer needs two lines to hold "הפרש בין פרסומים".
+ * One <select> drawn as a card, used exactly once — for "הפרש בין פרסומים".
+ * "יש להסיר לחלוטין מהממשק את השדה הישן… אין להשאיר אותו במקום אחר ואין
+ *  ליצור הגדרה כפולה", so the field went and this component had no second
+ * caller to justify keeping it. מצב פרסום חכם replaced it with three cards
+ * and a rest the dropdown could never have expressed.
  */
-function Pick({
-  label,
-  aria,
-  icon,
-  value,
-  options,
-  onChange,
-  disabled,
-}: {
-  label: string;
-  aria: string;
-  icon: React.ReactNode;
-  value: string;
-  options: { value: string; label: string }[];
-  onChange: (v: string) => void;
-  disabled?: boolean;
-}) {
-  return (
-    /* p-1.5 → p-0.5, leading-[13px] on the label, mt-0.5 over the control:
-       13px off this field, and the 40px control itself untouched. The SAME
-       three numbers in TimePick/Pick below — they are one shape drawn twice
-       and campaign-card.test.ts measures the pair for a pixel of
-       disagreement. */
-    <label className="block min-w-0 rounded-2xl bg-ink-900 p-0.5">
-      <span className="flex min-w-0 items-center justify-center gap-1 text-center text-[10px] font-bold leading-[13px] text-mist-300">
-        {icon}
-        {/* dir="auto" because the guard in layout.test.ts asks it of every
-             clamped expression, and it is right to: it cannot tell this label
-             from a group name. Both are Hebrew constants written in this file,
-             so "auto" resolves to the RTL they already had. */}
-        <span dir="auto" className="min-w-0 truncate">{label}</span>
-      </span>
-      <span className="relative mt-0.5 block">
-        <select
-          aria-label={aria}
-          value={value}
-          disabled={disabled}
-          onChange={(e) => onChange(e.target.value)}
-          /* ps-6 leaves the chevron its corner and pe-6 keeps the value
-             optically centred against it, which is where the reference puts
-             it. */
-          className="h-10 min-h-10 w-full cursor-pointer appearance-none rounded-xl border border-ink-600 bg-ink-900 pe-6 ps-6 text-center text-[13px] font-extrabold tabular-nums text-mist-100 transition-colors hover:border-brand-300 focus:border-brand-300 focus:outline-none focus:ring-2 focus:ring-brand-300/40 disabled:cursor-not-allowed disabled:opacity-60"
-        >
-          {options.map((o) => (
-            <option key={o.value} value={o.value}>
-              {o.label}
-            </option>
-          ))}
-        </select>
-        <ChevronDownIcon aria-hidden className="pointer-events-none absolute inset-y-0 start-2 my-auto h-3.5 w-3.5 text-mist-500" />
-      </span>
-    </label>
-  );
-}
 
 /**
  * THE SAME FIELD AS Pick, WITH A CLOCK INSTEAD OF A LIST.
@@ -956,17 +940,13 @@ function Pick({
  * seconds wheel would offer a precision nothing downstream can keep.
  */
 function TimePick({
-  label,
   aria,
-  icon,
   value,
   onDraft,
   onCommit,
   disabled,
 }: {
-  label: string;
   aria: string;
-  icon: React.ReactNode;
   value: string;
   /** Every notch of the wheel. Must not write anything. */
   onDraft: (v: string) => void;
@@ -975,17 +955,26 @@ function TimePick({
   disabled?: boolean;
 }) {
   return (
-    /* p-1.5 → p-0.5, leading-[13px] on the label, mt-0.5 over the control:
-       13px off this field, and the 40px control itself untouched. The SAME
-       three numbers in TimePick/Pick below — they are one shape drawn twice
-       and campaign-card.test.ts measures the pair for a pixel of
-       disagreement. */
-    <label className="block min-w-0 rounded-2xl bg-ink-900 p-0.5">
-      <span className="flex min-w-0 items-center justify-center gap-1 text-center text-[10px] font-bold leading-[13px] text-mist-300">
-        {icon}
-        <span dir="auto" className="min-w-0 truncate">{label}</span>
-      </span>
-      <span className="relative mt-0.5 block">
+    /*
+     * NO LABEL OF ITS OWN ANY MORE. The field used to be a stacked card —
+     * label over control — because it shared a two-column grid with the gap
+     * dropdown. It now sits in a horizontal row whose heading says
+     * "שעת התחלה" in 12.5px beside it, and a second copy of that word under
+     * the row's own title would be the screen saying one thing twice.
+     *
+     * The CONTROL is untouched: same 40px height, same radius, border and
+     * focus ring campaign-card.test.ts hit-tests.
+     *
+     * 128px, MEASURED RATHER THAN CHOSEN. "23:15" at this weight needs about
+     * 70 — but <input type="time"> renders in the BROWSER's locale, not the
+     * document's, so the same field reads "11:15 PM" on a machine set to
+     * en-US and needs 112 plus the native picker's own affordance. The first
+     * draft of this row was 104 and clipped the meridiem off the leading
+     * edge in a screenshot taken at 390px. shrink-0 keeps it from being
+     * squeezed back by a long campaign name.
+     */
+    <span className="relative block w-[128px] shrink-0">
+      <span className="sr-only">שעת התחלה</span>
         <input
           type="time"
           step={60}
@@ -1007,8 +996,7 @@ function TimePick({
           }}
           className="h-10 min-h-10 w-full cursor-pointer appearance-none rounded-xl border border-ink-600 bg-ink-900 px-2 text-center text-[13px] font-extrabold tabular-nums text-mist-100 transition-colors hover:border-brand-300 focus:border-brand-300 focus:outline-none focus:ring-2 focus:ring-brand-300/40 disabled:cursor-not-allowed disabled:opacity-60"
         />
-      </span>
-    </label>
+    </span>
   );
 }
 

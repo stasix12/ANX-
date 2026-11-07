@@ -18,13 +18,13 @@ import {
 } from '@/lib/social/campaign';
 import { type CampaignRepeat, type CampaignRound, type CampaignSchedule } from '@/lib/social/campaign-schedule';
 import { scheduleReadout, type AccountSpacing } from '@/lib/social/schedule-readout';
-import { accountGapSeconds } from '@/lib/social/rules';
+import { accountGapSeconds, paceProfile } from '@/lib/social/rules';
 import { countdownTo } from '@/lib/social/countdown';
 import { LATEST_SCHEMA_FILE } from '@/lib/social/errors';
 import { agree, counted, formatTimeHe, relativeHe } from '@/lib/social/time';
 import type { QueueRow } from '@/lib/social/client';
 import { QUEUE_STEP_LABEL, type QueueStep } from '@/lib/social/types';
-import type { Campaign, MediaItem, SocialTarget } from '@/lib/social/types';
+import type { Campaign, MediaItem, PaceId, SocialTarget } from '@/lib/social/types';
 import { CampaignScheduleBoard } from './CampaignScheduleBoard';
 import { CampaignSchedulePanel } from './CampaignSchedulePanel';
 import { ProgressRing } from './ProgressRing';
@@ -269,7 +269,9 @@ export function LiveCampaignHero({
   repeat,
   onRepeatChange,
   spacing,
-  onAccountGapChange,
+  pace,
+  onPaceChange,
+  paceRestUntil,
   floorHours,
   frozenUntil = null,
   scheduleBusy = false,
@@ -345,7 +347,16 @@ export function LiveCampaignHero({
   /** Writes the account's own gap — the only one the engine enforces. See the
       panel's prop of the same name for why this card no longer writes the
       campaign's. */
-  onAccountGapChange?: (seconds: number) => void;
+  /**
+   * מצב פרסום חכם — which publishing mode the ACCOUNT is on, and the handler
+   * that changes it. Straight through to CampaignSchedulePanel, which
+   * explains at length what field this replaced and why the mode writes the
+   * account's own gap rather than the campaign's column.
+   */
+  pace?: PaceId | null;
+  onPaceChange?: (id: PaceId) => void;
+  /** When the current automatic rest ends, if one is running. */
+  paceRestUntil?: string | null;
   /** How close two publications of one post to one group may be, in hours —
       the account's setting, defaulted by the panel when absent. */
   floorHours?: number;
@@ -859,6 +870,11 @@ export function LiveCampaignHero({
              ה-3 שעות בגלל המגבלה." It is drawn inside the block below, under
              the instant it contradicts — see NextPublication's own note. */
           frozenUntil={frozenUntil}
+          /* מצב פרסום חכם — the readout box that used to print the gap prints
+             the mode instead, and the next-publication block under it counts
+             down an automatic rest the way it counts down a Meta freeze. */
+          pace={paceProfile(pace)}
+          restUntil={paceRestUntil}
           /* So the block under it can withdraw its own promise when the PC
              that does the publishing is not connected: "אם המחשב מנותק, יש
              להציג אזהרת חיבור, בלי להבטיח שהפרסום יצא במועד." */
@@ -907,7 +923,11 @@ export function LiveCampaignHero({
                 /* The second gate, so the panel can say which of the two is
                    actually deciding — see the note on the prop. */
                 accountFloorSeconds={spacing ? accountGapSeconds(spacing, spacing, true) : undefined}
-                onAccountGapChange={onAccountGapChange}
+                /* מצב פרסום חכם — the account's publishing mode, the handler
+                   that writes it, and the rest it is currently serving. */
+                pace={pace}
+                onPaceChange={onPaceChange}
+                restUntil={paceRestUntil}
                 /* The account's own repeat floor, so the card judges the rounds
                    against the number in Settings rather than a constant. */
                 floorHours={floorHours}

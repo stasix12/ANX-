@@ -318,6 +318,44 @@ async function main(): Promise<void> {
 
      The owner's decision was "את המספר האמיתי". These hold the three pieces
      of that in place. Comments stripped first.
+
+     ─── RE-POINTED 07.11.2026 — THE FIELD IS GONE, THE FAULT IS NOT ──────
+
+     "יש להסיר לחלוטין מהממשק את השדה הישן: הפרש בין פרסומים. אין להשאיר אותו
+      במקום אחר ואין ליצור הגדרה כפולה."
+
+     The dropdown these checks were written around no longer exists on any
+     screen, and neither does `onAccountGapChange`. What has NOT changed is
+     the fault: three numbers wore one name, the card showed the inert one,
+     and the write was asymmetric. מצב פרסום חכם chooses the gap now — three
+     modes rather than a list of seconds — and every piece of the anatomy
+     above still has to hold, one hand further along:
+
+       WHAT IS SHOWN     the panel still resolves the gap from the ACCOUNT
+                         floor, and hands that number to <SmartPaceCard>
+                         (`currentGapSeconds`) instead of to a <select>. The
+                         campaign's own column still reaches no screen.
+       WHAT IS WRITTEN   applyPace() → applyGapFloor(pace.gapSeconds), no
+                         lowerOnly: the same symmetric write, moved out of
+                         the two screens and into client.ts so that the two
+                         cannot drift from each other.
+       WHO WRITES IT     both screens, through changePace, in the same order
+                         as before — the account floor first, then the
+                         campaign save, or the re-stamp uses the old floor.
+
+     Each assertion below says which of the three it now pins. Nothing was
+     softened: where a control was deleted the check moved onto the control
+     that replaced it, and the negatives that guarded against the campaign's
+     own number being shown or written are re-aimed at the new prop rather
+     than dropped.
+
+     ONE LEFTOVER, REPORTED RATHER THAN PINNED: src/app/social/page.tsx still
+     defines `changeAccountGap` — the old applyGapFloor + changeSchedule pair
+     — and nothing calls it; src/app/social/campaigns/page.tsx still imports
+     applyGapFloor without using it. Both are unreachable: no control on
+     either screen writes a gap any more, so nothing below is pinned to them.
+     Asserting their absence would be asserting a change to src/, which this
+     file may not make.
      ══════════════════════════════════════════════════════════════════════ */
   {
     const bare = (rel: string) =>
@@ -329,40 +367,90 @@ async function main(): Promise<void> {
     const hero = bare('../../src/components/social/LiveCampaignHero.tsx');
     const card = bare('../../src/components/social/CampaignCard.tsx');
     const camps = bare('../../src/app/social/campaigns/page.tsx');
-    for (const [name, src] of [['panel', panel], ['dashboard', dash], ['hero', hero], ['card', card], ['campaigns', camps]] as const) {
+    /* ADDED 07.11.2026, because the control and the write both moved: the gap
+       the panel resolves is now printed by <SmartPaceCard>, and the symmetric
+       floor write now lives in client.ts's applyPace() rather than being typed
+       out twice on two screens. Both files are read here so the checks below
+       can follow the number instead of pinning where it used to be. */
+    const paceCard = bare('../../src/components/social/SmartPaceCard.tsx');
+    const clientSrc = bare('../../src/lib/social/client.ts');
+    for (const [name, src] of [['panel', panel], ['dashboard', dash], ['hero', hero], ['card', card], ['campaigns', camps], ['pace card', paceCard], ['client', clientSrc]] as const) {
       assert.ok(src.length > 2000, `${name} did not load — ${src.length} chars, and every check below would pass on emptiness`);
     }
 
-    /* 1 — WHAT IS SHOWN. The field and the summary read the account's gap. */
+    /* 1 — WHAT IS SHOWN. The mode card and its two sentences read the
+           account's gap, and nothing on the panel reads the campaign's. */
     assert.ok(
       /const effectiveGapSeconds =\s*typeof accountFloorSeconds === 'number'/.test(panel),
       'the panel must resolve the gap from the ACCOUNT floor before drawing it',
     );
-    assert.ok(/value=\{String\(effectiveGapSeconds\)\}/.test(panel), 'and the field must show that, not the campaign\'s stored number');
-    assert.ok(!/value=\{String\(shown\.gapSeconds\)\}/.test(panel), 'the field is back on the campaign column — that is the number the engine never reads');
-    assert.ok((panel.match(/gapLabel\(gapShown\)/g) ?? []).length >= 2, 'both summary sentences must name the same resolved gap');
-    assert.ok(!/gapLabel\(shown\)/.test(panel), 'a summary is still naming the campaign\'s own gap');
-
-    /* 2 — WHAT IS WRITTEN. applyGapFloor, symmetric, before anything else. */
-    assert.ok(/onAccountGapChange/.test(panel), 'the panel must hand the change to its caller rather than writing the campaign column');
-    assert.ok(/onAccountGapChange=\{onAccountGapChange\}/.test(hero), 'the run card must pass that handler through');
-    assert.ok(/onAccountGapChange=\{\(sec\) => void changeAccountGap\(/.test(dash), 'and the dashboard must wire it to a handler of its own');
+    /*
+     * RE-POINTED 07.11.2026. This was `value={String(effectiveGapSeconds)}`:
+     * the <select> the gap was chosen in. The field is deleted, so the number
+     * the panel resolves is handed to the control that replaced it. Same
+     * number, same boundary, one element further on — and this is still the
+     * single line that decides whether the figure on screen is the one the
+     * engine obeys.
+     */
+    assert.ok(/currentGapSeconds=\{effectiveGapSeconds\}/.test(panel), 'and the mode card must be handed that, not the campaign\'s stored number');
+    assert.ok(!/currentGapSeconds=\{shown\.gapSeconds\}/.test(panel), 'the card is back on the campaign column — that is the number the engine never reads');
+    /*
+     * RE-POINTED 07.11.2026. This counted two `gapLabel(gapShown)` calls —
+     * the panel's two summary sentences, which both had to name the resolved
+     * gap rather than one naming it and the other naming the campaign's own.
+     * The summary strip states no interval at all now ("ימי פרסום: … | משעה
+     * HH:MM"), so the claim is re-aimed at where the interval IS stated: the
+     * panel states none of its own, and the mode card's two sentences — one
+     * for a mode picked, one for none picked — are the only two, both off the
+     * one prop above. "אין ליצור הגדרה כפולה" is the same requirement said
+     * from the other end.
+     */
+    assert.ok(!/gapLabel\(/.test(panel), 'the panel must print no interval of its own — one place names the gap, and it is the mode card');
+    assert.ok(!/gapShown/.test(panel), 'and must keep no second resolved copy of it to print from');
     assert.ok(
-      /const floor = await applyGapFloor\(seconds\);/.test(dash),
+      (paceCard.match(/data-pace-summary/g) ?? []).length === 2,
+      'the mode card carries exactly two summary sentences — one for a mode picked, one for none picked',
+    );
+    assert.ok(
+      /accountGapLabel\(currentGapSeconds\)/.test(paceCard),
+      'the no-mode sentence names the ACCOUNT gap it was handed — that is the state every account that exists today loads in, and there the number is the whole truth',
+    );
+    assert.ok(
+      /const selected = paceProfile\(pace\)/.test(paceCard) && /paceGapWords\(selected\.gapSeconds\)/.test(paceCard),
+      'and the picked-mode sentence names the mode\'s own gap — the number applyPace WROTE into that same account floor, so the two sentences still cannot disagree',
+    );
+
+    /* 2 — WHAT IS WRITTEN. applyGapFloor, symmetric, before anything else.
+     *
+     * RE-POINTED 07.11.2026. The prop is `onPaceChange` and the handler is
+     * `changePace`; the symmetric write itself moved one file deeper, into
+     * applyPace() in client.ts, which both screens call. The three claims are
+     * the three that were here before — the panel writes nothing itself, the
+     * write raises as well as lowers, and the account floor lands before the
+     * campaign save — pinned at their new addresses.
+     */
+    assert.ok(/onChange=\{onPaceChange\}/.test(panel), 'the panel must hand the change to its caller rather than writing the campaign column');
+    assert.ok(!/gapSeconds:/.test(panel), 'and must write no gap into the schedule it saves — it no longer has a gap of its own to write');
+    assert.ok(/onPaceChange=\{onPaceChange\}/.test(hero), 'the run card must pass that handler through');
+    assert.ok(/onPaceChange=\{\(id\) => void changePace\(run\.campaign, id\)\}/.test(dash), 'and the dashboard must wire it to a handler of its own');
+    const apply = clientSrc.slice(clientSrc.indexOf('export async function applyPace'), clientSrc.indexOf('export async function liveQueuePlan'));
+    assert.ok(apply.length > 150, 'applyPace could not be isolated — the two checks over it would be vacuous');
+    assert.ok(
+      /const gap = await applyGapFloor\(pace\.gapSeconds\);/.test(apply),
       'THE WRITE: applyGapFloor with no lowerOnly — the asymmetric call is exactly what refused his ten minutes',
     );
     assert.ok(
-      !/applyGapFloor\(seconds, \{ lowerOnly/.test(dash),
-      'the dashboard is lowering only again — raising the gap would be silently refused',
+      !/lowerOnly/.test(apply),
+      'the mode write is lowering only again — picking a SLOWER mode would be refused in silence, which is the same fault with the sign flipped',
     );
-    const handler = dash.slice(dash.indexOf('const changeAccountGap'), dash.indexOf('const changeRepeat'));
+    const handler = dash.slice(dash.indexOf('const changePace'), dash.indexOf('const changeRepeat'));
     assert.ok(handler.length > 200, 'the handler could not be isolated — the checks over it would be vacuous');
     assert.ok(
-      handler.indexOf('applyGapFloor') < handler.indexOf('changeSchedule'),
+      handler.indexOf('applyPace') < handler.indexOf('changeSchedule'),
       'the account floor must be written BEFORE the campaign save, or the re-stamp uses the old floor',
     );
     assert.ok(
-      /gapSeconds: seconds/.test(handler),
+      /gapSeconds: pace\.gapSeconds/.test(handler),
       'and the campaign column must be written to the same number — plan.ts takes max(account, campaign), and two numbers disagreeing is the fault being fixed',
     );
 
@@ -376,15 +464,26 @@ async function main(): Promise<void> {
      * which the engine never reads. A gap set there reverted on the next read
      * while the same field on the dashboard stuck. Two screens, one field,
      * one writer.
+     *
+     * RE-POINTED 07.11.2026: one MODE now rather than one field, and the one
+     * writer is applyPace() — so "one writer" is structural instead of being
+     * two identical handlers that have to be kept identical by hand. The
+     * campaigns screen must call it rather than keep a copy of the floor
+     * write, which is what the negative below is for.
      */
-    assert.ok(/onAccountGapChange=\{onAccountGapChange\}/.test(card), 'the campaigns card must pass the account-gap handler through');
-    assert.ok(/onAccountGapChange=\{\(sec\) => void changeAccountGap\(/.test(camps), 'and the campaigns screen must wire it');
-    assert.ok(/const floor = await applyGapFloor\(seconds\);/.test(camps), 'with the same symmetric write the dashboard makes');
-    assert.ok(!/applyGapFloor\(seconds, \{ lowerOnly/.test(camps), 'the campaigns screen is lowering only — raising would be refused in silence');
-    for (const [name, src] of [['dashboard', dash], ['campaigns', camps]] as const) {
-      const h = src.slice(src.indexOf('const changeAccountGap'), src.indexOf('const changeRepeat'));
+    assert.ok(/onPaceChange=\{onPaceChange\}/.test(card), 'the campaigns card must pass the mode handler through');
+    assert.ok(/onPaceChange=\{\(id\) => void changePace\(c, id\)\}/.test(camps), 'and the campaigns screen must wire it');
+    assert.ok(/await applyPace\(id\);/.test(camps), 'with the same symmetric write the dashboard makes — the one inside applyPace, not a second copy of it');
+    assert.ok(!/applyGapFloor\(/.test(camps), 'the campaigns screen is writing the account floor itself again — two writers of one number is the fault being fixed');
+    for (const [name, src, column] of [
+      ['dashboard', dash, 'gapSeconds: pace.gapSeconds'],
+      ['campaigns', camps, 'gapSeconds: picked.gapSeconds'],
+    ] as const) {
+      const h = src.slice(src.indexOf('const changePace'), src.indexOf('const changeRepeat'));
       assert.ok(h.length > 200, `${name}: the handler could not be isolated — the order check below would be vacuous`);
-      assert.ok(h.indexOf('applyGapFloor') < h.indexOf('changeSchedule'), `${name}: the account floor must be written before the campaign save`);
+      assert.ok(h.indexOf('applyPace') < h.indexOf('changeSchedule'), `${name}: the account floor must be written before the campaign save`);
+      assert.ok(h.includes(column), `${name}: the campaign column must be written to the mode's own number as well`);
+      assert.ok(!/lowerOnly/.test(h), `${name}: the write is lowering only — a slower mode would be refused in silence`);
     }
 
     /* 3 — AND THE ENGINE STILL READS ONLY THE ACCOUNT'S. This is the fact the
@@ -395,6 +494,18 @@ async function main(): Promise<void> {
     assert.ok(/accountGapSeconds\(limits, ctx\.browser/.test(rules), 'the per-row gate must read the account gap');
     assert.ok(/accountGapSeconds\(limits, browser, true\)/.test(worker), 'and so must the worker\'s spacing gate');
     assert.ok(!/schedule\.gapSeconds/.test(rules), 'rules.ts is reading the campaign gap — then the card and the gate have two sources again');
+    /*
+     * ADDED 07.11.2026, and it is the same fact from the new mechanism's side.
+     * A mode is a THIRD place a gap could come from, and it would be the
+     * easiest of the three to read at publish time — PACE_PROFILES is in
+     * rules.ts, beside the gate. It is not read there: picking a mode WRITES
+     * its gap into the account pair through applyPace, and both gates go on
+     * reading the pair. The moment a gate reads a mode's gap directly, the
+     * owner can change a mode and have the queue obey a number no screen
+     * resolved — which is 10 דק/30 שניות again, wearing a new name.
+     */
+    assert.ok(!/pace\.gapSeconds/.test(rules), 'no gate reads a MODE\'s gap at publish time — it is written into the account floor, which is the one number both gates compare against');
+    assert.ok(!/pace\.gapSeconds/.test(worker), 'and the worker\'s gate does not either');
   }
 
   console.log(`campaign gap tests OK — ${checks} assertions, decided by the real engine against a fake database`);

@@ -130,7 +130,7 @@ ok(/if \(previousErr\) continue;/.test(gap), 'and holds, because the gap below i
  * is quoting a rule nobody follows.
  */
 ok(
-  /if \(lastError\) return \{ open: false/.test(between(worker, 'async function spacingGate', 'const at = (last', 'spacingGate')),
+  /if \(lastError\) return \{ open: false/.test(between(worker, 'async function spacingGate', 'const stamps = ((rows', 'spacingGate')),
   'publications still refuse to go on a failed spacing read — the rule the comment guard above is quoting',
 );
 

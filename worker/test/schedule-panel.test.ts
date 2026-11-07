@@ -128,7 +128,7 @@ async function main(): Promise<void> {
     /* The state the owner's screen opens in. */
     eq(
       (await summary()).replace(/\s+/g, ' ').trim(),
-      'ימי פרסום: א׳, ב׳, ג׳, ד׳, ה׳ | משעה 08:00 | כל 10 דקות',
+      'ימי פרסום: א׳, ב׳, ג׳, ד׳, ה׳ | משעה 08:00',
       'the panel opens on the reference’s own setting',
     );
 
@@ -138,13 +138,13 @@ async function main(): Promise<void> {
     await day('יום שישי').click();
     eq(
       (await summary()).replace(/\s+/g, ' ').trim(),
-      'ימי פרסום: א׳, ב׳, ג׳, ד׳, ה׳, ו׳ | משעה 08:00 | כל 10 דקות',
+      'ימי פרסום: א׳, ב׳, ג׳, ד׳, ה׳, ו׳ | משעה 08:00',
       'ADDING A SIXTH DAY KEEPS THE OTHER FIVE — a row that behaved like radio buttons would read "ו׳" alone here',
     );
     eq(await day('יום שישי').getAttribute('aria-pressed'), 'true', 'and the chip says it is chosen');
 
     await day('שבת').click();
-    eq((await summary()).replace(/\s+/g, ' ').trim(), 'ימי פרסום: כל הימים | משעה 08:00 | כל 10 דקות', 'all seven is a sentence, not seven labels');
+    eq((await summary()).replace(/\s+/g, ' ').trim(), 'ימי פרסום: כל הימים | משעה 08:00', 'all seven is a sentence, not seven labels');
 
     /* And off again: "חובה לאפשר Multi Select" says nothing about a day being
        un-choosable, and a control that refuses its own last press is one the
@@ -152,7 +152,7 @@ async function main(): Promise<void> {
     await day('יום רביעי').click();
     eq(
       (await summary()).replace(/\s+/g, ' ').trim(),
-      'ימי פרסום: א׳, ב׳, ג׳, ה׳, ו׳, ש׳ | משעה 08:00 | כל 10 דקות',
+      'ימי פרסום: א׳, ב׳, ג׳, ה׳, ו׳, ש׳ | משעה 08:00',
       'a chosen day un-chooses, and the list closes over the gap in week order rather than in tap order',
     );
     eq(await day('יום רביעי').getAttribute('aria-pressed'), 'false', 'and the chip says so');
@@ -177,22 +177,26 @@ async function main(): Promise<void> {
      *  התחלת הפרסום, הפרש בין פרסום לפרסום, ימי הפרסום שנבחרו."
      * ---------------------------------------------------------------- */
     /*
-     * TWO FIELDS, AND THEY ARE NO LONGER THE SAME KIND OF CONTROL.
+     * ONE FIELD NOW, AND THE COUNT IS STILL THE PIN.
      *
-     * This read `[data-schedule] select` and counted two. The start hour is
-     * an <input type="time"> now — "בשעת ההתחלה אני רוצה לבחור בדיוק איזה זמן
-     * שבא לי ולא בקפיצות של 30 דק" — so counting selects alone would quietly
-     * drop to one and this assertion would have gone red for the right change.
-     * The claim it was making is about how many CONTROLS the card offers, and
-     * that is what it counts now; which element each one is is asserted
-     * separately below, because that distinction is the fix.
+     * It was two: the start hour and "הפרש בין פרסומים". On 07.11.2026 the
+     * second was deleted outright — "יש להסיר לחלוטין מהממשק את השדה הישן:
+     * הפרש בין פרסומים. אין להשאיר אותו במקום אחר ואין ליצור הגדרה כפולה" —
+     * and מצב פרסום חכם, a three-card picker, took its place.
+     *
+     * The claim this assertion makes is unchanged: this card offers EXACTLY
+     * the controls the brief leaves it, and no more. A third field appearing
+     * here is still a failure; so is the gap dropdown coming back, which the
+     * select count now forbids outright.
      */
     const fields = page.locator('[data-schedule] select, [data-schedule] input[type="time"]');
-    eq(await fields.count(), 2, 'TWO FIELDS, not three — the closing hour has no control any more');
-    eq(await page.locator('[data-schedule] input[type="time"]').count(), 1, 'and the start hour is a clock, not a list');
-    eq(await page.locator('[data-schedule] select').count(), 1, 'while the interval stays a list, because its choices are a decision and not a continuum');
+    eq(await fields.count(), 1, 'ONE FIELD — the start hour. The closing hour and the interval both have no control here any more');
+    eq(await page.locator('[data-schedule] input[type="time"]').count(), 1, 'and it is a clock, not a list');
+    eq(await page.locator('[data-schedule] select').count(), 0, 'there is no dropdown on this card at all — the gap list is gone and must not return');
+    /* And the mechanism that replaced it is present, live, and a radio group. */
+    eq(await page.locator('[data-schedule] [data-smart-pace] [role="radio"]').count(), 3, 'מצב פרסום חכם draws exactly three modes');
 
-    /* The reference's own order: the start time first, the interval second. */
+    /* The reference's own order: the start time first, the modes under it. */
     const start = page.locator('[data-schedule] input[type="time"]');
     /*
      * FILLING THE HOUR IS NOT FINISHING WITH IT, and that is the product's
@@ -283,15 +287,37 @@ async function main(): Promise<void> {
     eq(await start.getAttribute('step'), '60', 'and no seconds wheel: the engine stores minutes');
     eq(await start.getAttribute('dir'), 'ltr', 'the clock reads left to right inside the RTL card, like every other hour in this product');
     await setStart('06:30');
-    /* The select's values are SECONDS now — "תעשה אופציה של 30 40 50 שניות" —
-       so twenty-five minutes is 1500. Driven through the real control rather
-       than through the component's props, which is the point of this file. */
-    await fields.nth(1).selectOption('1500');
-    is((await summary()).includes('כל 25 דקות'), 'and so does the interval');
+    /*
+     * ─── AND THE INTERVAL, WHICH IS A MODE NOW ───────────────────────────
+     *
+     * This selected 1500 seconds from the gap dropdown and read the summary
+     * back. The dropdown is gone; the pace is chosen by tapping one of three
+     * cards, and the card's OWN summary line is what states the consequence.
+     * Driven through the real control rather than through props, which is the
+     * point of this file.
+     */
+    const mode = (label: string) => page.locator(`[data-schedule] [data-smart-pace] [role="radio"]`).filter({ hasText: label });
+    await mode('איטי').first().click();
+    eq(await mode('איטי').first().getAttribute('aria-checked'), 'true', 'tapping a mode selects it');
+    const paceLine = () => page.locator('[data-schedule] [data-pace-summary]').innerText();
+    is((await paceLine()).includes('איטי'), 'and the summary line under the row names the mode that was chosen');
+    is((await paceLine()).includes('5 דקות'), 'with its interval');
+    /* "30 דק׳" — the summary abbreviates where the cards above it spell the
+       word out, because it has four facts to fit on one line and they have
+       two each. Both spellings come from the same seconds; see paceGapWords
+       and accountGapLabel in rules.ts. */
+    is(/30 דק/.test(await paceLine()), 'and the length of its rest');
+    is((await paceLine()).includes('על כל החשבון'), 'and that the mode is account-wide, which is the one consequence that reaches outside this campaign');
+    is((await paceLine()).includes('10 פרסומים'), 'and how many publications in a row trigger it');
+    /*
+     * THE SCHEDULE SUMMARY NO LONGER CARRIES THE INTERVAL, deliberately: two
+     * places stating one number is the "הגדרה כפולה" the brief forbids, and
+     * the mode's own line is the one that can state the rest as well.
+     */
     eq(
       (await summary()).replace(/\s+/g, ' ').trim(),
-      'ימי פרסום: א׳, ב׳, ג׳, ה׳, ו׳, ש׳ | משעה 06:30 | כל 25 דקות',
-      'and both at once, with the days from the taps above still in it',
+      'ימי פרסום: א׳, ב׳, ג׳, ה׳, ו׳, ש׳ | משעה 06:30',
+      'the days and the hour, with the days from the taps above still in it',
     );
     /* AND NOWHERE IN IT IS A SECOND HOUR. A range is written with a dash; its
        absence is the cheapest statement of the requirement that cannot be
@@ -303,21 +329,34 @@ async function main(): Promise<void> {
     );
 
     /*
-     * RE-POINTED, NOT DELETED. This used to read "thirty choices, 1 דק׳ to 30
-     * דק׳" — offered, not merely accepted. The claim is the same; the list
-     * grew three sub-minute steps at the front, because a minute used to be
-     * the floor the UNIT imposed rather than a decision anyone made:
-     * "בהפרש פרסום בין פוסט לפוסט תעשה אופציה של 30 40 50 שניות".
+     * RE-POINTED 07.11.2026 — THE LIST OF 33 INTERVALS IS NOW THREE MODES.
      *
-     * Read off the real <option> elements, so a choice that exists in the
-     * constant and never reaches the control still fails here.
+     * This read the <option> elements off the gap dropdown and demanded 33 of
+     * them, starting at "30 שניות". The dropdown is gone: "יש להסיר לחלוטין
+     * מהממשק את השדה הישן: הפרש בין פרסומים… במקומו יש להשתמש במנגנון החדש של
+     * שלושת מצבי הפרסום."
+     *
+     * The claim survives the change of control: what is OFFERED is read off
+     * the real elements, not off the constant, so a mode that exists in
+     * PACE_PROFILES and never reaches the card still fails here — which is
+     * exactly what the 33-option version was for.
      */
-    const gaps = await fields.nth(1).locator('option').allTextContents();
-    eq(gaps.length, 33, 'the interval field offers three sub-minute steps and the thirty minutes');
-    eq(gaps.slice(0, 4).join(' | '), '30 שניות | 40 שניות | 50 שניות | דקה', 'starting at thirty seconds');
-    eq(gaps[32], '30 דק׳', 'and still ending at thirty minutes');
-    const gapValues = await fields.nth(1).locator('option').evaluateAll((os) => os.map((o) => (o as HTMLOptionElement).value));
-    eq(gapValues.slice(0, 4).join(','), '30,40,50,60', 'and the VALUES are seconds — the label alone could say anything');
+    const cards = page.locator('[data-schedule] [data-smart-pace] [role="radio"]');
+    const labels = await cards.evaluateAll((els) => els.map((e) => (e.textContent ?? '').replace(/\s+/g, ' ').trim()));
+    eq(labels.length, 3, 'three modes are offered, no more and no fewer');
+    is(labels[0].startsWith('מהיר'), 'מהיר first — fastest at the start of the row, which in RTL draws it rightmost as the reference does');
+    is(labels[1].startsWith('בינוני'), 'בינוני second');
+    is(labels[2].startsWith('איטי'), 'איטי third');
+    /* And each card carries BOTH of its numbers, which is the whole reason a
+       mode replaced a bare interval: a gap alone cannot express a rest. */
+    is(labels[0].includes('45 שניות') && labels[0].includes('7 דקות'), 'מהיר: every 45 seconds, a 7-minute rest');
+    is(labels[1].includes('2 דקות') && labels[1].includes('15 דקות'), 'בינוני: every 2 minutes, a 15-minute rest');
+    is(labels[2].includes('5 דקות') && labels[2].includes('30 דקות'), 'איטי: every 5 minutes, a 30-minute rest');
+    /* The run length is stated once, under the row, because all three share it. */
+    is(
+      (await page.locator('[data-schedule] [data-smart-pace]').innerText()).includes('10 פרסומים'),
+      'and the row says a rest follows every ten publications',
+    );
 
     /* ---------------------------------------------------------------- *
      * 3. THERE IS NO SWITCH ANY MORE — THE DAYS DECIDE.
@@ -357,7 +396,7 @@ async function main(): Promise<void> {
     );
     eq(
       (await summary()).replace(/\s+/g, ' ').trim(),
-      'מפרסם בכל יום, בכל שעה | כל 25 דקות',
+      'מפרסם בכל יום, בכל שעה',
       'and the summary says the consequence in one sentence instead of naming a switch position',
     );
 
@@ -378,7 +417,12 @@ async function main(): Promise<void> {
     await setStart('06:30');
     const restored = (await changes()).at(-1)!;
     eq(restored.days, [0, 1, 2, 4, 5, 6], 'the six days are back');
-    eq(restored.gapSeconds, 1500, 'and nothing was lost on the way — the interval is still twenty-five minutes');
+    /* The campaign's own gapSeconds is untouched by anything on this card
+       now: the pace writes the ACCOUNT's gap through applyGapFloor, and this
+       panel emits only what it still edits. Unchanged from the opening value
+       is exactly the assertion — a card that quietly rewrote a field nobody
+       touched is the defect the three taps above are about. */
+    eq(restored.gapSeconds, 600, 'and nothing was lost on the way — the campaign\u2019s own stored interval is untouched by this card');
 
     /* ---------------------------------------------------------------- *
      * 4. NO DAY AT ALL, which is reachable in six taps and must not look

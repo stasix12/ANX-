@@ -2064,31 +2064,97 @@ console.log('unit tests OK');
   assert.ok(sheet.includes('לא הופך שום דבר'), 'the gap control must carry its disclaimer, in the owner\'s language');
 
   /*
-   * EVERY MINUTE MUST BE REACHABLE.
+   * THE RATE MUST STILL BE REACHABLE — AND IT IS NO LONGER REACHED FROM HERE.
    *
-   * The stepper moved in fives and the presets jump 20 → 30 → 45, so 7 or 23
-   * were not reachable by any control on the sheet. The figure is the input
-   * now, and the stepper is the fine adjustment.
+   * What stood here pinned the gap EDITOR on this sheet: a thirty-second
+   * stepper, a typed 42px figure and six presets. It was pinned because the
+   * stepper used to move in fives and the presets jumped 20 → 30 → 45, so 7
+   * or 23 were reachable by no control at all — the owner asked for exactly
+   * those two numbers.
+   *
+   * On 07.11.2026 that editor was deleted, along with every other copy of the
+   * old field: "יש להסיר לחלוטין מהממשק את השדה הישן: הפרש בין פרסומים. אין
+   * להשאיר אותו במקום אחר ואין ליצור הגדרה כפולה." מצב פרסום חכם owns the
+   * number now and it is picked on the campaign card, not here. STEP, PRESETS,
+   * the typed figure, setGapTo() and commitDraft() are all gone from
+   * QueueTunerSheet.tsx, so the four assertions that named them have nothing
+   * left to point at INSIDE this sheet. They are replaced — not relaxed, and
+   * not dropped — by the two halves the rule actually had:
+   *
+   *  (a) THIS SHEET STILL HAS TO NAME THE NUMBER IT WILL RE-SPACE AT. The
+   *      button under it moves every waiting row at `gap`, and `gap` is still
+   *      seeded from the account's own value and still handed to
+   *      respaceQueue() — only the editing of it moved. A sheet that re-lays
+   *      200 publications at an interval it does not print is the twenty-fold
+   *      speed-up bug with the misleading label removed instead of corrected,
+   *      so the section stays, read-only, and it says WHERE the number is
+   *      changed: read-only with no doorway is a dead end.
+   *
+   *  (b) EVERY MODE MUST BE REACHABLE, which is what "every minute must be
+   *      reachable" becomes once the gap is a choice of three: all three are
+   *      drawn off the engine's own table rather than hand-written, each is
+   *      one tap, and not one of them asks for a gap the engine would refuse.
+   *      The old rule existed because a control offered a range it could not
+   *      cover; this is the same rule over the control that replaced it.
    */
   const tuner = readFileSync(new URL('../../src/components/social/QueueTunerSheet.tsx', import.meta.url), 'utf8');
-  assert.ok(/const STEP = 30;/.test(tuner), 'the stepper must move thirty seconds at a time — the engine\u2019s own minimum');
-  /* "שניות", not "דקות": the value has been seconds since the sub-minute gaps
-     shipped and every label on this sheet said minutes over it — see the
-     section in cadence-30s.test.ts. The pin follows the value. */
-  assert.ok(/inputMode="numeric"[\s\S]{0,1600}שניות בין פרסום לפרסום/.test(tuner), 'the gap figure itself must be typable');
-  /*
-   * And it must be typable in practice. A controlled input clamped on every
-   * keystroke cannot be cleared — emptying it yields NaN, the clamp makes that
-   * MIN_GAP, and "1" reappears under the cursor. The raw text is held while
-   * editing and committed on blur; an empty entry keeps the previous value
-   * rather than silently choosing one minute for a 28-group queue.
-   */
-  assert.ok(tuner.includes('value={draft ?? String(gap)}'), 'the field shows the raw text while it is being edited');
-  assert.ok(tuner.includes('onBlur={commitDraft}'), 'and commits on blur');
+  const paceCard = readFileSync(new URL('../../src/components/social/SmartPaceCard.tsx', import.meta.url), 'utf8');
+  const scheduleSrc = readFileSync(new URL('../../src/lib/social/campaign-schedule.ts', import.meta.url), 'utf8');
+  /* The pins below are about CODE, and this file's own history is quoted in
+     the comments around that code — "600" over the words "דקות בין פרסום
+     לפרסום" is written out in QueueTunerSheet.tsx as the bug it describes. A
+     pin that reads the comments would pass on the retelling of the bug. */
+  const tunerCode = tuner.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\{\/\*[\s\S]*?\*\/\}/g, '');
+
+  /* (a) — the figure, read-only, and the doorway out of it. */
+  assert.ok(/aria-label="קצב הפרסום הנוכחי"/.test(tunerCode), 'the sheet keeps a section about the rate it will re-space at');
+  assert.ok(/<h3[^>]*>קצב הפרסום הנוכחי<\/h3>/.test(tunerCode), 'and names it, so the read-only block is not an unlabelled number');
   assert.ok(
-    /const commitDraft[\s\S]{0,300}draft !== ''[\s\S]{0,120}setGapTo/.test(tuner),
-    'an empty or nonsense entry must leave the gap untouched',
+    /\{gapChoiceLabel\(gap\)\}<\/p>[\s\S]{0,200}בין פרסום לפרסום/.test(tunerCode),
+    'the interval the button will use is printed, through the product\u2019s one spelling of this value',
   );
+  /*
+   * "שניות", not "דקות" — the lesson of the twenty-fold speed-up, kept in its
+   * strictest form now that the figure is not typed. The unit used to be a
+   * caption the value could disagree with: `gap` was seconds and the words
+   * under it said "דקות", so the shipped ten-minute gap read "600 דקות" and
+   * correcting it to "10" re-spaced the queue at thirty seconds. The unit now
+   * travels INSIDE gapChoiceLabel() ("30 שניות", "דקה", "10 דק׳"), and no
+   * caption may spell a second one over it.
+   */
+  assert.ok(
+    !/(שניות|דקות) בין פרסום לפרסום/.test(tunerCode),
+    'and no caption carries a unit of its own above it — that is how "600" came to sit over the word "דקות"',
+  );
+  assert.ok(tunerCode.includes('מצב פרסום חכם'), 'the read-only block says where the number IS changed now');
+  /* And the editor must not grow back here, in any of its three shapes — that
+     is the "אין להשאיר אותו במקום אחר ואין ליצור הגדרה כפולה" half. */
+  assert.ok(!/inputMode=/.test(tunerCode), 'no typed gap field returns to this sheet');
+  assert.ok(
+    !/setGapTo|commitDraft|gapDirty/.test(tunerCode),
+    'and no stepper, preset or blur writes the account gap from here — one control owns that number',
+  );
+
+  /* (b) — the three modes, every one of them reachable in one tap. */
+  const paceRows = [...rules.matchAll(/\{ id: '(\w+)', label: '([^']+)', tone: '\w+', gapSeconds: (\d+), burst: (\d+), restMinutes: (\d+) \}/g)];
+  assert.equal(paceRows.length, 3, 'three modes, which is the whole of the choice now — fast, medium, slow');
+  assert.ok(/PACE_PROFILES\.map\(/.test(paceCard), 'the picker draws them off the engine\u2019s own table — a hand-written row is how a mode becomes unreachable');
+  assert.ok(/role="radio"/.test(paceCard) && /onClick=\{\(\) => onChange\(p\.id\)\}/.test(paceCard), 'and each one is a single tap that names its own id');
+  /*
+   * THE FLOOR THE STEPPER USED TO RESPECT. `const STEP = 30` was there because
+   * thirty seconds is the engine's own minimum — MIN_GAP_SECONDS, the value
+   * respaceQueue() clamps to and throws under. A stepper that could walk below
+   * it offered a gap the engine refuses; so does a MODE that asks for one, and
+   * a mode is picked in one tap with no clamp in front of it.
+   */
+  const minGapSeconds = Number(/export const MIN_GAP_SECONDS = (\d+);/.exec(scheduleSrc)?.[1]);
+  assert.equal(minGapSeconds, 30, 'the engine\u2019s own minimum is still thirty seconds');
+  for (const [, id, label, gapSeconds] of paceRows) {
+    assert.ok(
+      Number(gapSeconds) >= minGapSeconds,
+      `מצב ${label} (${id}) must not ask for a gap the engine refuses — ${gapSeconds}s is under the ${minGapSeconds}s floor`,
+    );
+  }
 
   console.log('queue-tuner tests OK');
 }
@@ -2233,9 +2299,29 @@ console.log('unit tests OK');
     sheet.includes('המרווח הוא הגדרה שלכם בלבד'),
     'the quick-publish sheet must carry the scheduler\'s own disclaimer, word for word',
   );
+  /*
+   * STILL ACCOUNT-WIDE, AND STILL SAID — in the sentence that replaced the
+   * picker. On 07.11.2026 the gap <select> and the six "מרווח מהיר" chips were
+   * deleted from this sheet with every other copy of the old field ("אין
+   * להשאיר אותו במקום אחר ואין ליצור הגדרה כפולה"), and the paragraph that sat
+   * under them was reworded around the mode that owns the number now. The
+   * subject of the sentence changed from the SETTING to the INTERVAL, so the
+   * verb went from "חלה" to "חל"; the fact being pinned did not change at all,
+   * and it is pinned here with the contrast clause that carries the point —
+   * the whole bug this line exists for was an owner reading the figure as "the
+   * spacing of THIS quick publish" and discovering it had re-paced every
+   * campaign on the account.
+   */
   assert.ok(
-    sheet.includes('חלה על כל החשבון'),
+    sheet.includes('חל על כל החשבון — לא על הפרסום הזה בלבד'),
     'the sheet must say the gap is an account-wide setting, not a per-publication one',
+  );
+  /* And it must name where that number is set, now that it is not set here:
+     a figure the owner cannot act on is the half-truth this paragraph used to
+     avoid by being a control. */
+  assert.ok(
+    sheet.includes('מצב פרסום חכם'),
+    'and must say where the interval is chosen, since this sheet no longer chooses it',
   );
   assert.ok(
     library.includes('truncated'),
@@ -5791,12 +5877,49 @@ const scenario: { step: string; line: string }[] = [];
     saveBody.includes('...curLimits,'),
     'it starts from the row as it is NOW, so a key this screen never mentions survives the write',
   );
-  for (const key of ['maxPerDay', 'maxPerTargetPerDay', 'minGapMinutes', 'dedupeDays']) {
+  /*
+   * minGapMinutes CHANGED SIDES ON 07.11.2026 — it is no longer a box on this
+   * screen, so it is no longer written by name, and the list it moved to is
+   * the one that was already here for exactly this reason.
+   *
+   * "יש להסיר לחלוטין מהממשק את השדה הישן: הפרש בין פרסומים. אין להשאיר אותו
+   *  במקום אחר ואין ליצור הגדרה כפולה." The box `מרווח מינימלי בין פרסומים
+   * (דקות)` was deleted with every other copy of the field, and מצב פרסום חכם
+   * writes the gap now, through applyGapFloor().
+   *
+   * Which makes the ABSENCE the stronger pin, and it is the same guarantee
+   * the two keys below it already carry: this screen's copy of the limits is
+   * read at MOUNT, so a save ten minutes later writing minGapMinutes back
+   * would silently revert a mode the owner picked in between — the stale
+   * snapshot defect this whole block exists for, arriving through the one
+   * field that paces how fast the account posts to Facebook. What the screen
+   * never writes, the screen cannot reset. `minGapSeconds` and `pace` join it
+   * because they are the other two halves of the same mechanism.
+   */
+  for (const key of ['maxPerDay', 'maxPerTargetPerDay', 'dedupeDays']) {
     assert.ok(saveBody.includes(`${key}: limits.${key},`), `${key} is written by name — it is a box on this screen`);
   }
-  for (const key of ['blockRepeatToSameTarget', 'repeatFloorHours']) {
+  for (const key of ['blockRepeatToSameTarget', 'repeatFloorHours', 'minGapMinutes', 'minGapSeconds', 'pace']) {
     assert.ok(!saveBody.includes(key), `and ${key} is not written at all, so the save cannot reset it either way`);
   }
+  /*
+   * AND THE NUMBER IS STILL STATED HERE, which is the half of the deleted box
+   * that had nothing to do with editing. This is the screen whose whole job is
+   * the truth about these settings; a gap the engine enforces and no screen
+   * names is how this product has repeatedly gone wrong (the twenty-fold
+   * speed-up, the 11 hard-coded floors). So the box became a read-only line
+   * that prints the ENFORCED value through the product's one spelling of it,
+   * says where it is changed, and says that saving from here will not touch it.
+   */
+  assert.ok(
+    /accountGapLabel\(accountGapSeconds\(limits, browser, true\)\)/.test(settings),
+    'the settings screen still states the gap the engine is actually holding, computed the one way everything computes it',
+  );
+  assert.ok(settings.includes('מצב פרסום חכם'), 'and names where that number is changed, now that it is not changed here');
+  assert.ok(
+    settings.includes('שמירה מהמסך הזה לא תיגע בו'),
+    'and says the save leaves it alone — which is the pin two paragraphs up, told to the owner',
+  );
   /*
    * AND THE DELETION LEFT ONE THING OPEN, pinned so it cannot be forgotten:
    * with no switch anywhere, DEFAULT_LIMITS decides for every account that
@@ -6002,9 +6125,35 @@ const scenario: { step: string; line: string }[] = [];
    * holds the other gate to the same three.
    */
   const gapBranch = rules.slice(rules.indexOf('const wait = gapMs - sinceLast;'));
+  /*
+   * THE INSTANT IS STILL "THE LAST PUBLICATION PLUS THE GAP", spelled off the
+   * new read. On 07.11.2026 מצב פרסום חכם gave this block a second job — the
+   * rest after a run of ten — and a rest needs the newest `burst` instants,
+   * not one row. So `.limit(1).maybeSingle()` became `.limit(burst)` and the
+   * rows are parsed once into `stamps`, newest first; `last.published_at`
+   * became `stamps[0]`, held in `lastAt`.
+   *
+   * The pin follows the value and is not loosened: `lastAt` is asserted to BE
+   * the newest published instant, and the held instant is asserted to be
+   * `lastAt + gapMs` — i.e. measured from the last publication, never from
+   * `now`. That distinction is the whole of this assertion. Holding
+   * `now + wait` reads identically on a calm queue and collapses the moment
+   * two lanes evaluate in the same tick, which is how "one a minute" became
+   * "one every minute-and-a-publication" in the first place.
+   */
   assert.ok(
-    /if \(wait <= PREP_LEAD_MS\) \{[\s\S]{0,400}holdFor\(new Date\(new Date\(last\.published_at\)\.getTime\(\) \+ gapMs\)\);/.test(gapBranch),
+    /const lastAt = stamps\[0\];/.test(rules),
+    'the gap is measured from the newest published instant, which is the head of the list the rest also reads',
+  );
+  assert.ok(
+    /if \(wait <= PREP_LEAD_MS\) \{[\s\S]{0,400}holdFor\(new Date\(lastAt \+ gapMs\)\);/.test(gapBranch),
     'within that lead the rule lets the row through with the instant attached, instead of deferring it',
+  );
+  /* The deferral past the lead is measured from the same instant, or the two
+     halves of one gate would disagree about when the gap closes. */
+  assert.ok(
+    /insideWindow\(gate, new Date\(lastAt \+ gapMs \+ DEFER_CUSHION_MS\)\)/.test(gapBranch),
+    'and so is the deferral it falls back to',
   );
   assert.ok(
     /\} else \{[\s\S]{0,200}action: 'defer'/.test(gapBranch),

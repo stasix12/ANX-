@@ -364,6 +364,17 @@ async function main(): Promise<void> {
                   fields: fields.length,
                   fieldRows: new Set(fields.map((r) => Math.round(r.top))).size,
                   fieldWidths: [...new Set(fields.map((r) => Math.round(r.width)))],
+                  /* מצב פרסום חכם, which replaced the second field: three
+                     cards that must stay on ONE row at every width this card
+                     is drawn at — three modes on three lines stop being
+                     comparable, which is the whole reason they are together. */
+                  modes: [...p.querySelectorAll('[data-smart-pace] [role="radio"]')].map((e) => e.getBoundingClientRect()).length,
+                  modeRows: new Set(
+                    [...p.querySelectorAll('[data-smart-pace] [role="radio"]')].map((e) => Math.round(e.getBoundingClientRect().top)),
+                  ).size,
+                  modeWidths: [
+                    ...new Set([...p.querySelectorAll('[data-smart-pace] [role="radio"]')].map((e) => Math.round(e.getBoundingClientRect().width))),
+                  ],
                   /* How many of the seven are lit — the fixture's own data. */
                   lit: [...p.querySelectorAll('[aria-pressed="true"]')].length,
                   switches: p.querySelectorAll('[role="switch"]').length,
@@ -542,11 +553,37 @@ async function main(): Promise<void> {
          * The ceiling is the measured maximum plus a few, as everywhere in
          * this suite: it catches growth nobody decided on. Everything in the
          * list above was decided on.
+         *
+         * ─── 910 → 915, 07.11.2026, AND WHAT IT BOUGHT ────────────────────
+         *
+         * מצב פרסום חכם replaced the "הפרש בין פרסומים" dropdown with three
+         * tappable cards — "יש ליצור רכיב חדש בשם: מצב פרסום חכם… יש להציג
+         * את שלוש האפשרויות בשורה אחת, בדיוק לפי הרפרנס."
+         *
+         * MEASURED, NOT ESTIMATED, at the four widths below:
+         *
+         *     360px   901 → 874     (-27)
+         *     390px   —   → 867
+         *     430px   —   → 860
+         *     600px   —   → 911     (+1 over the old ceiling)
+         *
+         * The block itself is 187px where a dropdown sharing a row with the
+         * start hour was free; three other changes gave most of it back (the
+         * two-field row became one, "הפרסום הבא" moved under the repeat, and
+         * the floor-warning line went with the field it warned about). Three
+         * of the four widths came DOWN. The fourth is one pixel over, so the
+         * ceiling moves by the suite's own convention — max plus four — and
+         * goes on catching anything nobody decided on.
+         *
+         * It was also tuned down to get here rather than simply allowed to
+         * grow: the mode cards' forced 96px floor, a wrapping pill and a
+         * three-line summary were all cut after the first measurement put the
+         * card at 929.
          */
-        const ceiling = card.panel ? 910 : 400;
+        const ceiling = card.panel ? 915 : 400;
         assert.ok(
           card.height <= ceiling,
-          say(`card ${i} is ${card.height}px, over its ${ceiling} ceiling — ${card.panel ? 'with the scheduling block, the next publication, the daily repeat and a turn-it-back-on button it measured 685 to 901 when this was written' : "a card with no scheduling block measured 322 to 394 here"}`),
+          say(`card ${i} is ${card.height}px, over its ${ceiling} ceiling — ${card.panel ? 'with the scheduling block, the next publication, the daily repeat and a turn-it-back-on button it measured 685 to 911 when this was written' : "a card with no scheduling block measured 322 to 394 here"}`),
         );
         /*
          * THE PICTURE IS THE POINT OF THIS CARD. "התמונה צריכה להיות אלמנט
@@ -790,17 +827,35 @@ async function main(): Promise<void> {
         assert.ok(p.lit >= 2 || p.lit === 0, `${where}: ${p.lit} day lit — a single-choice row would look exactly like this`);
 
         /*
-         * TWO FIELDS, NOT THREE. "יש להסיר לחלוטין את אפשרות שעת הסיום מממשק
-         * הכרטיס. להשאיר רק: שעת התחלת הפרסום, הפרש בין פרסום לפרסום, ימי
-         * הפרסום שנבחרו." The third one being gone is the assertion; it is
-         * written as an equality rather than a `<= 2` so a fourth field cannot
-         * creep in either.
+         * ONE FIELD, NOT TWO — AND NOT THREE.
+         *
+         * It was two: the start hour and "הפרש בין פרסום לפרסום", after
+         * "שעת סיום" was removed. On 07.11.2026 the gap field went too —
+         * "יש להסיר לחלוטין מהממשק את השדה הישן: הפרש בין פרסומים. אין
+         * להשאיר אותו במקום אחר ואין ליצור הגדרה כפולה" — and מצב פרסום חכם
+         * took its place as three tappable cards.
+         *
+         * Still an equality and not a `<= 1`, for the same reason it always
+         * was: a field creeping back in is exactly what this measures.
          */
-        assert.equal(p.fields, 2, `${where}: ${p.fields} fields — the reference draws two, and "שעת סיום" is not one of them`);
-        assert.equal(p.fieldRows, 1, `${where}: the two fields wrapped onto ${p.fieldRows} rows`);
+        assert.equal(p.fields, 1, `${where}: ${p.fields} fields — the reference draws one, the start hour; neither "שעת סיום" nor the gap is one of them`);
+        assert.equal(p.fieldRows, 1, `${where}: the field wrapped onto ${p.fieldRows} rows`);
         assert.ok(
           p.fieldWidths.length === 1,
-          `${where}: the two fields are different widths — ${p.fieldWidths.join(', ')}px`,
+          `${where}: the start-hour field is drawn at more than one width — ${p.fieldWidths.join(', ')}px`,
+        );
+        /*
+         * AND THE THREE MODES, WHICH MUST STAY ON ONE ROW AT EVERY WIDTH.
+         * This is the geometry claim the two-field row used to make, moved to
+         * the control that replaced it: three equal cards, one line. A mode
+         * that drops to a second line is a mode the owner cannot compare, and
+         * at 360px that is the width this file exists to catch.
+         */
+        assert.equal(p.modes, 3, `${where}: ${p.modes} publishing modes — the reference draws three`);
+        assert.equal(p.modeRows, 1, `${where}: the three modes wrapped onto ${p.modeRows} rows`);
+        assert.ok(
+          p.modeWidths.length === 1,
+          `${where}: the three modes are different widths — ${p.modeWidths.join(', ')}px`,
         );
 
         /*

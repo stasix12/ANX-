@@ -35,6 +35,17 @@ import { DEFAULT_BROWSER, DEFAULT_LIMITS } from '../../src/lib/social/types';
 let checks = 0;
 const eq = (a: unknown, b: unknown, msg: string) => { checks += 1; assert.deepEqual(a, b, msg); };
 const is = (c: unknown, msg: string) => { checks += 1; assert.ok(c, msg); };
+/*
+ * COMMENTS ARE NOT CODE, and this file has already been bitten by that — see
+ * the note in §4b about three pins in this change that matched a COMMENT
+ * instead of code, twice a page's own explanation of what had been removed.
+ * Every file read here quotes its deleted labels and sentences at length in
+ * its docblocks, and the 07.11.2026 deletion made that the rule rather than
+ * the exception: four files now carry a long "WHAT WAS HERE" block holding the
+ * exact strings whose absence is the point. So a pin on a Hebrew sentence, or
+ * on a prop that was supposed to go, is tested against this and not the file.
+ */
+const codeOnly = (src: string) => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
 
 /* ─────────────────────────────────────────────────────────────────────────
  * 1. accountGapSeconds — ONE function, asked by everybody.
@@ -200,12 +211,68 @@ const is = (c: unknown, msg: string) => { checks += 1; assert.ok(c, msg); };
 
   /* And the panel says so BEFORE the write, where the choice is being made. */
   const panel = readFileSync(new URL('../../src/components/social/CampaignSchedulePanel.tsx', import.meta.url), 'utf8');
+  const card = readFileSync(new URL('../../src/components/social/SmartPaceCard.tsx', import.meta.url), 'utf8');
   is(/accountFloorSeconds\?: number;/.test(panel), 'the panel can be told what the account floor currently is');
+  /*
+   * ─── RE-POINTED 07.11.2026 ───────────────────────────────────────────────
+   *
+   * This asked for `accountFloorSeconds > schedule.gapSeconds` — the condition
+   * on a line that appeared only while the campaign's own chosen gap sat below
+   * the account floor, warned that saving would take the floor down for every
+   * round, and cleared itself once the write landed.
+   *
+   * THE CONDITION CANNOT ARISE ANY MORE, which is why the line is gone rather
+   * than moved: "יש להסיר לחלוטין מהממשק את השדה הישן: הפרש בין פרסומים. אין
+   * להשאיר אותו במקום אחר ואין ליצור הגדרה כפולה." There is no per-campaign
+   * gap field left to disagree with the floor, so there is no moment at which
+   * one campaign's choice is about to move an account-wide number. What the
+   * self-clearing notice existed to prevent is now structural instead: picking
+   * a mode IS an account-wide act, and מצב פרסום חכם says so permanently.
+   *
+   * So the pin becomes the two halves of that which still have to be true —
+   * the floor the ENGINE enforces still reaches the control that states it,
+   * and that control states it as a fact about the engine rather than as a
+   * comparison against a number that no longer exists.
+   */
   is(
-    /accountFloorSeconds > schedule\.gapSeconds/.test(panel),
-    'and says something only while the two genuinely disagree — so the line clears itself once the write lands instead of standing as a permanent warning about nothing',
+    /currentGapSeconds=\{effectiveGapSeconds\}/.test(codeOnly(panel)),
+    'the account floor still reaches the control that states it — the mode card is handed the same effectiveGapSeconds the deleted field used to show',
   );
-  is(/לכל הסבבים/.test(panel), 'in words that name the scope');
+  is(
+    /accountGapLabel\(currentGapSeconds\)/.test(codeOnly(card)),
+    'and the card prints that floor in the unit it actually has, so the number the engine is holding is never left un-named on screen',
+  );
+  is(
+    /typeof currentGapSeconds === 'number' && Number\.isFinite\(currentGapSeconds\)/.test(codeOnly(card)),
+    'guarded on the floor being KNOWN rather than on it disagreeing with a campaign — a caller that cannot read the account settings says nothing instead of guessing',
+  );
+  /*
+   * ─── RE-POINTED 07.11.2026 ───────────────────────────────────────────────
+   *
+   * "in words that name the scope" was pinned on the panel because the words
+   * were in the panel's deleted notice. They moved into מצב פרסום חכם's own
+   * summary line, where they are now UNCONDITIONAL — "המצב חל על כל החשבון
+   * ועל כל הסבבים", on every render — rather than a warning that appears and
+   * disappears. The scope is said more often than it used to be, not less.
+   *
+   * AND IT IS TESTED AGAINST THE CODE. The panel still holds a sentence very
+   * close to this one, inside the docblock where it records what it deleted
+   * and where the words went; a pin that matched that would keep passing long
+   * after the real sentence was gone. See codeOnly() at the top of this file.
+   */
+  is(
+    /המצב חל על כל החשבון ועל כל הסבבים/.test(codeOnly(card)),
+    'in words that name the scope, on the card that now owns the choice — and permanently, not only while something disagrees',
+  );
+  /*
+   * AND THE FIELD IS GONE FROM THE PANEL ITSELF, which is the half of the
+   * instruction that is about this file: "אין להשאיר אותו במקום אחר ואין
+   * ליצור הגדרה כפולה". A deleted control that comes back next to a mode
+   * picker is two definitions of one number, which is the shape of every bug
+   * this whole file exists to pin.
+   */
+  is(!/הפרש בין פרסומים/.test(codeOnly(panel)), 'and the old per-campaign gap field is not in the panel any more — not beside the mode card, not anywhere');
+  is(!/gapSeconds: Number\(/.test(codeOnly(panel)), 'nor is any control left in it that writes a gap');
 }
 
 /* ─────────────────────────────────────────────────────────────────────────
@@ -220,13 +287,24 @@ const is = (c: unknown, msg: string) => { checks += 1; assert.ok(c, msg); };
  * — and the gate the engine actually consults does not. Nothing on any screen
  * disagrees with anything else. It is simply not true.
  *
- * There were three writers of this pair in the product, and as of 07.11.2026
- * there are TWO for the group half. The settings screen stopped being one when
- * "מרווח נוסף בין קבוצות" was deleted at the owner's request: a screen
- * with no box for a number has no business writing it, and while it still did,
- * it wrote a MOUNT-TIME copy that reverted a floor the campaign panel had just
- * lowered. It is still a writer of the ACCOUNT half, which it does have a box
- * for, and that is checked below in full.
+ * There were three writers of this pair in the product. As of 07.11.2026 the
+ * settings screen is a writer of NEITHER half, and there is a fourth that is
+ * now the one that matters.
+ *
+ * The settings screen stopped writing the group half when "מרווח נוסף בין
+ * קבוצות" was deleted at the owner's request, and stopped writing the account
+ * half when "מרווח מינימלי בין פרסומים (דקות)" went the same way: "יש להסיר
+ * לחלוטין מהממשק את השדה הישן: הפרש בין פרסומים. אין להשאיר אותו במקום אחר
+ * ואין ליצור הגדרה כפולה." A screen with no box for a number has no business
+ * writing it, and while it still did, it wrote a MOUNT-TIME copy that reverted
+ * a floor the campaign panel had just lowered. The invariant this section
+ * defends is now kept for BOTH halves the one way that cannot drift: by
+ * removing the writer rather than by remembering to update it.
+ *
+ * The fourth writer is applyGapFloor(), which is what מצב פרסום חכם writes
+ * through — applyPace() hands it the chosen mode's gapSeconds — so it is
+ * behind every gap change the owner can still make. It is held to exactly the
+ * same invariant as the other three, below.
  * ───────────────────────────────────────────────────────────────────────── */
 {
   const client = readFileSync(new URL('../../src/lib/social/client.ts', import.meta.url), 'utf8');
@@ -246,8 +324,53 @@ const is = (c: unknown, msg: string) => { checks += 1; assert.ok(c, msg); };
     'the surcharge write is not guarded on the MINUTES being different — 30s and 60s are both "1 minute", and the stale seconds would win',
   );
 
+  /*
+   * ─── THE FOURTH WRITER, AND NOW THE ONE THAT MATTERS ─────────────────────
+   *
+   * ADDED 07.11.2026. applyGapFloor() is the writer מצב פרסום חכם goes
+   * through, so it carries the gap for every change the owner can still make
+   * from a campaign card. Same invariant, asserted the same way: both units of
+   * both halves, derived through the one split, onto the whole object.
+   */
+  const floor = client.slice(client.indexOf('export async function applyGapFloor'), client.indexOf('async function campaignWindows'));
+  is(floor.length > 400, 'applyGapFloor was located');
+  is(/const \{ baseSeconds, surchargeSeconds \} = splitAccountGap\(want, curSurcharge\)/.test(floor), 'derived through the one split, so the mode card cannot disagree with the tuner or the panel about what a gap of N means');
+  is(
+    /saveSetting\('limits', \{ \.\.\.limits, minGapMinutes: Math\.ceil\(baseSeconds \/ 60\), minGapSeconds: baseSeconds \}\)/.test(floor),
+    'both units of the base, rounded UP, onto the whole limits object',
+  );
+  is(
+    /saveSetting\('browser', \{ \.\.\.browser, groupMinGapMinutes: Math\.ceil\(surchargeSeconds \/ 60\), groupMinGapSeconds: surchargeSeconds \}\)/.test(floor),
+    'and both units of the surcharge, onto the whole browser object',
+  );
+  /* And the mode goes THROUGH it rather than around it — a saveSetting of its
+     own would be a fifth writer of the pair on the day the fourth was added. */
+  const applyPace = client.slice(client.indexOf('export async function applyPace'), client.indexOf('export async function liveQueuePlan'));
+  is(applyPace.length > 100, 'applyPace was located');
+  is(/const gap = await applyGapFloor\(pace\.gapSeconds\)/.test(applyPace), 'picking a mode writes the account gap through that one writer, so nothing new had to learn about the pair');
+  is(
+    /const limits = await getLimits\(\);\s*\n\s*await saveSetting\('limits', \{ \.\.\.limits, pace: id \}\)/.test(applyPace),
+    'and `pace` lands on a FRESH read of the row, after the gap write that re-read it — a stale spread is how this product has twice reverted a setting somebody had just changed elsewhere',
+  );
+
   const settings = readFileSync(new URL('../../src/app/social/settings/page.tsx', import.meta.url), 'utf8');
-  is(/minGapSeconds: keepOrDerive\(/.test(settings), 'the settings screen writes the seconds beside its minutes box, or that box stops governing');
+  /*
+   * ─── RE-POINTED 07.11.2026: THE SETTINGS SCREEN WRITES NEITHER HALF ──────
+   *
+   * This asked for `minGapSeconds: keepOrDerive(` and called it "the settings
+   * screen writes the seconds beside its minutes box, or that box stops
+   * governing". THE BOX IS GONE — "יש להסיר לחלוטין מהממשק את השדה הישן:
+   * הפרש בין פרסומים" — and the write went with it, exactly as the group half
+   * went when "מרווח נוסף בין קבוצות" was deleted a change earlier.
+   *
+   * There is nothing to re-point this at on that screen, because the right
+   * answer for a writer with no control is to stop being a writer. So the
+   * assertion that replaces it is the key set below, read out rather than
+   * grepped for: it is the one form of this that cannot pass by accident, and
+   * it says in one line that neither minGapMinutes nor minGapSeconds is in
+   * the write any more. The executed round trip at the end of this section
+   * then proves the property the deleted arithmetic existed for.
+   */
   /*
    * AND THE GROUP HALF IS NOT WRITTEN FROM THERE AT ALL ANY MORE.
    *
@@ -270,92 +393,143 @@ const is = (c: unknown, msg: string) => { checks += 1; assert.ok(c, msg); };
    * name is mentioned; it is which keys the write actually carries. So this
    * lists them.
    */
+  /* Hoisted out of the block below as of 07.11.2026, because the executed
+     round trip further down now BUILDS the save out of this very list rather
+     than out of three key names typed into it by hand. */
+  let saveKeys: string[] = [];
   {
     const from = settings.indexOf("await saveSetting('limits', {");
     is(from > 0, 'the limits save was located');
     const body = settings.slice(from, settings.indexOf('});', from));
-    const keys = [...body.matchAll(/^\s{8}([A-Za-z][A-Za-z0-9]*):/gm)].map((m) => m[1]).sort();
+    saveKeys = [...body.matchAll(/^\s{8}([A-Za-z][A-Za-z0-9]*):/gm)].map((m) => m[1]).sort();
     eq(
-      keys.join(','),
-      'dedupeDays,maxPerDay,maxPerTargetPerDay,minGapMinutes,minGapSeconds',
-      'the settings save carries exactly its four boxes and the account seconds — no group half, and nothing it has no control for',
+      saveKeys.join(','),
+      'dedupeDays,maxPerDay,maxPerTargetPerDay',
+      /* RE-POINTED 07.11.2026: three boxes, not four, and NEITHER half of the
+         gap. The expected list shrank because a control was deleted, which is
+         the one reason a key set here is allowed to change — and listing it
+         is what makes that visible rather than a regex quietly still passing
+         over a line that no longer exists. */
+      'the settings save carries exactly its three remaining boxes — no gap of either kind, no group half, and nothing it has no control for',
     );
     is(body.includes('...curLimits,'), 'onto the row as it is now, so every other key survives untouched');
   }
 
   /*
-   * ─── AND IT IS A ONE-WAY RATCHET IF IT DERIVES THEM BLINDLY ────────────
+   * AND IT STILL SAYS THE NUMBER, WHICH IS THE PART THAT WAS NOT DELETED.
    *
-   * THE BUG THE FIRST VERSION OF THE FIX ABOVE SHIPPED WITH, found by reading
-   * it again rather than by anything failing.
-   *
-   * The seconds are stored with the minutes beside them ROUNDED UP, on
-   * purpose: a worker that predates the seconds must read a SLOWER number,
-   * never a faster one. So a 30-second floor is stored as 30 seconds with
-   * `groupMinGapMinutes: 1`. This screen loads that box as "1" — and a save
-   * that recomputed 1 x 60 would write 60, DOUBLING the floor the owner had
-   * just chosen in the campaign panel. Open the settings screen, press שמור,
-   * touch nothing: thirty seconds becomes sixty, silently, through the one
-   * screen whose job is to tell the truth about these numbers.
-   *
-   * So a minutes value that still agrees with the stored seconds is NOT a
-   * decision — it is the box showing what it can of a number it cannot say.
+   * RE-POINTED 07.11.2026. A floor the engine enforces and no screen states
+   * is how this product has repeatedly gone wrong, and this is the screen
+   * whose whole job is the truth about these settings. The <Notice> that used
+   * to appear only when the box could not express the stored seconds is now
+   * UNCONDITIONAL, because there is no box left for it to disagree with — and
+   * it names where the number IS changed, since an instruction that cannot
+   * work is worse than none.
    */
-  is(/const keepOrDerive = /.test(settings), 'the settings screen decides per field whether the minutes are a decision or a rounding');
-  is(
-    /Math\.ceil\(stored \/ 60\) === minutes\) return stored;/.test(settings),
-    'MINUTES THAT STILL ROUND UP TO THE STORED SECONDS KEEP THE SECONDS — otherwise a no-op save doubles a sub-minute floor',
-  );
-  is(
-    /Number\.isFinite\(stored\) && stored >= 0/.test(settings),
-    'and a stored floor of ZERO survives — the owner who wants no gap at all is not a falsy value to be discarded',
-  );
-  is(
-    /keepOrDerive\(limits\.minGapMinutes, curLimits\.minGapSeconds\)/.test(settings),
-    'compared against the FRESHLY RE-READ row, not the form state — the form was loaded before the campaign panel may have lowered the floor',
-  );
-  /* And the screen says the real figure when the box cannot. */
-  is(/accountGapLabel\(accountGapSeconds\(limits, browser, true\)\)/.test(settings), 'and it prints the floor the engine actually enforces when that is not a whole number of minutes');
+  is(/שמירה מהמסך הזה לא תיגע/.test(codeOnly(settings)), 'the read-only line promises that saving here will not touch the floor');
+  is(/מצב פרסום חכם/.test(codeOnly(settings)), 'and names the control that does change it, by the name it has on screen');
+
+  /* And the screen says the real figure, which is the part that was NOT
+     deleted — it is now printed unconditionally, see above. */
+  is(/accountGapLabel\(accountGapSeconds\(limits, browser, true\)\)/.test(settings), 'and it prints the floor the engine actually enforces, through the one function, rather than adding the two columns up again');
 
   /*
-   * THE ARITHMETIC ITSELF, EXECUTED — the rule re-implemented here exactly as
-   * the screen states it, so a change to the screen's rule that this file does
-   * not follow shows up as these cases failing rather than as a silent ratchet.
+   * ─── THE ONE-WAY RATCHET, RE-POINTED 07.11.2026 ─────────────────────────
+   *
+   * WHAT WAS HERE. keepOrDerive() — this screen's own rule for when a minutes
+   * box was a DECISION and when it was merely a rounding — pinned in four
+   * assertions, then re-implemented here and executed over eight cases and a
+   * three-save round trip. It existed because of a real bug, and the bug is
+   * worth keeping written down:
+   *
+   *   the seconds are stored with the minutes beside them ROUNDED UP, on
+   *   purpose, so a worker that predates the seconds reads a SLOWER number
+   *   and never a faster one. A 30-second floor is therefore stored as 30
+   *   seconds with the minutes reading 1. This screen loaded that box as "1",
+   *   and a save that recomputed 1 x 60 wrote 60 — DOUBLING the floor the
+   *   owner had just chosen in the campaign panel. Open the settings screen,
+   *   press שמור, touch nothing: thirty seconds became sixty, silently,
+   *   through the one screen whose job is to tell the truth about it.
+   *
+   * THE RULE IS GONE BECAUSE THE BOX IS. "יש להסיר לחלוטין מהממשק את השדה
+   * הישן: הפרש בין פרסומים" took the minutes box with it, and arithmetic for
+   * a box that does not exist is not a pin to re-point — it is dead code, and
+   * re-implementing it here would be this file testing itself.
+   *
+   * BUT THE PROPERTY IT BOUGHT IS STILL THE THING THAT MUST BE TRUE, and it
+   * is now provable rather than argued: the save spreads a FRESH read of the
+   * row and names only the keys listed above, and neither of the gap's two
+   * keys is among them. So what is executed below is that save — BUILT OUT OF
+   * THE KEY LIST THE SOURCE ITSELF JUST GAVE US, not out of three key names
+   * typed in here — run three times over a sub-minute floor. A gap key
+   * creeping back into that write starts moving the floor in this loop, which
+   * is the failure arriving AS a failure rather than as a regex that still
+   * matches a line somebody deleted.
    */
-  const keepOrDerive = (typedMinutes: number, storedSeconds: unknown): number => {
-    const minutes = Math.max(0, Math.round(Number(typedMinutes) || 0));
-    const stored = Number(storedSeconds);
-    if (Number.isFinite(stored) && stored >= 0 && Math.ceil(stored / 60) === minutes) return stored;
-    return minutes * 60;
-  };
-  eq(keepOrDerive(1, 30), 30, 'a box reading 1 over a stored 30s keeps the 30s — the no-op save that used to double it');
-  eq(keepOrDerive(0, 0), 0, 'a zero floor stays zero');
-  eq(keepOrDerive(1, 60), 60, 'a box reading 1 over a stored 60s keeps the 60s — nothing changes for an ordinary account');
-  eq(keepOrDerive(2, 30), 120, 'but typing 2 over a stored 30s is a DECISION, and the minutes win');
-  eq(keepOrDerive(0, 30), 0, 'and so is typing 0 — the owner lowering it to nothing');
-  eq(keepOrDerive(45, undefined), 2700, 'with no stored seconds at all the minutes decide, exactly as before they existed');
-  eq(keepOrDerive(45, 'abc'), 2700, 'and garbage in the jsonb does not become the floor');
-  eq(keepOrDerive(45, -1), 2700, 'nor does a negative one');
-  /* The round trip that matters: lower to 30s in the panel, then press שמור
-     on the settings screen without touching anything, twice. */
   {
+    interface LimitsRow { minGapMinutes: number; minGapSeconds: number; maxPerDay: number; maxPerTargetPerDay: number; dedupeDays: number }
+    /* The save, to the letter: `{ ...curLimits, <the keys it names> }`. */
+    const saveOnTheSettingsScreen = (curLimits: LimitsRow, form: Record<string, number>): LimitsRow => {
+      const next: Record<string, number> = { ...curLimits };
+      for (const key of saveKeys) next[key] = form[key];
+      return next as unknown as LimitsRow;
+    };
+    /* The three boxes the screen still has, as the owner left them. EVERY key
+       the save carries has to be one of these: a key in that write which is
+       not a box here is either the gap coming back or a fourth control nobody
+       told this file about, and both have to be looked at by a person. */
+    const boxes: Record<string, number> = { maxPerDay: 41, maxPerTargetPerDay: 3, dedupeDays: 7 };
+    for (const key of saveKeys) {
+      is(key in boxes, `the save's key "${key}" is a box this screen actually has — anything else in that write is the gap returning, or a control this file has not been told about`);
+    }
+
+    /* The round trip that matters: pick a mode that puts the floor at thirty
+       seconds, then press שמור on the settings screen three times. */
     const stored = splitAccountGap(30, 20 * 60);
-    let base = stored.baseSeconds;
-    let surcharge = stored.surchargeSeconds;
+    let limitsRow: LimitsRow = {
+      ...DEFAULT_LIMITS,
+      minGapMinutes: Math.ceil(stored.baseSeconds / 60),
+      minGapSeconds: stored.baseSeconds,
+    };
+    const browserRow = {
+      ...DEFAULT_BROWSER,
+      groupMinGapMinutes: Math.ceil(stored.surchargeSeconds / 60),
+      groupMinGapSeconds: stored.surchargeSeconds,
+    };
     for (let save = 1; save <= 3; save += 1) {
-      base = keepOrDerive(Math.ceil(base / 60), base);
-      surcharge = keepOrDerive(Math.ceil(surcharge / 60), surcharge);
+      /* Not an empty save: the box the screen DOES have moves every time, so
+         this is the real action and not a pass bought by doing nothing. */
+      limitsRow = saveOnTheSettingsScreen(limitsRow, { ...boxes, maxPerDay: 40 + save });
       eq(
-        accountGapSeconds({ minGapMinutes: Math.ceil(base / 60), minGapSeconds: base }, { groupMinGapMinutes: Math.ceil(surcharge / 60), groupMinGapSeconds: surcharge }, true),
+        accountGapSeconds(limitsRow, browserRow, true),
         30,
         `save #${save} on the settings screen leaves the floor at thirty seconds`,
       );
+      eq(limitsRow.maxPerDay, 40 + save, `and save #${save} did land — the boxes it still has governed, so this is a working save rather than an inert one`);
+    }
+    /* AND THE HALF IT PASSES THROUGH IS UNTOUCHED, not merely summing to 30
+       by luck. splitAccountGap(30, 20min) puts the whole floor in the group
+       surcharge and leaves the account half at ZERO, so this is also the case
+       the deleted `Number.isFinite(stored) && stored >= 0` guard was for: a
+       stored floor of zero is a real setting and not a falsy value to be
+       discarded. Nothing on this path can discard it now, because nothing on
+       this path computes it. */
+    eq(limitsRow.minGapSeconds, stored.baseSeconds, 'the account half came through the three saves byte for byte, zero included');
+
+    /* And the whole floor at zero — the owner who wants no gap at all. */
+    {
+      let zeroRow: LimitsRow = { ...DEFAULT_LIMITS, minGapMinutes: 0, minGapSeconds: 0 };
+      const zeroBrowser = { ...DEFAULT_BROWSER, groupMinGapMinutes: 0, groupMinGapSeconds: 0 };
+      zeroRow = saveOnTheSettingsScreen(zeroRow, { ...boxes });
+      eq(accountGapSeconds(zeroRow, zeroBrowser, true), 0, 'a floor of ZERO survives a save here too — it is a setting, not an absence');
     }
   }
 
-  /* The third writer is matchAccountGapTo, already checked above — it is the
-     one that writes seconds FIRST and therefore the one that arms this trap
-     for the other two. */
+  /* And the last writer, matchAccountGapTo, already checked above — it is the
+     one that writes seconds FIRST and therefore the one that armed this trap
+     for all the others. As of 07.11.2026 the writers of this pair are
+     applyGapFloor (which מצב פרסום חכם goes through), applyGapSettings and
+     this; the settings screen is no longer one of them. */
   const match = client.slice(client.indexOf('export async function matchAccountGapTo'), client.indexOf('export async function applyGapSettings'));
   is(/minGapSeconds: base/.test(match) && /minGapMinutes: Math\.ceil/.test(match), 'and the panel writes both units of the base');
   is(/groupMinGapSeconds: surcharge/.test(match) && /groupMinGapMinutes: Math\.ceil/.test(match), 'and both units of the surcharge');

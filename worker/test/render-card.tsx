@@ -225,6 +225,21 @@ const body = cases.map(([label, c, s, posts, media, paused]) => `
       repeat: repeats[(c as { id: string }).id] ?? DEFAULT_CAMPAIGN_REPEAT,
       onRepeatChange: schedules[(c as { id: string }).id] ? () => {} : undefined,
       /*
+       * מצב פרסום חכם, which replaced the gap field on 07.11.2026. Passed on
+       * the same condition as the schedule, because the panel draws the card
+       * only when it has a handler to write with — a picker that cannot save
+       * is the decorative control this product has a standing rule against.
+       *
+       * 'medium' rather than null so the SELECTED state is what the ceilings
+       * below are measured against: it is the taller of the two (the chosen
+       * card carries a filled mark and the summary line names three numbers),
+       * and a ceiling measured on the shorter one would pass a card that
+       * overflows the moment somebody picks a mode.
+       */
+      pace: schedules[(c as { id: string }).id] ? 'medium' : undefined,
+      onPaceChange: schedules[(c as { id: string }).id] ? () => {} : undefined,
+      paceRestUntil: null,
+      /*
        * סבבים ביום IS NOT ON THIS CARD, and the number is why. Measured here
        * with the rounds on, the tallest fixture went 901 → 1008px at 360px
        * against a 910 ceiling — the card is already full. The owner's own

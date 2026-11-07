@@ -55,24 +55,16 @@ import { Button, EmptyState, Field, IconButton, inputClass, Loading, Notice, She
 
 /* ------------------------------------------------------------- local bits */
 
-/** No MinusIcon in src/components/icons.tsx; same geometry as PlusIcon there. */
-function MinusIcon({ className = '' }: { className?: string }) {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={2.2}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden
-      focusable="false"
-      className={className}
-    >
-      <path d="M5 12h14" />
-    </svg>
-  );
-}
+/*
+ * ─── WHAT WAS HERE: MinusIcon AND Stepper ────────────────────────────────
+ *
+ * The − / + buttons either side of the gap figure. Both existed for the gap
+ * editor and for nothing else, and the gap editor was deleted on 07.11.2026:
+ * "יש להסיר לחלוטין מהממשק את השדה הישן: הפרש בין פרסומים." מצב פרסום חכם is
+ * where that number is chosen now, and a helper with no caller is a control
+ * the next reader goes looking for.
+ */
+
 
 /**
  * A clock reading is digits around a colon inside an RTL sentence. The colon is
@@ -107,21 +99,6 @@ function Stat({ label, children }: { label: string; children: React.ReactNode })
   );
 }
 
-/** A 44px stepper for the one number, tapped with a thumb in a moving van. */
-function Stepper({ label, onClick, disabled, children }: { label: string; onClick: () => void; disabled?: boolean; children: React.ReactNode }) {
-  return (
-    <button
-      type="button"
-      aria-label={label}
-      title={label}
-      onClick={onClick}
-      disabled={disabled}
-      className="grid h-14 w-14 shrink-0 place-items-center rounded-xl bg-ink-800 text-mist-100 transition-transform active:scale-[0.94] disabled:text-ink-600"
-    >
-      {children}
-    </button>
-  );
-}
 
 /*
  * The two counted nouns this sheet keeps repeating. Hebrew gives one a
@@ -215,8 +192,8 @@ function withDeadline<T>(work: Promise<T>, soFar?: () => { done: number; total: 
  * for exactly that. The presets stay for the big moves; these two buttons are
  * now the fine adjustment, and the figure between them can be typed into.
  */
-const STEP = 30;
-const PRESETS = [30, 60, 300, 1200, 2700, 3900];
+/* STEP and PRESETS — the stepper's 30s increment and the six preset
+   buttons — went with the gap editor on 07.11.2026. */
 /** Anything longer than this and the list gets a search box instead of a scroll. */
 const ADD_LIST_LIMIT = 30;
 
@@ -303,9 +280,6 @@ export function QueueTunerSheet({
   const progressRef = useRef<{ done: number; total: number } | null>(null);
 
   const [gap, setGap] = useState(0);
-  const [gapDirty, setGapDirty] = useState(false);
-  /* The raw text while the figure is being typed into; null when it is not. */
-  const [draft, setDraft] = useState<string | null>(null);
   const [query, setQuery] = useState('');
   const [picked, setPicked] = useState<string[]>([]);
 
@@ -356,10 +330,6 @@ export function QueueTunerSheet({
            */
           const own = campaign ? readSchedule(campaign) : null;
           setGap(own?.enabled ? own.gapSeconds : plan.effectiveGapSeconds);
-          setGapDirty(false);
-          /* A half-typed number from a previous opening must not come back as
-             the value of a queue the owner has not looked at yet. */
-          setDraft(null);
         }
       } catch (err) {
         setError(friendlyMessage(err));
@@ -770,21 +740,12 @@ export function QueueTunerSheet({
       return added ? `${posts(added)} ${agree(added, 'נוסף', 'נוספו')} לסוף התור.` : 'לא נוסף כלום — הקבוצות שבחרתם כבר ממתינות לפוסט הזה.';
     });
 
-  const setGapTo = (value: number) => {
-    setGap(Math.min(MAX_GAP, Math.max(MIN_GAP, value)));
-    setGapDirty(true);
-  };
-
   /*
-   * The typed value, committed. Anything that is not a number in range leaves
-   * the gap exactly as it was — a blur on an empty field must not silently
-   * choose 1 minute for a queue of 28 groups.
+   * setGapTo() and commitDraft() were the gap editor's two writers — the
+   * stepper/presets and the typed figure. Deleted with it on 07.11.2026. The
+   * `gap` this sheet re-spaces at is seeded from the account's own value in
+   * load() and is never edited here any more.
    */
-  const commitDraft = () => {
-    const n = Number(draft);
-    if (draft !== null && draft !== '' && Number.isFinite(n)) setGapTo(Math.round(n));
-    setDraft(null);
-  };
 
   /* ---------------------------------------------------------------- view */
 
@@ -810,16 +771,19 @@ export function QueueTunerSheet({
    * already use. */
   const gapLabel = `ל-${gapChoiceLabel(gap)}`;
 
+  /*
+   * THE BUTTON IS ABOUT THE START TIME NOW, because that is the only thing on
+   * this sheet that still edits the queue's layout: the gap is read-only here
+   * and is chosen on מצב פרסום חכם. `gapDirty` can no longer become true, so
+   * it is gone from the gating rather than left as a condition that is always
+   * false — a disabled button nobody can enable is worse than no button.
+   */
   const footer =
     !loading && !error && hasQueue ? (
-      <Button size="lg" className="w-full" busy={busy === 'respace'} disabled={working || (!gapDirty && !startDirty)} onClick={commitGap}>
+      <Button size="lg" className="w-full" busy={busy === 'respace'} disabled={working || !startDirty} onClick={commitGap}>
         {busy === 'respace' && progress
           ? `מעדכן… ${progress.done} מתוך ${progress.total}`
-          : startDirty && gapDirty
-            ? 'עדכן את מועד ההתחלה והמרווח'
-            : startDirty
-              ? 'הזז את התור למועד החדש'
-              : `עדכן מרווח ${gapLabel}`}
+          : `הזז את התור למועד החדש, במרווח של ${gapChoiceLabel(gap)}`}
       </Button>
     ) : undefined;
 
@@ -831,7 +795,7 @@ export function QueueTunerSheet({
         <div className="mb-3">
           <Notice tone="error">
             {error}{' '}
-            <button type="button" className="min-h-11 font-bold underline" onClick={() => void load(gapDirty)}>
+            <button type="button" className="min-h-11 font-bold underline" onClick={() => void load(false)}>
               נסו שוב
             </button>
           </Notice>
@@ -932,81 +896,30 @@ export function QueueTunerSheet({
             )}
           </section>
 
-          <section aria-label="מרווח בין פרסומים" className="space-y-3">
-            <h3 className="text-sm font-extrabold uppercase tracking-wide text-mist-500">מרווח בין פרסומים</h3>
+          <section aria-label="קצב הפרסום הנוכחי" className="space-y-3">
+            {/*
+              ─── THE GAP EDITOR THAT WAS HERE ───────────────────────────────
 
-            <div className="flex items-center justify-center gap-4 rounded-xl bg-ink-900 px-3 py-4">
-              <Stepper label={`הפחת ${gapChoiceLabel(STEP)}`} onClick={() => setGapTo(gap - STEP)} disabled={working || gap <= MIN_GAP}>
-                <MinusIcon className="h-6 w-6" />
-              </Stepper>
-              <div className="min-w-0 text-center">
-                {/*
-                  THE FIGURE IS THE INPUT.
+              A stepper, a typed 42px figure and six presets, all writing the
+              ACCOUNT's gap. "יש להסיר לחלוטין מהממשק את השדה הישן: הפרש בין
+              פרסומים. אין להשאיר אותו במקום אחר ואין ליצור הגדרה כפולה."
+              — 07.11.2026. מצב פרסום חכם owns that number now.
 
-                  Presets and a stepper cannot reach every number, and adding a
-                  separate field beside the big number would put two controls
-                  on screen for one value — the class of thing this file keeps
-                  removing. So the number the owner is looking at is the number
-                  they type into.
+              THE SECTION STAYS, READ-ONLY, because this sheet re-spaces the
+              queue AT that number and the owner has to be able to see which
+              number that is before pressing the button that moves 200 rows.
+              `gap` is still seeded from the account's own current value and
+              still handed to respaceQueue(), so the re-space does exactly
+              what it did; only the editing of it moved.
+            */}
+            <h3 className="text-sm font-extrabold uppercase tracking-wide text-mist-500">קצב הפרסום הנוכחי</h3>
 
-                  `draft` is what makes it typable. A controlled input that
-                  clamps on every keystroke cannot be cleared: emptying it
-                  gives NaN, the clamp turns that into MIN_GAP, and the field
-                  refills with "1" under the cursor. So while it is being
-                  edited the raw text is held as-is and only committed on blur
-                  or Enter; an empty or nonsense entry falls back to the value
-                  that was there before rather than to a number nobody chose.
-                */}
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  pattern="[0-9]*"
-                  aria-label={`מרווח בשניות, בין ${gapChoiceLabel(MIN_GAP)} ל-${gapChoiceLabel(MAX_GAP)}`}
-                  disabled={working}
-                  dir="ltr"
-                  value={draft ?? String(gap)}
-                  /* FOUR DIGITS, NOT THREE. The ceiling is MAX_GAP = 43,200
-                     seconds, and a three-character field could not express
-                     the ten-minute default the campaigns ship with. */
-                  onChange={(e) => setDraft(e.target.value.replace(/[^0-9]/g, '').slice(0, 5))}
-                  onFocus={(e) => {
-                    setDraft(String(gap));
-                    e.target.select();
-                  }}
-                  onBlur={commitDraft}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault();
-                      e.currentTarget.blur();
-                    }
-                  }}
-                  className="block w-24 rounded-lg bg-transparent text-center tabular-nums text-[42px] font-extrabold leading-none text-mist-100 focus:bg-ink-800 focus:outline-none focus:ring-2 focus:ring-brand-300 disabled:opacity-50"
-                />
-                <span className="mt-1 block text-xs font-bold text-mist-500">שניות בין פרסום לפרסום</span>
-                {/* And the same number in the words the rest of the product
-                    uses for it, so "600" and "10 דק׳" are visibly one value. */}
-                {gap >= 60 && <span className="mt-0.5 block text-[11px] font-bold text-brand-400">{gapChoiceLabel(gap)}</span>}
-              </div>
-              <Stepper label={`הוסף ${gapChoiceLabel(STEP)}`} onClick={() => setGapTo(gap + STEP)} disabled={working || gap >= MAX_GAP}>
-                <PlusIcon className="h-6 w-6" />
-              </Stepper>
-            </div>
-
-            <div className="flex flex-wrap gap-1.5">
-              {PRESETS.map((p) => (
-                <button
-                  key={p}
-                  type="button"
-                  onClick={() => setGapTo(p)}
-                  disabled={working}
-                  aria-pressed={gap === p}
-                  className={`min-h-11 min-w-14 rounded-xl px-3 text-sm font-bold tabular-nums transition-colors disabled:opacity-50 ${
-                    gap === p ? 'bg-brand-500 text-on-brand' : 'bg-ink-800 text-mist-300'
-                  }`}
-                >
-                  <span dir="auto">{gapChoiceLabel(p)}</span>
-                </button>
-              ))}
+            <div className="rounded-xl bg-ink-900 px-3 py-4 text-center">
+              <p dir="auto" className="text-[32px] font-extrabold leading-none text-mist-100">{gapChoiceLabel(gap)}</p>
+              <p className="mt-1.5 text-xs font-bold text-mist-500">בין פרסום לפרסום</p>
+              <p className="mt-2 text-[11px] font-bold leading-4 text-brand-400">
+                נקבע לפי מצב הפרסום שנבחר בכרטיס הקמפיין (״מצב פרסום חכם״), ושם גם משנים אותו.
+              </p>
             </div>
 
             <p className="text-xs leading-relaxed text-mist-500">
@@ -1031,7 +944,11 @@ export function QueueTunerSheet({
               </Notice>
             )}
 
-            {gapDirty && nextLastISO && currentLastISO && (
+            {/* Gated on startDirty now, not on a gap that can no longer change
+                here: the thing this preview describes — where the first and
+                last publications land after the change — is exactly what moving
+                the start time does. */}
+            {startDirty && nextLastISO && currentLastISO && (
               <Notice tone="info">
                 אחרי השינוי: הפרסום האחרון בתור יצא ב-
                 <Clock iso={nextLastISO} withDay={!sameLocalDay(new Date(nextLastISO), new Date(snap!.at))} /> במקום ב-
@@ -1181,7 +1098,6 @@ export function QueueTunerSheet({
                         <Clock iso={addLastISO} withDay={!sameLocalDay(new Date(addLastISO), new Date(snap!.at))} />.
                       </>
                     )}
-                    {gapDirty && ' החישוב לפי המרווח שיש בתור כרגע; המרווח החדש שבחרתם עוד לא נשמר.'}
                   </Notice>
                 )}
 

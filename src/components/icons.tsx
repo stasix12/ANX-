@@ -815,3 +815,48 @@ export function PauseIcon(props: IconProps) {
     </svg>
   );
 }
+
+/**
+ * ─── THE THREE ICONS מצב פרסום חכם DRAWS, AND NOTHING ELSE USES YET ────────
+ *
+ * The reference image gives each publishing mode an icon and the card a
+ * rocket, and the rest line a coffee cup. ShieldIcon (איטי) and BoltIcon
+ * (מהיר) were already here; these three were not. Same `base` spread, same
+ * 24×24 box, same 1.8 stroke as every icon above, so they sit on the same
+ * optical weight as the rest of the set — "אין להוסיף צבעים חדשים שלא קיימים
+ * בעיצוב" applies to line weight too.
+ */
+
+/** A speedometer — the middle mode, בינוני. A dial arc with a needle. */
+export function GaugeIcon(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M4.2 17a8.5 8.5 0 1 1 15.6 0" />
+      <path d="M12 14.5 15.8 9.7" />
+      <circle cx="12" cy="15.3" r="1.4" />
+    </svg>
+  );
+}
+
+/** A rocket — the "מצב פרסום חכם" card's own heading icon. */
+export function RocketIcon(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M13.5 3.5c3.2.4 5.8 2.3 6.9 5.4-2.1 4.6-5.4 7.6-9.8 9.1l-2.6-2.6c1.5-4.4 4.5-7.7 9.1-9.8" />
+      <path d="M9.4 14.6 6.2 11.4l-2.3.6.9 3.1 3.1.9.6-2.3z" />
+      <circle cx="15" cy="9" r="1.6" />
+      <path d="M6.8 17.2c-.9.9-1.1 2.3-1.1 3.1.8 0 2.2-.2 3.1-1.1" />
+    </svg>
+  );
+}
+
+/** A coffee cup — the rest between runs. */
+export function CoffeeIcon(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M4 9h12v5a4 4 0 0 1-4 4H8a4 4 0 0 1-4-4V9z" />
+      <path d="M16 10.5h1.6a2.4 2.4 0 0 1 0 4.8H16" />
+      <path d="M7.5 3.5v2M11 3.5v2" />
+    </svg>
+  );
+}

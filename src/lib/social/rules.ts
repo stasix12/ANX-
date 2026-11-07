@@ -14,7 +14,7 @@ import {
   gapLabel,
 } from './campaign-schedule';
 import { startOfZonedDay } from './time';
-import type { BrowserSettings, Campaign, LimitsSettings, Post, QueueItem, SocialTarget, Variant } from './types';
+import type { BrowserSettings, Campaign, LimitsSettings, PaceId, Post, QueueItem, SocialTarget, Variant } from './types';
 
 /**
  * Anti-spam decisions shared by the server worker (Pages, Graph API) and the
@@ -173,6 +173,177 @@ export function accountGapLabel(seconds: number): string {
   if (seconds < 60) return `${seconds} שניות`;
   const m = seconds / 60;
   return `${Number.isInteger(m) ? m : m.toFixed(1)} דק׳`;
+}
+
+/**
+ * ─────────────────────────────────────────────────────────────────────────────
+ * מצב פרסום חכם — THE THREE PUBLISHING MODES, AND THE REST THAT DEFINES THEM
+ *
+ * "בוא נגדיר לו 3 דפוסי התנהגות אחד מהיר השני בינוני השלישי, ושיהיה הפסקות
+ *  אחרי נגיד 10 פוסטים רצופים הפסקה" — the owner, 07.11.2026, followed by a
+ *  binding reference image and an eleven-section specification.
+ *
+ * WHAT THIS IS NOT. It is not a way around anything Facebook does: there is
+ * no detection to dodge here and nothing is disguised. Every mode publishes
+ * LESS than the account publishes today and adds stretches of doing nothing
+ * at all. It is a brake, and it is the owner braking his own account. The
+ * specification is explicit that the modes must not be presented as a promise
+ * that an account will not be restricted — "אין להציג את המצבים כהבטחה
+ * למניעת חסימות בפייסבוק" — and no string in this product does.
+ *
+ *   מהיר    45 שניות  ·  10 ברצף  ·  הפסקה 7 דק׳    ≈ 44 פרסומים בשעה
+ *   בינוני   2 דקות    ·  10 ברצף  ·  הפסקה 15 דק׳   ≈ 18 פרסומים בשעה
+ *   איטי     5 דקות    ·  10 ברצף  ·  הפסקה 30 דק׳   ≈  8 פרסומים בשעה
+ *
+ * THE NUMBERS ARE THE SPECIFICATION'S, VERBATIM. They are not derived from
+ * any published Meta figure, because there is none: this account has been
+ * restricted exactly ONCE, on 07.11.2026 at 21:40:13 after 158 publications
+ * at a sustained 69 an hour; the night of 02.11 ran 442 publications at 152
+ * an hour and was not restricted. Rate alone does not explain it and nothing
+ * here claims it does. What the three modes are is three CHOICES with their
+ * consequences printed on them.
+ *
+ * THE RUN LENGTH IS TEN IN ALL THREE, which is what was asked for and is also
+ * what keeps the three comparable: one row of the gap and the rest, and the
+ * reader can rank them at a glance.
+ *
+ * ─── WHERE EACH HALF OF A MODE IS KEPT ───────────────────────────────────
+ *
+ * THE GAP IS NOT READ FROM HERE AT PUBLISH TIME. Picking a mode WRITES
+ * `gapSeconds` into the pair the engine has always read — limits.minGapSeconds
+ * and browser.groupMinGapSeconds, through applyGapFloor() — so the planner,
+ * the projection, both spacing gates and every screen that prints a gap keep
+ * reading it from the one place they read it from now. Nothing had to learn
+ * about modes, and no screen can disagree with the engine about the gap.
+ *
+ * THE REST IS THE GENUINELY NEW RULE and lives in `limits.pace` plus this
+ * table. paceRestRemainingMs() below is the whole of it.
+ * ─────────────────────────────────────────────────────────────────────────────
+ */
+export interface PaceProfile {
+  id: PaceId;
+  /** The word on the card: מהיר / בינוני / איטי. */
+  label: string;
+  /**
+   * The semantic colour the specification assigns this mode — orange for
+   * fast, blue for medium, green for slow. A TOKEN NAME, not a hex and not a
+   * class: the component maps it to the product's own palette, so a mode
+   * cannot introduce a colour that is not already in the design system.
+   */
+  tone: 'warning' | 'brand' | 'success';
+  /**
+   * The ACCOUNT-WIDE gap this mode asks for. Not read by the gate — see the
+   * note above: picking the mode writes it into the stored pair.
+   */
+  gapSeconds: number;
+  /** How many SUCCESSFUL publications in a row before the engine rests. */
+  burst: number;
+  /** How long the rest lasts, measured from the last publication of the run. */
+  restMinutes: number;
+}
+
+export const PACE_PROFILES: PaceProfile[] = [
+  { id: 'fast', label: 'מהיר', tone: 'warning', gapSeconds: 45, burst: 10, restMinutes: 7 },
+  { id: 'medium', label: 'בינוני', tone: 'brand', gapSeconds: 120, burst: 10, restMinutes: 15 },
+  { id: 'slow', label: 'איטי', tone: 'success', gapSeconds: 300, burst: 10, restMinutes: 30 },
+];
+
+/** The mode a stored id names, or null — which is "no mode", the state every
+    account is in until somebody picks one, and means no rest at all. */
+export function paceProfile(id: PaceId | null | undefined): PaceProfile | null {
+  return PACE_PROFILES.find((p) => p.id === id) ?? null;
+}
+
+/**
+ * Publications per hour a mode SUSTAINS, rest included — which is the only
+ * number worth putting on a card.
+ *
+ * A run's first publication comes straight after the rest, so the run itself
+ * spans (burst − 1) gaps and the cycle is that plus the rest. Quoting
+ * 3600/gap instead — 80 an hour for the fast mode — would describe a burst
+ * that lasts seven minutes as if it lasted all day, which is exactly the
+ * misreading these modes exist to correct.
+ */
+export function paceRatePerHour(p: PaceProfile): number {
+  const cycleSeconds = (p.burst - 1) * p.gapSeconds + p.restMinutes * 60;
+  return cycleSeconds > 0 ? (p.burst * 3600) / cycleSeconds : 0;
+}
+
+/**
+ * ─── HOW LONG A REST IS STILL OWED, in milliseconds. 0 means none is. ──────
+ *
+ * ONE FUNCTION, ASKED BY EVERYBODY — the per-row rule below, the worker's own
+ * pre-claim gate (worker/social-worker.ts) and the screen that has to show
+ * "בהפסקה" with a countdown. Those gates have drifted before over the GAP,
+ * which is why accountGapSeconds() exists; this is the same lesson applied
+ * the first time rather than the second.
+ *
+ * `stampsDesc` is the published_at instants of the most recent SUCCESSFUL
+ * publications, NEWEST FIRST, at least `burst` of them. Every caller reads
+ * them with `status = 'published'`, so a failed or skipped attempt is not in
+ * the list at all — "פרסום שנכשל אינו נחשב לפרסום מוצלח", structurally rather
+ * than by a filter somebody has to remember to write.
+ *
+ * ─── WHY THERE IS NO COUNTER COLUMN, AND NO MIGRATION ─────────────────────
+ *
+ * "how many in a row" looks like state that has to be stored and reset, and
+ * storing it would mean a schema change, a reset nobody can see, and a number
+ * that goes wrong the first time a row is published from somewhere this code
+ * does not run. It does not have to be stored, because THE REST ITSELF BREAKS
+ * THE RUN: a stretch as long as the rest, between two publications, IS a
+ * rest, whatever caused it. So the run is simply "how many of the newest
+ * publications are each less than one rest apart", and after a real rest the
+ * newest publication is more than one rest from the one before it, the count
+ * falls back to 1, and the next run starts.
+ *
+ * THIS IS ALSO WHAT MAKES THE REST SURVIVE A REFRESH AND A RESTART, which the
+ * specification requires by name: "יש לשמור את זמן סיום ההפסקה גם לאחר רענון
+ * העמוד או הפעלה מחדש". There is nothing to persist — the rest is DERIVED, on
+ * every call, from rows that were already in the database. A browser refresh,
+ * a worker restart, a second agent on another machine and the server all
+ * compute the same instant from the same rows.
+ *
+ * It also means a quiet night counts as a rest, which is right: an account
+ * that published nothing for two hours has had its break.
+ */
+export function paceRestRemainingMs(
+  pace: PaceProfile | null,
+  stampsDesc: number[],
+  nowMs: number,
+): number {
+  if (!pace || pace.burst <= 0 || pace.restMinutes <= 0) return 0;
+  if (stampsDesc.length < pace.burst) return 0;
+  const restMs = pace.restMinutes * 60_000;
+  let run = 1;
+  for (let i = 1; i < stampsDesc.length; i += 1) {
+    if (stampsDesc[i - 1] - stampsDesc[i] >= restMs) break;
+    run += 1;
+  }
+  if (run < pace.burst) return 0;
+  return Math.max(0, stampsDesc[0] + restMs - nowMs);
+}
+
+/** "18 דק׳" — the wait a resting row reports, rounded UP so the sentence never
+    promises an instant that has not arrived. */
+export function paceRestLabel(ms: number): string {
+  return `${Math.max(1, Math.ceil(ms / 60_000))} דק׳`;
+}
+
+/**
+ * "45 שניות" / "2 דקות" / "5 דקות" — a mode's gap SPELLED OUT, for the card.
+ *
+ * accountGapLabel() abbreviates to "דק׳" because it has to fit inside a
+ * deferral sentence and a narrow readout box; the reference image writes the
+ * word in full on the mode cards, which have the room. Same seconds, same
+ * module, so the two spellings of one number cannot come from two different
+ * ideas of what that number is — and anything that is not a whole number of
+ * minutes falls back to the abbreviating one rather than inventing a third
+ * format.
+ */
+export function paceGapWords(seconds: number): string {
+  if (seconds < 60) return `${seconds} שניות`;
+  const m = seconds / 60;
+  return Number.isInteger(m) ? `${m} דקות` : accountGapLabel(seconds);
 }
 
 export const PREP_LEAD_MS = 75_000;
@@ -687,20 +858,29 @@ export async function evaluateQueueItem(db: SupabaseClient, ctx: RuleContext): P
     }
   }
 
-  // Minimum spacing between any two publications (groups get extra spacing).
+  /*
+   * Minimum spacing between any two publications (groups get extra spacing),
+   * and — when a pacing pattern is in force — the rest after a run of them.
+   *
+   * ONE READ SERVES BOTH, and the limit is the only thing the pattern changes
+   * about it. The rest needs the newest `burst` instants to tell a run from a
+   * stretch that has already been broken; the gap needs the newest of them,
+   * which is the same row this read has always returned. With no pattern the
+   * limit is 1 and this is byte-for-byte the query it was.
+   */
+  const pace = paceProfile(limits.pace);
   const recent = await db
     .from('social_queue')
     .select('published_at')
     .eq('status', 'published')
     .not('published_at', 'is', null)
     .order('published_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();
+    .limit(pace ? Math.max(1, pace.burst) : 1);
   /*
-   * AND THE LAST OF THE FOUR. `last?.published_at` on a failed read is
-   * undefined, the whole spacing block is skipped, and the minimum gap
-   * between any two publications — the single setting standing between this
-   * product and a restricted Facebook account — is not enforced at all. No
+   * AND THE LAST OF THE FOUR. A failed read leaves `stamps` empty, both
+   * blocks below are skipped, and the minimum gap between any two
+   * publications — the single setting standing between this product and a
+   * restricted Facebook account — is not enforced at all, nor is the rest. No
    * screen would show anything: the post publishes, successfully, too soon.
    */
   if (recent.error) {
@@ -711,11 +891,50 @@ export async function evaluateQueueItem(db: SupabaseClient, ctx: RuleContext): P
       attention: true,
     };
   }
-  const last = recent.data;
-  if (last?.published_at) {
+  /* Newest first, as the order above asks. Parsed once, because both gates
+     below want numbers and `new Date(...)` on a string PostgREST has already
+     promised is a timestamp is not free when it happens per row per claim. */
+  const stamps = (recent.data ?? [])
+    .map((r) => Date.parse(String((r as { published_at?: string | null }).published_at ?? '')))
+    .filter((t) => Number.isFinite(t));
+
+  /*
+   * ─── THE REST AFTER A RUN ────────────────────────────────────────────────
+   *
+   * Checked BEFORE the gap, and that ordering is the only reason the owner
+   * ever sees the right sentence. A rest is longer than the gap in all three
+   * patterns, so when both are owed the rest is the later instant and the one
+   * that decides; the gap's branch below `return`s on its own, so leaving this
+   * second would have deferred the row for the gap, let it come back, and
+   * defer it again for the rest — two round trips and a reason about spacing
+   * for a row that is resting.
+   *
+   * paceRestRemainingMs() is the whole rule and it is pure; everything here is
+   * the same shape the gap uses underneath — hold if it is close enough to
+   * prepare inside, defer if it is not.
+   */
+  const restMs = paceRestRemainingMs(pace, stamps, now.getTime());
+  if (pace && restMs > 0) {
+    if (item.attempts > MAX_DEFERRALS) return { action: 'skip', reason: 'הפרסום נכשל שוב ושוב ולכן הופסק.' };
+    if (restMs <= PREP_LEAD_MS) {
+      /* Raised, not returned — the gap below and the campaign's own interval
+         may each want a later instant, and the single return hands over the
+         latest of the three. */
+      holdFor(new Date(now.getTime() + restMs));
+    } else {
+      return {
+        action: 'defer',
+        until: insideWindow(gate, new Date(now.getTime() + restMs + DEFER_CUSHION_MS)).toISOString(),
+        reason: `הפסקה אחרי ${pace.burst} פרסומים רצופים — ממשיכים בעוד ${paceRestLabel(restMs)}.`,
+      };
+    }
+  }
+
+  if (stamps.length) {
+    const lastAt = stamps[0];
     const gapSeconds = accountGapSeconds(limits, ctx.browser, target.channel === 'facebook_group');
     const gapMs = gapSeconds * 1000;
-    const sinceLast = now.getTime() - new Date(last.published_at).getTime();
+    const sinceLast = now.getTime() - lastAt;
     if (sinceLast < gapMs) {
       /*
        * The belt, and it is only a belt now.
@@ -742,9 +961,9 @@ export async function evaluateQueueItem(db: SupabaseClient, ctx: RuleContext): P
         /* Raised rather than returned: the campaign's own interval may already
            have asked for a LATER instant, and the one return below hands over
            whichever of the two is further out. */
-        holdFor(new Date(new Date(last.published_at).getTime() + gapMs));
+        holdFor(new Date(lastAt + gapMs));
       } else {
-        const until = insideWindow(gate, new Date(new Date(last.published_at).getTime() + gapMs + DEFER_CUSHION_MS)).toISOString();
+        const until = insideWindow(gate, new Date(lastAt + gapMs + DEFER_CUSHION_MS)).toISOString();
         return { action: 'defer', until, reason: `נדחה כדי לשמור מרווח של ${accountGapLabel(gapSeconds)} בין פרסומים` };
       }
     }

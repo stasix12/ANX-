@@ -30,6 +30,8 @@ import {
   reopenCampaign,
   getBrowserSettings,
   getLimits,
+  applyPace,
+  readPaceRest,
   lastPublishedAt,
   matchAccountGapTo,
   saveCampaign,
@@ -38,14 +40,14 @@ import {
   repeatRefusedText,
   syncWeeklyHours,
   stopCampaign,
-  applyGapFloor,} from '@/lib/social/client';
+} from '@/lib/social/client';
 import { campaignState, cancellableRows, type CampaignState } from '@/lib/social/campaign';
 import { SNAPSHOT, readSnapshot, writeSnapshot } from '@/lib/social/snapshot';
 import { MIN_REPEAT_HOURS, readRepeat, readSchedule, repeatColumns, repeatFloorFrom, scheduleColumns, type CampaignRepeat, type CampaignSchedule, readRounds, roundsColumn, roundsSavedMessage, type CampaignRound,} from '@/lib/social/campaign-schedule';
 import { accountGapLabel } from '@/lib/social/rules';
 import { counted } from '@/lib/social/time';
 import { scheduleReadout, type AccountSpacing } from '@/lib/social/schedule-readout';
-import type { Campaign, ControlSettings } from '@/lib/social/types';
+import type { Campaign, ControlSettings, PaceId } from '@/lib/social/types';
 import { friendlyMessage } from '@/lib/social/errors';
 import { MegaphoneIcon } from '@/components/icons';
 
@@ -113,6 +115,16 @@ export default function CampaignsPage() {
    * act as though the protection were lower than it is.
    */
   const [floorHours, setFloorHours] = useState<number>(MIN_REPEAT_HOURS);
+  /*
+   * מצב פרסום חכם — which mode the ACCOUNT is on, and the rest it is serving.
+   *
+   * Both read from the account's settings on the same load() this screen
+   * already makes, so the cards here and the dashboard's card cannot show
+   * different modes. Undefined until the first load answers, which draws the
+   * honest "no mode picked yet" state rather than guessing at one.
+   */
+  const [pace, setPace] = useState<PaceId | undefined>(undefined);
+  const [paceRestUntil, setPaceRestUntil] = useState<string | null>(null);
   const [workerOnline, setWorkerOnline] = useState<boolean | undefined>(seed?.workerOnline);
   /*
    * WHICH ROUND THE COMMENT SHEET IS ABOUT — and null when it is closed, so
@@ -161,6 +173,10 @@ export default function CampaignsPage() {
         lastPublishedAt(),
       ]);
       setFloorHours(repeatFloorFrom(lim));
+      setPace(lim.pace);
+      /* Derived from the queue's own published rows — see readPaceRest. It
+         returns without a query at all while no mode is picked. */
+      setPaceRestUntil((await readPaceRest(lim)).until);
       setSpacing({
         minGapMinutes: lim.minGapMinutes,
         groupMinGapMinutes: brw.groupMinGapMinutes,
@@ -583,20 +599,24 @@ export default function CampaignsPage() {
    * "שעת פרסום ותזמון הפוסטים לא מסונכרן בן מסך פרסום קמפיינים לבין המסך
    * הראשי". One field, one number, one writer, on both screens.
    */
-  const changeAccountGap = useCallback(
-    async (campaign: Campaign, seconds: number) => {
+  const changePace = useCallback(
+    async (campaign: Campaign, id: PaceId) => {
+      setScheduleBusy((b) => ({ ...b, [campaign.id]: true }));
       try {
-        const floor = await applyGapFloor(seconds);
-        await changeSchedule(campaign, { ...readSchedule(campaign), gapSeconds: seconds });
+        const { pace: picked, gap } = await applyPace(id);
+        await changeSchedule(campaign, { ...readSchedule(campaign), gapSeconds: picked.gapSeconds });
+        await load();
         toast(
-          `המרווח בין פרסומים עודכן ל-${accountGapLabel(floor.minGapSeconds + floor.groupMinGapSeconds)} — זה חל על כל הסבבים בחשבון, לא רק על זה.`,
+          `מצב "${picked.label}" הופעל — פרסום כל ${accountGapLabel(gap.minGapSeconds + gap.groupMinGapSeconds)}, והפסקה של ${picked.restMinutes} דקות אחרי ${picked.burst} פרסומים ברצף. חל על כל החשבון.`,
           'info',
         );
       } catch (err) {
-        toast(friendlyMessage(err, 'עדכון המרווח נכשל.'), 'error');
+        toast(friendlyMessage(err, 'החלפת מצב הפרסום נכשלה.'), 'error');
+      } finally {
+        setScheduleBusy((b) => ({ ...b, [campaign.id]: false }));
       }
     },
-    [changeSchedule, toast],
+    [changeSchedule, load, toast],
   );
 
   const changeRepeat = useCallback(
@@ -1028,8 +1048,10 @@ export default function CampaignsPage() {
                 schedule={scheduleOf(c)}
                 onScheduleChange={(next) => changeSchedule(c, next)}
                 spacing={spacing}
-                /* The gap is the ACCOUNT's — see changeAccountGap. */
-                onAccountGapChange={(sec) => void changeAccountGap(c, sec)}
+                /* מצב פרסום חכם — the mode is the ACCOUNT's, see changePace. */
+                pace={pace}
+                onPaceChange={(id) => void changePace(c, id)}
+                paceRestUntil={paceRestUntil}
                 repeat={readRepeat(c, floorHours)}
                 onRepeatChange={(next) => void changeRepeat(c, next)}
                 /* The account's own protection from Settings, so this list

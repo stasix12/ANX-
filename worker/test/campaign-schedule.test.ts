@@ -26,6 +26,7 @@ import {
   publishesAlways,
   limitsNothing,
 } from '../../src/lib/social/campaign-schedule';
+import { PACE_PROFILES } from '../../src/lib/social/rules';
 
 /**
  * "תזמון פרסום" — THE ENGINE HALF, which is the half that can lose a
@@ -212,6 +213,37 @@ const ref: CampaignSchedule = { enabled: true, days: [0, 1, 2, 3, 4], start: '08
     [],
     'and EVERY whole number in between — "כל מספר שלם בין 1 ל-30 צריך להיות אפשרי"',
   );
+  /*
+   * ─── THE DROPDOWN THESE WERE DRAWN IN IS GONE (07.11.2026) ───────────────
+   *
+   * "יש להסיר לחלוטין מהממשק את השדה הישן: הפרש בין פרסומים. אין להשאיר אותו
+   * במקום אחר ואין ליצור הגדרה כפולה." The panel's <Pick> over GAP_CHOICES,
+   * the quick-publish <select> and the queue tuner's stepper were all deleted
+   * and replaced by "מצב פרסום חכם" — three modes, each carrying its own gap.
+   *
+   * NOT ONE ASSERTION ABOVE IS DELETED, because not one of them was really
+   * about a dropdown. They are about the RANGE: the clamp in readSchedule()
+   * still rejects anything outside MIN_GAP_SECONDS..MAX_GAP_SECONDS, every
+   * campaign row still stores a gap inside it, and "a choice the clamp would
+   * reject is a trap" is still the claim — it simply has a new chooser.
+   *
+   * So the trap claim is re-pointed at the thing that chooses now. Picking a
+   * mode calls applyGapFloor(pace.gapSeconds), which THROWS below the floor:
+   * a mode whose gap the clamp would reject is a mode that cannot be picked
+   * at all, which is the same trap one layer further in.
+   */
+  eq(PACE_PROFILES.length, 3, 'three publishing modes, which is what the gap dropdown became');
+  eq(
+    PACE_PROFILES.filter((p) => p.gapSeconds < MIN_GAP_SECONDS || p.gapSeconds > MAX_GAP_SECONDS).map((p) => p.id),
+    [],
+    'and every one of their gaps is inside the range the clamp enforces — a mode outside it throws on the tap that picks it',
+  );
+  eq(
+    PACE_PROFILES.map((p) => gapChoiceLabel(p.gapSeconds)),
+    ['45 שניות', '2 דק׳', '5 דק׳'],
+    'and each one is spelled by the product\u2019s one spelling of a gap, so the card and the engine cannot name it differently',
+  );
+
   eq(TIME_CHOICES[0], '00:00', 'the clock starts at midnight');
   eq(TIME_CHOICES.at(-1), '23:30', 'and ends at half past eleven');
   is(TIME_CHOICES.every((t) => /^([01]\d|2[0-3]):(00|30)$/.test(t)), 'every time offered is a real 24-hour time — "שעות בפורמט 24 שעות"');
@@ -396,7 +428,24 @@ const ref: CampaignSchedule = { enabled: true, days: [0, 1, 2, 3, 4], start: '08
    */
   is(/let holdUntil: Date \| null = null/.test(rules), 'the two "not before" gates share one instant');
   is(/holdFor\(allowed\)/.test(rules), 'the campaign’s interval raises it');
-  is(/holdFor\(new Date\(new Date\(last\.published_at\)\.getTime\(\) \+ gapMs\)\)/.test(rules), 'the account-wide one raises it too, instead of returning on its own');
+  /*
+   * RE-POINTED, NOT WEAKENED (07.11.2026). The account-wide read stopped being
+   * a single `.maybeSingle()` row when the smart pacing mode arrived: it now
+   * reads the newest `burst` instants with `.limit(...)` and parses them into
+   * `stamps`, newest first, because the REST gate needs a run and the gap gate
+   * needs only the head of it. So `last.published_at` is spelled `lastAt` —
+   * `stamps[0]` — and the claim is the same claim: the account-wide gate
+   * RAISES the shared instant instead of returning its own.
+   */
+  is(/const lastAt = stamps\[0\]/.test(rules), 'the account-wide gate measures from the newest of the instants it read');
+  is(/holdFor\(new Date\(lastAt \+ gapMs\)\)/.test(rules), 'the account-wide one raises it too, instead of returning on its own');
+  /*
+   * AND THE THIRD GATE THAT ARRIVED WITH IT COMPOSES THE SAME WAY. The rest
+   * after a run of ten is a fourth way this engine can say "prepare now, click
+   * later", and it was written with the same shape for the same reason: a gate
+   * that returned on its own would throw the campaign's interval away.
+   */
+  is(/holdFor\(new Date\(now\.getTime\(\) \+ restMs\)\)/.test(rules), 'and so does the rest after a run — three gates, one instant');
   is(/return holdUntil \? \{ action: 'publish', notBefore: \(holdUntil as Date\)\.toISOString\(\) \}/.test(rules), 'and the single return hands over the later of the two');
 
   /*
@@ -583,11 +632,34 @@ const ref: CampaignSchedule = { enabled: true, days: [0, 1, 2, 3, 4], start: '08
    * the three hours down in seconds beside it. A fifteen-second tick there
    * would draw a timer that jumps, which is worse than no timer.
    */
-  is(/coarse && !frozenUntil \? 15_000 : 1_000/.test(nextPubSrc), 'and a card counting down in hours ticks at a fifteenth of the rate');
+  /*
+   * RE-POINTED AGAIN (07.11.2026), and for the third time the rule itself is
+   * untouched: the slow tick is for a card that is NOT MOVING. What arrived is
+   * a second kind of card that is moving while its own slot is hours away —
+   * the automatic rest of the chosen publishing mode ("מצב פרסום חכם"),
+   * counting its seven, fifteen or thirty minutes down in seconds beside a
+   * slot the rest has already pushed past the hour. A fifteen-second tick
+   * there draws a timer that jumps, which is the same fault the freeze clause
+   * was added to avoid, so `restUntil` joins it in exactly the same place.
+   */
+  is(/coarse && !frozenUntil && !restUntil \? 15_000 : 1_000/.test(nextPubSrc), 'and a card counting down in hours ticks at a fifteenth of the rate');
   is(
     /Boolean\(frozenUntil\)/.test(nextPubSrc),
     'unless a freeze is counting down on it, which is seconds on screen and has to move like it',
   );
+  is(
+    /Boolean\(restUntil\)/.test(nextPubSrc),
+    'or a rest is, which is also seconds on screen — and which also has to ARM the timer on a card with nothing scheduled at all',
+  );
+  /*
+   * AND THE REST RANKS BELOW THE FREEZE, which is a claim about meaning and
+   * not about layout: a freeze is Facebook refusing, a rest is the mode the
+   * owner chose doing what he asked. A card that printed "בהפסקה" over a
+   * standing rate-limit freeze would tell him to wait seven minutes for a
+   * three-hour wall.
+   */
+  is(/const resting = !frozen && /.test(nextPubSrc), 'and a rest never speaks over a Meta freeze — the freeze is the harder fact');
+  is(/'בהפסקה · חוזר לפרסם בעוד '/.test(nextPubSrc), 'the resting line says so in the owner\u2019s own words');
   is(/if \(!active\) return;/.test(nextPubSrc), 'and armed only when there is an instant to count down to — a list of finished rounds runs no timers');
 
   /* The migration, and the one file the owner is ever told to run. */

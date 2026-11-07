@@ -17,7 +17,7 @@ import { agree, counted, formatDayMonthHe, formatInstantHe, zonedDateISO, zonedT
 import { Stamp } from './DateTime';
 import type { MediaItem } from '@/lib/social/types';
 import { SchedulePlanPreview, type SchedulePlan } from './SchedulePicker';
-import { GAP_CHOICES, MIN_GAP_SECONDS, gapChoiceLabel } from '@/lib/social/campaign-schedule';
+import { MIN_GAP_SECONDS, gapChoiceLabel } from '@/lib/social/campaign-schedule';
 import { accountGapLabel } from '@/lib/social/rules';
 import { TargetPicker } from './TargetPicker';
 import { Badge, Button, ButtonLink, Notice, Sheet, SkeletonList, inputClass, useConfirm } from './ui';
@@ -30,7 +30,8 @@ import { Badge, Button, ButtonLink, Notice, Sheet, SkeletonList, inputClass, use
  * engine was being asked for thirty SECONDS. One tap moved the account floor
  * the wrong way by a factor of sixty.
  */
-const QUICK_GAPS = [30, 60, 300, 1200, 2700, 3600];
+/* QUICK_GAPS — the six "מרווח מהיר" chips — went with the gap picker on
+   07.11.2026. מצב פרסום חכם is the only place that number is chosen now. */
 
 /**
  * Publishing a library post without opening the editor: pick groups, pick the
@@ -638,42 +639,28 @@ export function QuickPublishSheet({
               </div>
             )}
 
-            <div className="min-w-0">
-              <label className="text-sm">
-                <span className="mb-1 block font-bold text-mist-300">מרווח בין פרסומים</span>
-                {/* The campaign panel's own list, so one record has one
-                    vocabulary. A free number box in MINUTES could not say
-                    thirty seconds at all, and its "30" meant thirty minutes. */}
-                <select
-                  aria-label="מרווח בין פרסומים"
-                  className={inputClass}
-                  value={String(gap)}
-                  onChange={(e) => setGap(Number(e.target.value) || MIN_GAP_SECONDS)}
-                >
-                  {GAP_CHOICES.map((sec) => (
-                    <option key={sec} value={String(sec)}>
-                      {gapChoiceLabel(sec)}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <div className="mt-2 flex min-w-0 flex-wrap gap-1.5 text-xs font-bold">
-                <span className="self-center text-mist-500">מרווח מהיר:</span>
-                {QUICK_GAPS.map((sec) => (
-                  <button
-                    key={sec}
-                    type="button"
-                    onClick={() => setGap(sec)}
-                    className={`min-h-11 rounded-full px-2.5 ${gap === sec ? 'bg-brand-500 text-on-brand' : 'bg-ink-900 text-mist-300'}`}
-                  >
-                    {gapChoiceLabel(sec)}
-                  </button>
-                ))}
-              </div>
-            </div>
+            {/*
+              ─── THE GAP PICKER THAT WAS HERE ───────────────────────────────
+
+              A <select> over GAP_CHOICES plus six "מרווח מהיר" chips, which
+              wrote the ACCOUNT's gap on confirm. "יש להסיר לחלוטין מהממשק את
+              השדה הישן: הפרש בין פרסומים. אין להשאיר אותו במקום אחר ואין
+              ליצור הגדרה כפולה." — 07.11.2026. מצב פרסום חכם owns that number
+              now, on the campaign card.
+
+              `gap` ITSELF STAYS AND IS STILL SENT, seeded at line 115 from
+              `snapshot.effectiveGapSeconds` — the account's own current gap.
+              So this sheet goes on planning at exactly the cadence the engine
+              is enforcing, and the applyGapFloor() its confirm makes writes
+              the same number back: a no-op rather than a behaviour change.
+              Removing the SEND as well would have been a second change to the
+              launch path on the day the control was deleted, and §9 of the
+              brief asks for the necessary change only.
+            */}
 
             <p className="text-xs text-mist-500">
-              ההגדרות דורשות כרגע {accountGapLabel(ctx.effectiveGapSeconds)} בין שני פרסומים לקבוצות. אישור כאן יעדכן את ההגדרה הזו ל-{accountGapLabel(gap)}, והיא חלה על כל החשבון — לא על הפרסום הזה בלבד.
+              הפרסומים ייצאו במרווח שההגדרות דורשות כרגע — {accountGapLabel(ctx.effectiveGapSeconds)} בין שני פרסומים לקבוצות. המרווח נקבע לפי
+              מצב הפרסום שנבחר בכרטיס הקמפיין (״מצב פרסום חכם״), והוא חל על כל החשבון — לא על הפרסום הזה בלבד.
             </p>
             <p className="text-xs text-mist-500">
               המרווח הוא הגדרה שלכם בלבד. אין מרווח שמבטיח שלא תיחסם ואין לפייסבוק מספר רשמי שאפשר להסתמך עליו — המערכת פשוט תעשה מה שביקשתם.

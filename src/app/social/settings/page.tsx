@@ -175,58 +175,27 @@ export default function SettingsPage() {
     try {
       const curLimits = await getLimits();
       /*
-       * ─── THE MINUTE FIELDS CARRY THEIR SECONDS WITH THEM ────────────────
+       * ─── THE GAP IS NO LONGER WRITTEN FROM HERE, BECAUSE THERE IS NO BOX ─
        *
-       * The gap box on this screen is whole minutes (there were two until the
-       * group-pacing card was deleted; this is the account one), and the pair it
-       * writes also has a `*Seconds` half that accountGapSeconds() PREFERS when
-       * it is present. So once anything has written seconds — the campaign
-       * panel lowering the floor to 30s does — typing "45" here and pressing
-       * שמור would say "ההגדרות נשמרו", show 45, and leave the engine on
-       * thirty seconds. A screen that is simply not true, with nothing on it
-       * disagreeing with anything else.
+       * "יש להסיר לחלוטין מהממשק את השדה הישן: הפרש בין פרסומים. אין להשאיר
+       *  אותו במקום אחר ואין ליצור הגדרה כפולה." — 07.11.2026.
        *
-       * ...AND NOT DERIVED BLINDLY, which is where the first version of this
-       * was WRONG in the opposite direction, silently, on the most ordinary
-       * action this screen has.
+       * `minGapMinutes` and `minGapSeconds` are set by מצב פרסום חכם on the
+       * campaign card now, through applyGapFloor(), which is the writer every
+       * other screen already uses. A box here would be the second definition
+       * the specification forbids — and, worse, a stale one: this screen's
+       * copy is read at mount, so saving it ten minutes later would revert a
+       * mode picked in between. That is the exact defect the docblock above
+       * this function describes, and the deleted box is how it used to arrive.
        *
-       * The seconds are stored alongside the minutes ROUNDED UP, deliberately:
-       * a worker that predates them must read a SLOWER number, never a faster
-       * one. So a 30-second floor is stored as `groupMinGapSeconds: 30` with
-       * `groupMinGapMinutes: 1`. This box then loads "1" — and a save that
-       * recomputed 1 × 60 = 60 would DOUBLE the floor the owner had just
-       * chosen in the campaign panel, having been told nothing and having
-       * touched nothing. Open this screen, press שמור, and 30 שניות quietly
-       * becomes 60. A one-way ratchet upwards through the one screen whose
-       * whole job is to show the truth about these settings.
-       *
-       * So the rule is: if the minutes in the box are still what the stored
-       * seconds round up to, the owner did not touch this field — keep the
-       * seconds exactly as they are. Only a minutes value that NO LONGER
-       * agrees with them is a decision, and then the minutes win, because
-       * minutes are all this control can express.
-       */
-      const keepOrDerive = (typedMinutes: number, storedSeconds: unknown): number => {
-        const minutes = Math.max(0, Math.round(Number(typedMinutes) || 0));
-        const stored = Number(storedSeconds);
-        /* `>= 0` and not truthiness: a stored floor of 0 is a real setting —
-           the owner who wants no gap at all — and `!0` would discard it. */
-        if (Number.isFinite(stored) && stored >= 0 && Math.ceil(stored / 60) === minutes) return stored;
-        return minutes * 60;
-      };
-      /*
-       * BY NAME, AND ONLY THESE FOUR. Each one is a box a few hundred pixels
-       * above; every other key in the row — blockRepeatToSameTarget and
-       * repeatFloorHours among them — comes through from `curLimits`
-       * untouched, because this screen has nothing to say about them.
+       * The two keys come through from `curLimits` untouched, like every other
+       * key this screen has nothing to say about.
        */
       await saveSetting('limits', {
         ...curLimits,
         maxPerDay: limits.maxPerDay,
         maxPerTargetPerDay: limits.maxPerTargetPerDay,
-        minGapMinutes: limits.minGapMinutes,
         dedupeDays: limits.dedupeDays,
-        minGapSeconds: keepOrDerive(limits.minGapMinutes, curLimits.minGapSeconds),
       });
       toast('ההגדרות נשמרו.');
     } catch (err) {
@@ -370,50 +339,30 @@ export default function SettingsPage() {
                   <Field label="מקסימום ביום לכל יעד">
                     <input type="number" min={0} inputMode="numeric" className={inputClass} value={limits.maxPerTargetPerDay} onChange={num('maxPerTargetPerDay')} />
                   </Field>
-                  <Field label="מרווח מינימלי בין פרסומים (דקות)" hint="פרסום שמגיע מוקדם מדי נדחה אוטומטית, לא נמחק">
-                    <input type="number" min={0} inputMode="numeric" className={inputClass} value={limits.minGapMinutes} onChange={num('minGapMinutes')} />
-                  </Field>
                   <Field label="מניעת כפילות (ימים)" hint="אותו טקסט ומדיה לאותו יעד לא יפורסמו שוב בטווח הזה">
                     <input type="number" min={0} inputMode="numeric" className={inputClass} value={limits.dedupeDays} onChange={num('dedupeDays')} />
                   </Field>
                 </div>
 
                 {/*
-                  ─── WHAT THE ENGINE ACTUALLY ENFORCES, WHEN IT IS NOT A
-                      WHOLE NUMBER OF MINUTES ─────────────────────────────
+                  ─── WHAT THE ENGINE ENFORCES, AS A FACT AND NOT AS A FIELD ─
 
-                  The box above is minutes, and the floor is stored in seconds
-                  with the minutes beside it rounded UP. So a 30-second floor —
-                  which is what the campaign panel writes when the owner picks
-                  "30 שניות" — makes that box read "1", and 1 is not what the
-                  engine does. The box is not wrong to say 1: it cannot say 0.5
-                  and rounding DOWN would promise something faster than the
-                  account allows. It is just not the whole truth, and this is
-                  the one screen whose job is the whole truth about these
-                  numbers.
+                  The box that used to sit above this is gone: "יש להסיר
+                  לחלוטין מהממשק את השדה הישן: הפרש בין פרסומים... אין ליצור
+                  הגדרה כפולה." The gap is מצב פרסום חכם's now, on the campaign
+                  card, and this screen must not be a second place to set it.
 
-                  Shown only when the two genuinely differ, so an account whose
-                  floor IS a whole number of minutes sees nothing new.
-
-                  AND IT NO LONGER OFFERS A REMEDY, because the remedy was a
-                  box that has been deleted. It used to end "שינוי של אחת
-                  התיבות למעלה ושמירה יחזירו את המרווח לדקות שלמות", which was true
-                  while "מרווח נוסף בין קבוצות" was on this screen AND the save
-                  wrote the browser row. Both are gone: the sub-minute half
-                  lives in browser.groupMinGapSeconds, and this screen does not
-                  write that row any more. An instruction that cannot work is
-                  worse than none, so the notice now says only what is true —
-                  the real number, where it is changed, and that saving here
-                  will not touch it.
+                  IT IS STILL SAID HERE, READ-ONLY, because a number the engine
+                  enforces and no screen states is how this product has
+                  repeatedly gone wrong — and because this is the screen whose
+                  whole job is the truth about these settings. It names where
+                  it is changed and changes nothing itself.
                 */}
-                {accountGapSeconds(limits, browser, true) !== (Math.max(0, Math.round(limits.minGapMinutes)) + Math.max(0, Math.round(browser.groupMinGapMinutes))) * 60 && (
-                  <Notice tone="info">
-                    המרווח שהמערכת באמת שומרת בין שני פרסומים לקבוצה הוא{' '}
-                    <strong>{accountGapLabel(accountGapSeconds(limits, browser, true))}</strong> — פחות ממה שהתיבה למעלה יכולה להציג, כי היא
-                    מציגה דקות שלמות. זה נקבע כשבחרתם הפרש בשניות בתזמון של קמפיין, ושם גם משנים את זה. שמירה מהמסך הזה לא תיגע
-                    במספר הזה.
-                  </Notice>
-                )}
+                <Notice tone="info">
+                  המרווח שהמערכת שומרת כרגע בין שני פרסומים לקבוצה הוא{' '}
+                  <strong>{accountGapLabel(accountGapSeconds(limits, browser, true))}</strong>. הוא נקבע לפי מצב הפרסום שנבחר בכרטיס הקמפיין
+                  (״מצב פרסום חכם״), ושם גם משנים אותו. שמירה מהמסך הזה לא תיגע בו.
+                </Notice>
 
                 {/*
                   ───── WHAT WAS HERE, AND WHY IT IS NOT ─────────────────────

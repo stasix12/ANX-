@@ -602,14 +602,33 @@ async function main(): Promise<void> {
   );
   is(!/מרווח בדקות/.test(tunerCode), 'and its field is still announced to a screen reader as minutes');
   is(/gapChoiceLabel\(gap\)/.test(tunerCode), 'the tuner no longer spells its own value with the product\u2019s one spelling of it');
-  /* The stepper, the presets and the footer button all take the same spelling
-     — three places that each said "דקות" over a number of seconds. */
-  for (const call of ['gapChoiceLabel(STEP)', 'gapChoiceLabel(p)', 'gapChoiceLabel(MIN_GAP)']) {
-    is(tunerCode.includes(call), `the tuner no longer spells ${call.replace('gapChoiceLabel(', '').replace(')', '')} in seconds`);
-  }
-  /* And the field can hold the shipped default at all: MAX_GAP is 43,200
-     seconds and the input used to accept three characters. */
+  /*
+   * RE-POINTED 07.11.2026 — THE THREE CONTROLS THAT CARRIED THIS BUG ARE GONE.
+   *
+   * The stepper, the presets and the typed field each printed "דקות" over a
+   * number of seconds, and this loop pinned all three through
+   * gapChoiceLabel(STEP) / (p) / (MIN_GAP). מצב פרסום חכם replaced them: "יש
+   * להסיר לחלוטין מהממשק את השדה הישן: הפרש בין פרסומים." The tuner no longer
+   * EDITS the gap at all — it shows it and re-spaces the queue at it.
+   *
+   * The rule survives the deletion and is what is asserted now: every place
+   * this sheet still prints that number goes through the product's one
+   * spelling of it, so none of them can invent a unit again. A deleted control
+   * cannot carry the bug; a surviving one that spelled its own number could.
+   */
+  is(!/שניות בין פרסום לפרסום/.test(tunerCode), 'and it no longer captions a raw figure with a unit of its own at all — the number is printed through gapChoiceLabel');
+  is(
+    !/\d+\s*(?:דקות|שניות)</.test(tunerCode),
+    'no literal unit is printed beside a figure anywhere in this sheet — every one of them goes through gapChoiceLabel',
+  );
+  is(
+    /הזז את התור למועד החדש, במרווח של \$\{gapChoiceLabel\(gap\)\}/.test(tunerCode),
+    'including the footer button, which is the one that read "עדכן מרווח ל-30 דקות" over a thirty-SECOND re-space',
+  );
+  /* And the typed field that could not hold the shipped default is gone with
+     the rest of the editor, so the three-character cap cannot come back. */
   is(!/slice\(0, 3\)/.test(tunerCode), 'the gap field is capped at three digits again — the ten-minute default cannot be typed');
+  is(!/inputMode="numeric"/.test(tunerCode), 'and there is no typed gap field left in this sheet to cap');
   /* And the group surcharge is read in the same unit as the gap it is
      subtracted from. It was read in MINUTES (20) and taken off a value in
      SECONDS (1200), so the warning that says "your group surcharge is about

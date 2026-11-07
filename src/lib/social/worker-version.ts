@@ -643,7 +643,7 @@
  *
  * התזמון, סדר התור, מנגנון הפרסום וחישוב זמני הפרסום לא נגעו.
  */
-export const WORKER_VERSION = '4.53.0';
+export const WORKER_VERSION = '4.54.0';
 
 /**
  * A FINGERPRINT OF EVERYTHING THE INSTALLER CARRIES.
@@ -1256,4 +1256,4 @@ export const WORKER_VERSION = '4.53.0';
  * button that has always been on this screen still emits that sentence.
  * Reverting it would have put the broken form back.
  */
-export const WORKER_FINGERPRINT = '0d363c0002dfdc42';
+export const WORKER_FINGERPRINT = 'd27d9707d944932f';

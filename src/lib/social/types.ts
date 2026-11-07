@@ -633,6 +633,20 @@ export interface ActivityEntry {
   meta: Record<string, unknown>;
 }
 
+/**
+ * ─── THE THREE PACING PATTERNS, AND WHY THEY EXIST ────────────────────────
+ *
+ * "בוא נגדיר לו 3 דפוסי התנהגות אחד מהיר השני בינוני השלישי, ושיהיה הפסקות
+ *  אחרי נגיד 10 פוסטים רצופים הפסקה" — the owner, 07.11.2026, the evening
+ *  after this account's first and only Facebook restriction.
+ *
+ * THE ID IS ALL THAT IS STORED. The numbers behind it — the gap between two
+ * publications, how many publications make one run, and how long the rest
+ * after a run lasts — live in PACE_PROFILES in src/lib/social/rules.ts, next
+ * to the gate that enforces them, so there is one table and not two.
+ */
+export type PaceId = 'fast' | 'medium' | 'slow';
+
 export interface LimitsSettings {
   maxPerDay: number;
   maxPerTargetPerDay: number;
@@ -694,6 +708,26 @@ export interface LimitsSettings {
    * which has no such key, keeps the behaviour it has today.
    */
   blockRepeatToSameTarget: boolean;
+  /**
+   * WHICH PACING PATTERN IS IN FORCE — and the only thing stored about it.
+   *
+   * ABSENT BY DEFAULT, and that is load-bearing rather than tidy: all eight
+   * `limits` rows in the live database carry no such key, so until somebody
+   * picks a pattern on the settings screen the engine rests after nothing and
+   * paces exactly as it does today. DEFAULT_LIMITS omits it deliberately —
+   * adding it there would re-pace eight accounts on one deploy.
+   *
+   * PICKING A PATTERN DOES TWO THINGS, AND ONLY ONE OF THEM IS THIS FIELD.
+   * The pattern's GAP is written into the pair the engine already reads —
+   * limits.minGapSeconds and browser.groupMinGapSeconds, through
+   * applyGapFloor() — so the planner, the projection, both spacing gates and
+   * every screen that prints a gap keep reading it from the one place they
+   * read it from now, and none of them had to learn about patterns.
+   *
+   * This field carries the REST, which is the genuinely new rule and has no
+   * other home. paceRestRemainingMs() in rules.ts is the whole of it.
+   */
+  pace?: PaceId;
 }
 
 /**

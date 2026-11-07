@@ -192,10 +192,19 @@ const row = (o: Partial<QueueRow>): QueueRow => ({ id: 'q', status: 'publishing'
   is(/const slow = secs >= 120;/.test(next), 'and past two minutes it must stop saying "any moment now" and name what would explain the delay');
   is(/הסבב הושק — התור עדיין לא נבנה/.test(next), 'with the honest wording for that case');
   is(!/%/.test(next.slice(next.indexOf('function Words'))), 'and no percentage anywhere — nothing here knows how far along the planner is');
-  is(
-    /useTick\(at !== null \|\| Boolean\(armedAt\)/.test(next),
-    'the tick must run while a launch is pending, or the counter freezes at the second it first rendered',
-  );
+  /*
+   * RE-POINTED 07.11.2026, SAME RULE. The tick's condition gained a fourth
+   * term when מצב פרסום חכם taught this block to count down an automatic rest
+   * (`|| Boolean(restUntil)`), so the single-line regex no longer matched. The
+   * rule it protects is unchanged and is asserted term by term instead, which
+   * is stronger: a future edit can add a fifth reason to tick without
+   * silently dropping one of these three.
+   */
+  const tickCall = next.slice(next.indexOf('const now = useTick('), next.indexOf('const left = at ?'));
+  is(/at !== null/.test(tickCall), 'the tick must run while something is scheduled');
+  is(/Boolean\(armedAt\)/.test(tickCall), 'the tick must run while a launch is pending, or the counter freezes at the second it first rendered');
+  is(/Boolean\(frozenUntil\)/.test(tickCall), 'and while a Meta freeze stands, which may be the only moving thing on the card');
+  is(/Boolean\(restUntil\)/.test(tickCall), 'and while an automatic rest is running, for exactly the same reason');
 
   const board = src('../../src/components/social/CampaignScheduleBoard.tsx');
   is(/armedAt=\{armedAt\}/.test(board), 'the board no longer carries the launch instant through to the block');

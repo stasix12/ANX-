@@ -9,7 +9,7 @@ import { projectQueue, roundAnchor, spacingFrom, windowedCascade, type AccountSp
 import { JOINED_QUERY, normalizeQuery } from './discovery';
 import { dedupeKey, renderPostText } from './compose';
 import { friendlyError, friendlyMessage } from './errors';
-import { accountGapLabel, accountGapSeconds, splitAccountGap } from './rules';
+import { accountGapLabel, accountGapSeconds, paceProfile, paceRestRemainingMs, splitAccountGap, type PaceProfile } from './rules';
 import { checkCampaignInvariants, checkQueueInvariants, takeUnreported, type InvariantViolation } from './invariants';
 import {
   ALL_QUEUE_STATUSES,
@@ -41,6 +41,7 @@ import {
   type CampaignProgress,
   type ControlSettings,
   type LimitsSettings,
+  type PaceId,
   type MediaItem,
   type Post,
   type QueueItem,
@@ -3868,6 +3869,95 @@ function medianGapSeconds(sortedISO: string[]): number | null {
  */
 export function effectiveGroupGapSeconds(limits: LimitsSettings, browser: BrowserSettings): number {
   return accountGapSeconds(limits, browser, true);
+}
+
+/**
+ * ─── IS THE ENGINE RESTING RIGHT NOW, AND UNTIL WHEN? ─────────────────────
+ *
+ * "יש להציג מצב 'בהפסקה'. יש להציג זמן שנותר להפסקה. יש לשמור את זמן סיום
+ *  ההפסקה גם לאחר רענון העמוד או הפעלה מחדש." — 07.11.2026.
+ *
+ * NOTHING IS PERSISTED AND NOTHING NEEDS TO BE. The rest is DERIVED, here and
+ * in both publishing gates, from rows that are already in the database: the
+ * instants of the most recent successful publications. A refresh, a worker
+ * restart, a second machine and the server all ask the same question of the
+ * same rows and get the same instant — which is a stronger guarantee than
+ * saving an end-time somewhere could give, because there is no copy to go
+ * stale and nothing to reset.
+ *
+ * THE RULE ITSELF IS NOT HERE. paceRestRemainingMs() in rules.ts is the one
+ * implementation; this function's only job is the READ. The gap between a
+ * screen's idea of the rules and the engine's is where this product has
+ * repeatedly gone wrong, and importing is how that is prevented.
+ *
+ * `status = 'published'` is what makes "פרסום שנכשל אינו נחשב לפרסום מוצלח"
+ * structural: a failed or skipped attempt is not in this list at all.
+ *
+ * A FAILED READ REPORTS NO REST, deliberately and unlike the engine's own
+ * gates — which hold. This is a label on a screen: showing "בהפסקה" because
+ * a network blip ate the answer would be inventing a hold the engine is not
+ * applying, and the engine's own gate is what actually stops publication.
+ */
+export interface PaceRestState {
+  /** The mode in force, or null when the account has not picked one. */
+  pace: PaceProfile | null;
+  /** Milliseconds of rest still owed; 0 when none is. */
+  restMs: number;
+  /** When it ends, as an instant — null when nothing is resting. */
+  until: string | null;
+}
+
+export async function readPaceRest(limits: LimitsSettings): Promise<PaceRestState> {
+  const pace = paceProfile(limits.pace);
+  if (!pace) return { pace: null, restMs: 0, until: null };
+  const { data, error } = await db()
+    .from('social_queue')
+    .select('published_at')
+    .eq('status', 'published')
+    .not('published_at', 'is', null)
+    .order('published_at', { ascending: false })
+    .limit(Math.max(1, pace.burst));
+  if (error) return { pace, restMs: 0, until: null };
+  const stamps = ((data ?? []) as { published_at?: string | null }[])
+    .map((r) => Date.parse(String(r.published_at ?? '')))
+    .filter((t) => Number.isFinite(t));
+  const now = Date.now();
+  const restMs = paceRestRemainingMs(pace, stamps, now);
+  return { pace, restMs, until: restMs > 0 ? new Date(now + restMs).toISOString() : null };
+}
+
+/**
+ * ─── PICK A PUBLISHING MODE — the one write behind מצב פרסום חכם ──────────
+ *
+ * TWO STORED THINGS, AND THEY ARE NOT THE SAME KIND OF THING.
+ *
+ * The mode's GAP goes through applyGapFloor(), the writer every screen that
+ * changes the gap already used: it re-reads both rows, splits the one number
+ * into limits.minGapSeconds and browser.groupMinGapSeconds through
+ * splitAccountGap(), and writes both units with the minutes rounded UP, so a
+ * worker that has not updated yet is SLOWER than asked rather than faster.
+ * Nothing new had to learn about modes — the planner, the projection, both
+ * spacing gates and every screen that prints a gap read the pair they always
+ * read, and no screen can disagree with the engine about the gap.
+ *
+ * The mode's REST is `limits.pace`, which is genuinely new and is the only
+ * thing stored about the mode itself. It is written onto a FRESH read of the
+ * row, never onto a copy a screen loaded at mount: saveSetting() replaces the
+ * whole jsonb, and a stale spread is how this product has twice reverted
+ * settings somebody had just changed on another screen.
+ *
+ * ORDER MATTERS. applyGapFloor() re-reads `limits` itself, so it runs FIRST
+ * and the pace is written onto the row it leaves behind. Doing it the other
+ * way round would have applyGapFloor read the row before the pace landed and
+ * write it back without it — the pace silently lost, one call later.
+ */
+export async function applyPace(id: PaceId): Promise<{ pace: PaceProfile; gap: GapFloor }> {
+  const pace = paceProfile(id);
+  if (!pace) throw new Error('מצב פרסום לא מוכר.');
+  const gap = await applyGapFloor(pace.gapSeconds);
+  const limits = await getLimits();
+  await saveSetting('limits', { ...limits, pace: id });
+  return { pace, gap };
 }
 
 export async function liveQueuePlan(opts: { campaignId?: string } = {}): Promise<LiveQueuePlan> {

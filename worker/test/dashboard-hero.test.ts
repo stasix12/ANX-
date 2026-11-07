@@ -136,10 +136,19 @@ for (const literal of ['08:10', '01.10.2026', '08:00', '22:00', '10 דקות']) 
 
    And "שעות פרסום" became "שעת התחלה": there is no closing hour left to make
    it a plural. "יש להסיר לחלוטין את אפשרות שעת הסיום מממשק הכרטיס." */
+/* And "הפרש בין פרסומים" became "מצב פרסום" on 07.11.2026: "יש להסיר לחלוטין
+   מהממשק את השדה הישן: הפרש בין פרסומים… במקומו יש להשתמש במנגנון החדש של
+   שלושת מצבי הפרסום." The readout still has three boxes and each still names
+   the setting the editor under it holds; the third of them is the MODE now. */
 const nextPubSrc = code('src/components/social/NextPublication.tsx');
-for (const word of ['תזמון פרסום', 'ימי פרסום', 'הפרש בין פרסומים', 'שעת התחלה']) {
+for (const word of ['תזמון פרסום', 'ימי פרסום', 'מצב פרסום', 'שעת התחלה']) {
   is(board.includes(word), `the board prints "${word}", in the brief's own wording`);
 }
+/* And the deleted field's label may not survive anywhere on this readout —
+   two places naming one setting is the "הגדרה כפולה" the brief forbids. */
+is(!board.includes('הפרש בין פרסומים'), 'the old gap label is gone from the board entirely');
+/* An account that has picked no mode draws the fact, not a guess at one. */
+is(board.includes("'לא נבחר'"), 'with "לא נבחר" when no mode has been chosen, rather than lighting up the nearest one');
 /*
  * AND THREE WORDS IT MAY NOT PRINT ANY MORE. "פעיל", "ללא הגבלה" and "כבוי"
  * were the two positions of a switch and the name of the bug that switch

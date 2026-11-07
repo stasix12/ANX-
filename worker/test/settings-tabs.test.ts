@@ -108,11 +108,28 @@ for (const key of ['concurrentJobs', 'maxPerCampaignPerDay']) {
 /* groupMinGapMinutes is the exception, and it is read-only: the sub-minute
    notice still prints the real floor with it. So it may be READ and must not
    be WRITTEN or bound to an input. */
-/* BOTH occurrences: one decides whether the notice appears, the other prints
-   the number in it. A mutation that changed only the second left the first
-   pin green, so the count is the pin. */
-eq((code.match(/accountGapSeconds\(limits, browser, true\)/g) ?? []).length, 2,
-  'the sub-minute notice reads the stored pacing both to decide it is needed and to print the real figure');
+/*
+ * RE-POINTED 07.11.2026 — ONE OCCURRENCE NOW, AND THAT IS THE POINT.
+ *
+ * It was two: the notice only appeared while the stored seconds disagreed with
+ * the whole minutes the deleted box could show, so one call decided whether to
+ * draw it and the other printed the figure. "יש להסיר לחלוטין מהממשק את השדה
+ * הישן: הפרש בין פרסומים" took the box, and with no box to contradict there is
+ * nothing to condition on: the line is unconditional and states the enforced
+ * gap as a fact, naming מצב פרסום חכם as the place it is changed.
+ *
+ * The rule this protected — the screen prints what the ENGINE enforces, not
+ * what a column happens to hold — is unchanged and is pinned harder below: the
+ * figure must come from accountGapSeconds (base + group surcharge), never from
+ * either half on its own.
+ */
+eq((code.match(/accountGapSeconds\(limits, browser, true\)/g) ?? []).length, 1,
+  'the screen states the enforced gap exactly once, now that there is no box for it to disagree with');
+is(/accountGapLabel\(accountGapSeconds\(limits, browser, true\)\)/.test(code),
+  'and it prints the floor the ENGINE enforces — the sum of the two halves, through the one function that adds them');
+is(!/limits\.minGapMinutes \+|minGapMinutes \* 60/.test(code),
+  'never by adding the minute columns up here, which is how this screen once showed 1 דק׳ over a thirty-second engine');
+is(/מצב פרסום חכם/.test(code), 'and it names where that number IS changed, because a figure with no lever beside it is a dead end');
 /* `setBrowser(br)` on the mount read is what makes the reading possible and
    must stay. What must not exist is an UPDATE of it — the object form
    `setBrowser({ ...browser, X: ... })` or the functional form
@@ -150,21 +167,49 @@ is(!/saveSetting\('browser'/.test(settings),
   'the settings screen does not write the browser row at all — nothing on it edits one field of it');
 is(!/saveSetting\('business'/.test(settings),
   'nor the business row, whose tab went the same way');
-/* And the one row it does write, it writes BY NAME — four fields, each of
-   which is a box on this screen. A spread of the whole form state is what
-   carried the stale snapshot, so its absence is the pin. */
+/* And the one row it does write, it writes BY NAME — one field per box on
+   this screen. A spread of the whole form state is what carried the stale
+   snapshot, so its absence is the pin. */
 is(!/saveSetting\('limits', \{ \.\.\.curLimits, \.\.\.limits/.test(settings),
   'and the limits save no longer spreads the whole form over the stored row');
-for (const key of ['maxPerDay', 'maxPerTargetPerDay', 'minGapMinutes', 'dedupeDays']) {
+/*
+ * THREE, NOT FOUR, SINCE 07.11.2026. `minGapMinutes` left this list with its
+ * box: "יש להסיר לחלוטין מהממשק את השדה הישן: הפרש בין פרסומים… אין ליצור
+ * הגדרה כפולה." מצב פרסום חכם writes that pair now, through applyGapFloor().
+ *
+ * AND ITS REMOVAL FROM THE SAVE IS THE SAME RULE AS ITS REMOVAL FROM THE
+ * FORM, not an afterthought: a field with no box is a mount-time snapshot,
+ * and writing one back over a fresh re-read reverts whatever another screen
+ * changed while this one sat open. That is the defect this whole block exists
+ * for, and leaving `minGapMinutes` in the save would have re-created it on
+ * the one number that paces the account. The two keys it governs are pinned
+ * as ABSENT from the save below.
+ */
+for (const key of ['maxPerDay', 'maxPerTargetPerDay', 'dedupeDays']) {
   is(new RegExp(`${key}: limits\\.${key},`).test(settings), `${key} is still saved, by name`);
 }
-/* The two keys whose inputs were deleted must NOT be named in the save — if
-   they were, the screen would be writing a value nobody can see or change. */
-for (const key of ['blockRepeatToSameTarget', 'repeatFloorHours']) {
-  is(!new RegExp(`${key}: limits\\.${key}`).test(settings), `${key} is not written from this screen either`);
+/* Every key whose input was deleted must NOT be named in the save — if it
+   were, the screen would be writing a value nobody can see or change. */
+for (const key of ['blockRepeatToSameTarget', 'repeatFloorHours', 'minGapMinutes', 'minGapSeconds']) {
+  is(!new RegExp(`${key}: `).test(settings.slice(settings.indexOf("await saveSetting('limits'"), settings.indexOf("toast('ההגדרות נשמרו.')"))),
+    `${key} is not written from this screen either`);
 }
-is(/minGapSeconds: keepOrDerive\(limits\.minGapMinutes, curLimits\.minGapSeconds\)/.test(settings),
-  'the one gap box still carries its seconds half, so typing minutes cannot silently double a 30-second floor');
+/*
+ * ─── AND THE RATCHET THE SECONDS HALF EXISTED TO STOP, STOPPED STRUCTURALLY ─
+ *
+ * `keepOrDerive` was the guard: the gap box held whole minutes, the engine
+ * prefers the `*Seconds` half, and a save that recomputed minutes × 60 turned
+ * a 30-second floor into 60 — a one-way ratchet upwards through the one screen
+ * whose job is the truth about these numbers.
+ *
+ * The box is gone (07.11.2026), so there is nothing left to derive FROM and
+ * the helper went with it. The ratchet is now impossible rather than guarded
+ * against, which is the stronger form: this screen cannot write either half of
+ * the gap at all, as the loop above pins, and מצב פרסום חכם writes both
+ * through applyGapFloor() — the one writer that keeps the two units agreeing.
+ */
+is(!/keepOrDerive/.test(settings), 'the minutes→seconds derivation is gone with the box it protected — nothing here can round a sub-minute floor up any more');
+is(/applyGapFloor/.test(read('src/lib/social/client.ts')), 'and the one writer that still sets both units lives in client.ts, where every screen reaches it');
 
 const worker = read('worker/social-worker.ts');
 const types = read('src/lib/social/types.ts');

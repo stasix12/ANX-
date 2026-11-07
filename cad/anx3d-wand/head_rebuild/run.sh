@@ -20,4 +20,4 @@ $P -I scripts/v44.py v45/deco_tmp_SHORT.stl v45/deco_SHORT.stl   # ticks -> arro
 $P -I scripts/fillholes.py v45/deco_SHORT.stl v45/deco47_SHORT.stl   # (log: filled 428.7 mm3)
 $P -I scripts/extend48.py v45/deco47_SHORT.stl v48/ext_SHORT.stl
 $P -I scripts/thread47.py v48/ext_SHORT.stl v48/v48S             # head: vol 149755, bbox [-44,-82.6,-295.4,44,22.6,-123]  (same as the log)
-$P -I scripts/widen_head2.py v48/v48S_head.stl wide/head_w15.stl 15   # v61: nozzle 88 -> 103 mm
+$P -I scripts/widen_head2.py v48/v48S_head.stl wide/head_w25.stl 25   # v62: nozzle 88 -> 113 mm

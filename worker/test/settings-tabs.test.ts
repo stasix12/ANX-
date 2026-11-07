@@ -26,7 +26,24 @@ const is = (cond: unknown, msg: string) => { checks += 1; assert.ok(cond, msg); 
 const eq = (a: unknown, b: unknown, msg: string) => { checks += 1; assert.equal(a, b, msg); };
 
 const read = (rel: string) => readFileSync(new URL(`../../${rel}`, import.meta.url), 'utf8');
+/*
+ * THE SAME STRIPPER admin-panel.test.ts uses, and it is here to settle an
+ * argument this file lost three times in one day.
+ *
+ * Several pins below had to forbid a NAME — "nothing writes concurrentJobs"
+ * — and the page's own comment names all six removed fields on purpose, so
+ * every such pin either matched the explanation (and could never fail) or had
+ * to be narrowed to one exact spelling of the JSX (and could be defeated by
+ * `?? 1`, by `String(...)`, or by prettier moving the prop to its own line).
+ * A reviewer put the three deleted inputs back in fully working form, in the
+ * card that still exists, and the whole suite stayed green.
+ *
+ * With comments removed there is no conflict: forbid the name in the CODE and
+ * let the prose say whatever it needs to.
+ */
+const stripComments = (src: string) => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
 const settings = read('src/app/social/settings/page.tsx');
+const code = stripComments(settings);
 const shell = read('src/components/social/SocialShell.tsx');
 const dash = read('src/app/social/page.tsx');
 const checklist = read('src/components/social/SetupChecklist.tsx');
@@ -85,10 +102,25 @@ is(!settings.includes('<Card title="קצב הקבוצות">'), 'the pacing card 
  * still reads. A pin that forbade the name would have forbidden the
  * explanation. `value={browser.X}` is what an input is.
  */
-for (const key of ['concurrentJobs', 'maxPerCampaignPerDay', 'groupMinGapMinutes']) {
-  is(!settings.includes(`value={browser.${key}}`), `${key} has no input bound to it any more`);
-  is(!settings.includes(`setBrowser({ ...browser, ${key}:`), `and nothing writes ${key} from this screen`);
+for (const key of ['concurrentJobs', 'maxPerCampaignPerDay']) {
+  is(!code.includes(key), `${key} appears nowhere in the screen's CODE — no input, no writer, under any spelling`);
 }
+/* groupMinGapMinutes is the exception, and it is read-only: the sub-minute
+   notice still prints the real floor with it. So it may be READ and must not
+   be WRITTEN or bound to an input. */
+/* BOTH occurrences: one decides whether the notice appears, the other prints
+   the number in it. A mutation that changed only the second left the first
+   pin green, so the count is the pin. */
+eq((code.match(/accountGapSeconds\(limits, browser, true\)/g) ?? []).length, 2,
+  'the sub-minute notice reads the stored pacing both to decide it is needed and to print the real figure');
+/* `setBrowser(br)` on the mount read is what makes the reading possible and
+   must stay. What must not exist is an UPDATE of it — the object form
+   `setBrowser({ ...browser, X: ... })` or the functional form
+   `setBrowser((b) => ...)`, which is the spelling that defeated the previous
+   version of this pin. Both are forbidden; the loader is not. */
+is(!/setBrowser\(\s*[{(]/.test(code), 'nothing on the screen UPDATES the browser state — it is loaded once and read, never edited');
+is(/setBrowser\(br\)/.test(code), 'while the mount read stays, because the notice below needs the stored numbers');
+is(!/value=\{browser\./.test(code), 'and no input is bound to any browser field, under any spelling');
 /*
  * ───── AND THE SAVE NO LONGER TOUCHES THE ROW AT ALL ──────────────────
  *
@@ -145,19 +177,44 @@ is(/debugMode: false,/.test(types) && /testMode: false,/.test(types) && /require
 /* Signing in must still show a window, or nobody can ever connect Facebook. */
 const session = read('worker/facebook/session.ts');
 is(/newPage\(false, 'התחברות ידנית'\)/.test(session), 'the login window is still visible — it opens regardless of debugMode');
-/* They must be INSIDE the one remaining customer tab, not orphaned. */
-const limitsAt = settings.indexOf("{tab === 'limits' && (");
-const adminAt = settings.indexOf("{tab === 'admin'");
-is(limitsAt > 0 && adminAt > limitsAt, 'found both blocks');
 /*
  * THE ONE THING KEPT OUT OF THE SIX, and it is not a control: the Meta hold.
- * It renders only while Facebook is actually holding the account, and its
- * "נקה" is the only manual way out — the dashboard reports the hold but
+ * Its "נקה" is the only manual way out — the dashboard reports the hold but
  * offers no clear. Removing it would have left a state the system can enter
  * by itself with no way back.
+ *
+ * AND IT MUST BE INSIDE THE CUSTOMER'S TAB. This window used to bound a
+ * containment check on the pacing card; when that card was deleted the
+ * assertion went with it and the two offsets were left behind, bounding
+ * nothing — "found both blocks" over an empty window. It has a subject
+ * again, and it is the right one: an edit that moves this block past
+ * `{tab === 'admin'` would hide the only way out of a Facebook hold behind a
+ * tab a customer is never shown (see the isAdmin pin above), and every other
+ * assertion here is a whole-file search that would not notice.
  */
-is(/\{control\.rateLimitedUntil && \(/.test(settings), 'the Meta hold still has a way out, and only shows while there is one');
-is(/onClick=\{clearRateLimit\}/.test(settings), 'with the button that clears it');
+const limitsAt = settings.indexOf("{tab === 'limits' && (");
+const adminAt = settings.indexOf("{tab === 'admin'");
+is(limitsAt > 0 && adminAt > limitsAt, 'found both tab blocks, in that order');
+const holdAt = settings.indexOf('control.rateLimitedUntil &&');
+is(holdAt > limitsAt && holdAt < adminAt, 'the Meta hold renders inside the tab a customer actually sees');
+is(settings.indexOf('onClick={clearRateLimit}') > limitsAt && settings.indexOf('onClick={clearRateLimit}') < adminAt,
+  'and so does the button that clears it — a way out on a screen nobody opens is no way out');
+/*
+ * AND IT ONLY SHOWS WHILE THE HOLD IS STILL RUNNING — which this file
+ * asserted in its MESSAGE long before the code did it.
+ *
+ * The pin was `/\{control\.rateLimitedUntil && \(/`, i.e. bare truthiness,
+ * under the words "only shows while there is one". But the field OUTLIVES the
+ * hold: the server clears it lazily and the clear sits after the paused check
+ * (server/worker.ts), so an owner who pauses before an expiry keeps the stale
+ * instant for as long as they stay paused, and this screen printed a hold
+ * Facebook was not applying. The dashboard has compared against the clock all
+ * along (page.tsx:1751) — two screens, one row, opposite answers.
+ */
+is(/\{control\.rateLimitedUntil && new Date\(control\.rateLimitedUntil\) > new Date\(\) && \(/.test(settings),
+  'the Meta hold is compared against the clock, not merely tested for being set');
+is(/data\.control\.rateLimitedUntil && new Date\(data\.control\.rateLimitedUntil\) > new Date\(\)/.test(dash),
+  'the same guard the dashboard uses, so the two screens cannot disagree about one row');
 
 // ───────────────── 3. The connection is still reachable ────────────────────
 /*

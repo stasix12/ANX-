@@ -460,8 +460,21 @@ export default function SettingsPage() {
                   chose them, a save merged them. For those six the ceiling is
                   real: rules.ts defers everything past the eighth publication
                   of a campaign in a day with "הסבב מילא את המכסה היומית
-                  שלו (8)" (rules.ts:561-567), and the 20 minutes are added to
-                  every gap between two publications to one group.
+                  שלו (8)" (rules.ts:561-567).
+
+                  AND THE 20 MINUTES ARE ACCOUNT-WIDE, which an earlier draft
+                  of this note got wrong by calling them a gap "between two
+                  publications to one group". They are not per group:
+                  accountGapSeconds() adds the surcharge to the account's own
+                  minimum gap (rules.ts:130-143), and the gate that consumes
+                  it reads THE SINGLE MOST RECENT PUBLISHED ROW with no target
+                  filter at all (rules.ts:691-717), passing withGroupExtra
+                  only to decide whether this target is a group. So for those
+                  six accounts the real floor is 45 + 20 = 65 minutes between
+                  ANY two group publications — about 22 a day, not 8 ×
+                  campaigns. That is a much tighter cap than the ceiling
+                  above, and it is the number a stalled round should be
+                  diagnosed against.
 
                   THEY KEEP THOSE NUMBERS — that is what the whole-row save
                   guarantees and what the test pins. What they no longer have
@@ -518,13 +531,26 @@ export default function SettingsPage() {
                   this commit's.
 
                   WHAT IS DELIBERATELY KEPT is the Meta hold below. It is not
-                  one of the six, it appears only while Facebook is actually
-                  holding the account, and it is the only manual way out: the
+                  one of the six, and it is the only manual way out: the
                   dashboard reports the hold but offers no clear. Removing it
                   would have left a state the system can enter on its own with
                   no way back.
+
+                  AND IT NOW CHECKS THAT THE HOLD IS STILL RUNNING, which this
+                  note claimed before the code did. It rendered on bare
+                  truthiness, and `rateLimitedUntil` OUTLIVES the hold: the
+                  server clears it lazily, and the clear sits AFTER the paused
+                  check (server/worker.ts — `if (control.paused) return` comes
+                  first), so an owner who pauses before an expiry keeps the
+                  stale instant in the row for as long as they stay paused.
+                  This screen then printed "הפרסום מושהה עד 14:00" at six in
+                  the evening — a hold Facebook was not applying — while the
+                  dashboard, four lines of the same product, said nothing,
+                  because page.tsx:1751 has compared against the clock all
+                  along. Two screens, one row, opposite answers. Same guard
+                  here now.
                 */}
-                {control.rateLimitedUntil && (
+                {control.rateLimitedUntil && new Date(control.rateLimitedUntil) > new Date() && (
                   <p className="mt-4 text-xs text-warning-400">
                     Meta ביקשה להאט — הפרסום מושהה עד <Stamp iso={control.rateLimitedUntil} />.{' '}
                     <button type="button" className="min-h-11 px-1 font-bold underline" onClick={clearRateLimit}>

@@ -5676,6 +5676,10 @@ const scenario: { step: string; line: string }[] = [];
   const rules = readFileSync(new URL('../../src/lib/social/rules.ts', import.meta.url), 'utf8');
   const types = readFileSync(new URL('../../src/lib/social/types.ts', import.meta.url), 'utf8');
   const settings = readFileSync(new URL('../../src/app/social/settings/page.tsx', import.meta.url), 'utf8');
+  /* Comments removed, so a pin may forbid a NAME without forbidding the
+     page's own explanation of why that name is gone — the trap three pins in
+     this change fell into. Same stripper as admin-panel.test.ts. */
+  const stripSettings = settings.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
   const sheet = readFileSync(new URL('../../src/components/social/QuickPublishSheet.tsx', import.meta.url), 'utf8');
   const campaignSrc = readFileSync(new URL('../../src/lib/social/campaign.ts', import.meta.url), 'utf8');
 
@@ -5801,9 +5805,20 @@ const scenario: { step: string; line: string }[] = [];
    * means a brand-new customer gets the rule ON and no way to turn it off.
    * The day that default changes, this pin is the place that says so.
    */
+  /*
+   * NOT A SECOND COPY OF THE PIN 60 LINES ABOVE. That one already asserts
+   * `/blockRepeatToSameTarget:\s*true/` against this same file, and
+   * node:assert throws on the first failure — so a duplicate here could never
+   * be the assertion that reports the default changing, and the sentence
+   * promising it would be was false.
+   *
+   * What is NOT pinned anywhere else, and is the thing the deletion actually
+   * changed, is that DEFAULT_LIMITS is now the ONLY decider: with the switch
+   * gone there is no screen in the product that can write this key.
+   */
   assert.ok(
-    /blockRepeatToSameTarget:\s*true/.test(types),
-    'and with the switch gone, DEFAULT_LIMITS is the only thing left deciding for a customer with no saved row',
+    !/blockRepeatToSameTarget/.test(stripSettings),
+    'no screen can write blockRepeatToSameTarget any more, so the shipped default decides alone for an account with no saved row',
   );
   assert.ok(
     sheet.includes('ctx.limits.blockRepeatToSameTarget === false'),
@@ -5863,10 +5878,26 @@ const scenario: { step: string; line: string }[] = [];
     statusCard.includes('התוכנה במחשב מריצה גרסה ישנה'),
     'and still says so in his own words, with both version numbers, instead of leaving it to be inferred',
   );
-  assert.ok(
-    /\{stale && \(/.test(statusCard) && /worker\?\.online/.test(statusCard),
-    'only while a machine is actually online and actually behind — an offline PC has its own, different sentence',
-  );
+  /*
+   * READ THE DEFINITION, DO NOT SEARCH THE FILE FOR ITS PARTS.
+   *
+   * This was `/\{stale && \(/.test(statusCard) && /worker\?\.online/.test(statusCard)`
+   * under the message "only while a machine is actually online". The two
+   * halves are unrelated whole-file searches: `worker?.online` occurs eight
+   * times in that file, including `{!worker?.online && (` — the OPPOSITE
+   * condition — so the second half is satisfied no matter how `stale` is
+   * defined. A reviewer redefined it without the online requirement and the
+   * assertion stayed green, which would print "התוכנה במחשב מריצה
+   * גרסה ישנה — היא מורידה את החדשה בעצמה" over a switched-off PC that
+   * is downloading nothing, beside the line saying it is disconnected.
+   *
+   * So the ONE line that defines it is the subject.
+   */
+  const staleDef = statusCard.slice(statusCard.indexOf('const stale ='), statusCard.indexOf('\n', statusCard.indexOf('const stale =')));
+  assert.ok(staleDef.includes('worker?.online'), 'stale itself requires the machine to be online — an offline PC has its own, different sentence');
+  assert.ok(staleDef.includes('worker.version !== WORKER_VERSION'), 'and to actually be behind');
+  assert.ok(staleDef.includes('worker.version &&'), 'and to have reported a version at all, so an unknown one is not called old');
+  assert.ok(/\{stale && \(/.test(statusCard), 'and the notice is what that condition gates');
   const workerVersionSrc = readFileSync(new URL('../../src/lib/social/worker-version.ts', import.meta.url), 'utf8');
   assert.ok(
     !workerVersionSrc.includes("'2.6.0'"),

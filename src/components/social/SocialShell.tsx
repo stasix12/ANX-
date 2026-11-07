@@ -330,9 +330,19 @@ export function IdentityBar({
               * buttons for one fact is the thing this module keeps removing,
               * not adding.
               *
-              * It is still reachable in two places, both of them named: the
-              * "השהה פרסום" card at the top of the dashboard, and "עצירת
-              * חירום" in settings, which is one tap from here.
+              * IT IS NOW REACHABLE IN EXACTLY ONE PLACE, and that sentence
+              * has to be kept accurate because it is the whole justification
+              * for this button not existing. It read "two places, both of
+              * them named: the \"השהה פרסום\" card at the top of the
+              * dashboard, and \"עצירת חירום\" in settings" — and on
+              * 07.11.2026 the settings card was deleted at the owner's
+              * request, leaving only the first.
+              *
+              * So the dashboard's card (page.tsx:1785-1803) is now the ONLY
+              * way anyone can stop publishing. Do not remove it without
+              * putting a stop somewhere else first: a comment in another file
+              * said there were two, and that is exactly how the last one
+              * would go.
               *
               * The pause FLAG is still read on this bar. It is what the line
               * under the greeting says when everything is stopped — "הפרסום

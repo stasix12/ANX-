@@ -31,6 +31,7 @@ import {
   addGroup,
   bulkDeleteTargets,
   bulkUpdateTargets,
+  deleteTarget,
   pauseTargets,
   getBrowserSettings,
   getLimits,
@@ -938,7 +939,69 @@ export default function GroupsPage() {
                       )}
                     </div>
                   </Link>
-                  <Toggle checked={g.enabled} onChange={(v) => act(`on-${g.id}`, () => updateTarget(g.id, { enabled: v }))} label={`הפעל את ${g.name}`} />
+                  {/*
+                    THE SWITCH HERE GOES THROUGH pauseTargets TOO, and it did
+                    not at first. The card menu and the bulk bar were changed
+                    together and this one was missed — so a group switched off
+                    from the LIST kept its waiting publications and went on
+                    being counted, which is the exact complaint the change was
+                    made to answer. One capability, one function, three places
+                    that reach it.
+                  */}
+                  <Toggle
+                    checked={g.enabled}
+                    onChange={(v) =>
+                      act(`on-${g.id}`, () =>
+                        v
+                          ? updateTarget(g.id, { enabled: true })
+                          : pauseTargets([g.id]).then((r) => {
+                              if (r.cancelled) toast(`הקבוצה הושהתה — ${counted(r.cancelled, 'פרסום אחד שהמתין בוטל', 'פרסומים שהמתינו בוטלו', 'שני פרסומים שהמתינו בוטלו')}`);
+                            }),
+                      )
+                    }
+                    label={`הפעל את ${g.name}`}
+                  />
+                  {/*
+                    ───── THE QUICK REMOVE, AND WHY IT IS ONLY HERE ────────────
+
+                    "בכרטיסיה של הקבוצות תוסיף אופציה מהירה להסיר קבוצה" — 07.11.2026,
+                    asked while looking at the GRID. It cannot go there, and
+                    the reason is measured rather than felt: GroupCard.tsx
+                    carries "ONE control in the corners, not two — this is
+                    arithmetic, not taste". Four cards across a 375px phone is
+                    ~80px each; two 44px hit boxes in opposite corners need 88,
+                    so they overlapped and whichever sat on top ate the other's
+                    taps. That is why the favourite toggle was taken off the
+                    card face in the first place. A second corner button would
+                    re-create exactly that bug.
+
+                    A list row is full width and has the room, so this is where
+                    the one-tap version lives. In the grid the same action is
+                    one tap deeper, in the card's menu, where it is last and
+                    marked destructive — which is where a delete belongs.
+
+                    IT ASKS FIRST, with the same warning the bulk bar uses: a
+                    delete takes the group's whole publication history, and
+                    unlike a pause there is nothing to switch back on.
+                  */}
+                  <button
+                    type="button"
+                    aria-label={`הסר את ${g.name}`}
+                    title="הסר מהרשימה"
+                    disabled={busy === `del-${g.id}`}
+                    className="grid h-11 w-11 shrink-0 place-items-center rounded-xl text-mist-500 transition-colors hover:bg-bad-400/10 hover:text-bad-400 disabled:opacity-50"
+                    onClick={async () => {
+                      const ok = await confirm.ask({
+                        title: `להסיר את "${g.name}"?`,
+                        body: DELETE_GROUP_WARNING,
+                        confirmLabel: 'הסר ומחק היסטוריה',
+                        danger: true,
+                      });
+                      if (ok) await act(`del-${g.id}`, () => deleteTarget(g.id), 'הקבוצה הוסרה.');
+                    }}
+                  >
+                    <TrashIcon className="h-4.5 w-4.5" />
+                  </button>
                 </li>
               ))}
             </ul>

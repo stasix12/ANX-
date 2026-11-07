@@ -231,6 +231,61 @@ is(
   /* Switching back ON is still the plain write: there is no queue to clear,
      and the planner brings the group back by itself. */
   is(/updateTarget\(g\.id, \{ enabled: true \}\)/.test(page), 'switching back on stays a plain write');
+  /*
+   * ── AND THE LIST VIEW'S SWITCH, WHICH WAS MISSED THE FIRST TIME ──────
+   *
+   * The card menu and the bulk bar were changed together; the Toggle on the
+   * list row kept calling updateTarget directly. So a group switched off from
+   * the LIST held on to its waiting publications and went on being counted —
+   * the exact complaint the change was made to answer, surviving in the one
+   * place nobody looked. A capability with three doors needs all three
+   * walked.
+   */
+  is(!/onChange=\{\(v\) => act\(`on-\$\{g\.id\}`, \(\) => updateTarget\(g\.id, \{ enabled: v \}\)\)\}/.test(page), 'the list row no longer switches off with a bare write');
+  {
+    const row = page.slice(page.indexOf('<Toggle'), page.indexOf('</li>', page.indexOf('<Toggle')));
+    is(/pauseTargets\(\[g\.id\]\)/.test(row), 'it goes through the one function, like the other two doors');
+    is(/\? updateTarget\(g\.id, \{ enabled: true \}\)/.test(row), 'and switching back ON is still the plain write — there is no queue to clear');
+  }
+
+  /*
+   * ── THE QUICK REMOVE ────────────────────────────────────────
+   *
+   * "בכרטיסיה של הקבוצות תוסיף אופציה מהירה להסיר קבוצה" — in the list row,
+   * where a full-width row has the space. NOT on the grid card: GroupCard.tsx
+   * measured that four cards across a 375px phone is ~80px each and two 44px
+   * hit boxes in opposite corners need 88, so they overlapped and ate each
+   * other's taps — which is why the favourite toggle came off the card face.
+   * The pin below is what stops a second corner button being added back.
+   */
+  const card = readFileSync('src/components/social/GroupCard.tsx', 'utf8');
+  is(/ONE control in the corners, not two/.test(card), 'the card still documents why it carries one corner control');
+  /*
+   * THE RULE IS "ONE TARGET", NOT "ONE ELEMENT". Three things sit in the
+   * card's corners and only one of them can be tapped:
+   *   • the overflow menu            — the control
+   *   • the favourite star           — pointer-events-none, a mark not a target
+   *   • the selection checkmark      — aria-hidden, and in the other branch
+   *     entirely (the whole card is the button while picking)
+   * So the pin counts TARGETS. Adding a remove button to the card face would
+   * make it two, and re-create the overlap the comment above describes.
+   */
+  is((strip(card).match(/<OverflowMenu /g) ?? []).length === 1, 'the card has exactly one menu');
+  is(/pointer-events-none absolute start-1 top-1/.test(strip(card)), 'the favourite star is a mark, not a target');
+  is(/absolute end-2 top-2 grid h-7 w-7/.test(strip(card)) && /aria-hidden/.test(strip(card)), 'and the selection mark is aria-hidden, in the branch where the whole card is the button');
+  is(!/onRemove|deleteTarget|TrashIcon/.test(card), 'and no remove affordance has been put on the card face — that is what the measurement forbids');
+  {
+    const row = page.slice(page.indexOf('<Toggle'), page.indexOf('</li>', page.indexOf('<Toggle')));
+    is(/deleteTarget\(g\.id\)/.test(row), 'the list row removes the group in one tap');
+    /* THE AWAIT, not just the words. A pin on the warning's text alone stays
+       green on a version that renders the object and deletes anyway. */
+    is(/const ok = await confirm\.ask\(\{/.test(row), 'and it WAITS for an answer before deleting');
+    is(/if \(ok\) await act\(/.test(row), 'and only deletes on yes');
+    is(/body: DELETE_GROUP_WARNING,/.test(row), 'behind the same warning the bulk bar shows — a delete takes the whole publication history');
+    is(/danger: true,/.test(row), 'marked destructive');
+    is(/h-11 w-11/.test(row), 'at the 44px tap floor');
+    is(/aria-label=\{`הסר את \$\{g\.name\}`\}/.test(row), 'and it names the group it would remove, for a screen reader and for a thumb that lands on the wrong row');
+  }
 }
 
 console.log(`unpostable groups OK — ${checks} assertions over the rule, his 600-row distribution and the screen`);

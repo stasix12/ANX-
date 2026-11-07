@@ -848,7 +848,7 @@ async function main(): Promise<void> {
         assert.ok(!p.summaryClipped, `${where}: the summary line is cut off — "${p.summary}"`);
         /* The second alternative was "התזמון כבוי — …", which opened on the
            position of a switch. That switch is gone, so the sentence now
-           opens on the consequence instead: "מפרסם בכל יום, בכל שעה · …". The
+           opens on the consequence instead: "מפרסם בכל יום, בכל שעה | …". The
            requirement is unchanged — the line is one of exactly two shapes
            and never something improvised. */
         assert.ok(

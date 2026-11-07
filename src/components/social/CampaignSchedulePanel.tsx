@@ -411,8 +411,9 @@ export function CampaignSchedulePanel({
      * measured suite selects to find "the scheduling area", and that area is
      * all three.
      */
-    <div data-schedule aria-busy={busy || undefined} className="mt-1.5">
-      <div className="rounded-2xl bg-brand-300/10 p-2">
+    <div data-schedule aria-busy={busy || undefined} className="mt-1">
+      {/* p-2 → p-1.5, from the compaction brief. Padding only. */}
+      <div className="rounded-2xl bg-brand-300/10 p-1.5">
         {/*
           THE BLUE CIRCLE, FIRST IN THE BLOCK.
 
@@ -487,7 +488,11 @@ export function CampaignSchedulePanel({
         <span
           aria-hidden
           dir="auto"
-          className={`block text-center text-[10px] font-bold leading-4 text-mist-300 ${showHeader ? 'mt-2' : 'mt-0.5'}`}
+          /* leading-4 → leading-[13px] and the gap above it halved: a 10px
+             word does not need a 16px line, and this label sits directly on
+             the chips it names. 5px off the panel, from the compaction
+             brief. */
+          className={`block text-center text-[10px] font-bold leading-[13px] text-mist-300 ${showHeader ? 'mt-1.5' : 'mt-0'}`}
         >
           ימי פרסום
         </span>
@@ -507,7 +512,18 @@ export function CampaignSchedulePanel({
                 /* "א׳" is read aloud as a letter; the day is read as a day. */
                 aria-label={DAY_NAMES[day]}
                 onClick={() => toggleDay(day)}
-                className={`flex min-h-[52px] flex-col items-center justify-center gap-0.5 rounded-2xl border text-[12.5px] font-extrabold transition-colors disabled:opacity-60 ${
+                /*
+                  52 → 40, WHICH IS THE PRODUCT'S FLOOR AND NOT A PIXEL LESS.
+                  *
+                  * "יש לצמצם את הגובה הכולל … ככל שניתן מבלי לפגוע
+                  *  בשימושיות." A chip holds a 12.5px letter over a 12px
+                  * check — 29px of content inside a 1px border — so 52 was
+                  * 21px of air on the tallest row in the panel, seven times
+                  * over. 40 is the floor campaign-card.test.ts hit-tests
+                  * every control in this panel against, and the row is still
+                  * measured at it: this number may go no lower.
+                */
+                className={`flex min-h-10 flex-col items-center justify-center gap-0.5 rounded-2xl border text-[12.5px] font-extrabold transition-colors disabled:opacity-60 ${
                   on
                     /*
                      * THE DISCOVERY SCREEN'S OWN SELECTED CHIP, brand-600 →
@@ -554,7 +570,7 @@ export function CampaignSchedulePanel({
         </div>
 
         {/* ─── 3. the two fields, in the reference's own order ────────────── */}
-        <div className="mt-2 grid grid-cols-2 gap-2 [&>*]:min-w-0">
+        <div className="mt-1 grid grid-cols-2 gap-2 [&>*]:min-w-0">
           {/*
             ─── ANY MINUTE, NOT EVERY HALF HOUR ──────────────────────────────
             *
@@ -600,19 +616,32 @@ export function CampaignSchedulePanel({
            בין פוסטים." It is computed from the prop on every render, so it
           cannot be anything else — there is no second copy of these values.
 
-          TWO LINES, WHICH IS HOW THE REFERENCE DRAWS IT: the days, then the
-          hour and the interval. The days are the half that can run long — all
-          seven, or six of them spelled out — so they get the line that is
-          allowed to end in an ellipsis and the numbers get one that is not.
-
-          AND NO CLOSING HOUR. The second line used to be "09:00 – 23:30"; the
-          brief removes the end time from here by name ("אין להציג שעת סיום גם
-          בשורת הסיכום"), so it reads "משעה 09:00" — which is what the engine
-          now actually does.
+          ─── ONE LINE NOW, WHICH IS WHAT THE REFERENCE DRAWS ──────────────
+          *
+          * "סיכום התזמון: להציג בשורה קומפקטית ובהירה."
+          *
+          * It was two stacked lines — the days, then the hour and the
+          * interval — in a strip with 8px of padding over and under, 49px for
+          * 32px of text. One flowing sentence with the same three facts and
+          * the same two separators is 16px of text in 24, and on every width
+          * this card is drawn at it comes out on a single line.
+          *
+          * IT FLOWS, IT DOES NOT TRUNCATE. The days are the half that can run
+          * long (six of them spelled out), and they are also the half nobody
+          * can reconstruct from an ellipsis — so the sentence is allowed to
+          * take a second line on a narrow enough screen rather than cut
+          * "א׳, ב׳, ג׳, ה׳, ו׳, ש׳" off at the geresh. The block grows by 16px
+          * on the day that happens and the figure stays readable, which is the
+          * right way round: "ככל שניתן מבלי לפגוע בשימושיות".
+          *
+          * AND NO CLOSING HOUR. The hour used to be "09:00 – 23:30"; the
+          * brief removes the end time from here by name ("אין להציג שעת סיום
+          * גם בשורת הסיכום"), so it reads "משעה 09:00" — which is what the
+          * engine now actually does.
         */}
         <div
           data-summary
-          className={`mt-2 flex min-w-0 items-start gap-1.5 rounded-2xl px-2.5 py-2 text-[11px] font-bold leading-4 ${
+          className={`mt-1 flex min-w-0 items-start gap-1.5 rounded-2xl px-2 py-1 text-[11px] font-bold leading-4 ${
             /* A white strip rather than an amber tint: warning-400 on 20% of
                brand-300 is 4.21:1, and on white it is 5.43. */
             noDays ? 'bg-ink-900 text-warning-400' : 'bg-brand-300/20 text-brand-400'
@@ -621,7 +650,7 @@ export function CampaignSchedulePanel({
           <CalendarIcon aria-hidden className="mt-0.5 h-3 w-3 shrink-0" />
           {!publishesAlways(schedule) ? (
             <span className="min-w-0">
-              <span className="block truncate">ימי פרסום: {daysLabel(shown)}</span>
+              ימי פרסום: {daysLabel(shown)}
               {!noDays && (
                 /*
                   THE HOUR IS ITS OWN LTR ISLAND. "09:00" is a European number
@@ -630,9 +659,16 @@ export function CampaignSchedulePanel({
                   the string has no strong character, so auto falls back to the
                   RTL that caused it. Same fix as <Stamp>: an explicit island.
                 */
-                <span className="mt-px block">
-                  משעה <span dir="ltr" className="inline-block tabular-nums">{shown.start}</span> · {gapLabel(gapShown)}
-                </span>
+                <>
+                  {/* THE REFERENCE'S SEPARATOR IS A RULE, NOT A DOT. It draws
+                      "ימי פרסום: … | משעה: 15:10 | כל 40 שניות" — three fields
+                      on one line with a vertical bar between them. The bar is
+                      a neutral character, so each run around it keeps its own
+                      direction and the hour stays inside its LTR island. */}
+                  {' | '}משעה <span dir="ltr" className="inline-block tabular-nums">{shown.start}</span>
+                  {' | '}
+                  {gapLabel(gapShown)}
+                </>
               )}
             </span>
           ) : (
@@ -646,7 +682,7 @@ export function CampaignSchedulePanel({
               so one sentence covers both and the reader is never asked to
               know which.
             */
-            <span className="min-w-0">מפרסם בכל יום, בכל שעה · {gapLabel(gapShown)}</span>
+            <span className="min-w-0">מפרסם בכל יום, בכל שעה | {gapLabel(gapShown)}</span>
           )}
         </div>
 
@@ -722,16 +758,23 @@ export function CampaignSchedulePanel({
          * 4.18 on an amber tint, which is the pair the contrast guard exists
          * to catch and did catch, in this block.
          */
-        <div className="mt-1.5 rounded-2xl border border-ink-600 bg-ink-900 p-2.5">
+        <div className="mt-1.5 rounded-2xl border border-ink-600 bg-ink-900 p-2">
           <div className="flex items-start gap-2">
             <span aria-hidden className="grid h-7 w-7 shrink-0 place-items-center rounded-xl bg-brand-300/15">
               <RepeatIcon className="h-3.5 w-3.5 text-brand-400" />
             </span>
             <span className="min-w-0 grow">
               <span className="block text-[12.5px] font-extrabold leading-4 text-mist-100">חזרה יומית</span>
-              <span className="mt-px block text-[10px] font-bold leading-[13px] text-mist-300">הפעל חזרה יומית של הקמפיין</span>
+              {/* THE REFERENCE'S OWN SUBTITLE. "הפעל חזרה יומית של הקמפיין"
+                  was an instruction to press the switch; the image writes
+                  what the switch DOES, which is also the only one of the two
+                  that is still true while it is off. */}
+              <span className="mt-px block text-[10px] font-bold leading-[13px] text-mist-300">הקמפיין יחזור אוטומטית בכל יום</span>
             </span>
-            <span className="ms-auto -me-1 -my-1 flex shrink-0 items-center">
+            {/* The reference draws a rule between the text and the controls
+                in this row, the same one the blue block and the strip carry. */}
+            <span aria-hidden className="ms-auto h-7 w-px shrink-0 bg-ink-700" />
+            <span className="-me-1 -my-1 flex shrink-0 items-center">
               {/*
                 THE EXPLANATION NO LONGER ARRIVES WITH THE TAP.
                 *
@@ -839,8 +882,13 @@ function Pick({
   disabled?: boolean;
 }) {
   return (
-    <label className="block min-w-0 rounded-2xl bg-ink-900 p-1.5">
-      <span className="flex min-w-0 items-center justify-center gap-1 text-center text-[10px] font-bold leading-4 text-mist-300">
+    /* p-1.5 → p-0.5, leading-[13px] on the label, mt-0.5 over the control:
+       13px off this field, and the 40px control itself untouched. The SAME
+       three numbers in TimePick/Pick below — they are one shape drawn twice
+       and campaign-card.test.ts measures the pair for a pixel of
+       disagreement. */
+    <label className="block min-w-0 rounded-2xl bg-ink-900 p-0.5">
+      <span className="flex min-w-0 items-center justify-center gap-1 text-center text-[10px] font-bold leading-[13px] text-mist-300">
         {icon}
         {/* dir="auto" because the guard in layout.test.ts asks it of every
              clamped expression, and it is right to: it cannot tell this label
@@ -848,7 +896,7 @@ function Pick({
              so "auto" resolves to the RTL they already had. */}
         <span dir="auto" className="min-w-0 truncate">{label}</span>
       </span>
-      <span className="relative mt-1 block">
+      <span className="relative mt-0.5 block">
         <select
           aria-label={aria}
           value={value}
@@ -927,12 +975,17 @@ function TimePick({
   disabled?: boolean;
 }) {
   return (
-    <label className="block min-w-0 rounded-2xl bg-ink-900 p-1.5">
-      <span className="flex min-w-0 items-center justify-center gap-1 text-center text-[10px] font-bold leading-4 text-mist-300">
+    /* p-1.5 → p-0.5, leading-[13px] on the label, mt-0.5 over the control:
+       13px off this field, and the 40px control itself untouched. The SAME
+       three numbers in TimePick/Pick below — they are one shape drawn twice
+       and campaign-card.test.ts measures the pair for a pixel of
+       disagreement. */
+    <label className="block min-w-0 rounded-2xl bg-ink-900 p-0.5">
+      <span className="flex min-w-0 items-center justify-center gap-1 text-center text-[10px] font-bold leading-[13px] text-mist-300">
         {icon}
         <span dir="auto" className="min-w-0 truncate">{label}</span>
       </span>
-      <span className="relative mt-1 block">
+      <span className="relative mt-0.5 block">
         <input
           type="time"
           step={60}

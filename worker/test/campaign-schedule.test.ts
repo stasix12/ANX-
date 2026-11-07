@@ -676,7 +676,14 @@ const ref: CampaignSchedule = { enabled: true, days: [0, 1, 2, 3, 4], start: '08
    * trusted about whether it is readable.
    */
   is(/leading-\[13px\] text-mist-300/.test(panelSrc), 'the header subtitle is mist-300 on the tint (5.61), not mist-500 (4.40)');
-  is(/text-\[10px\] font-bold leading-4 text-mist-300/.test(panelSrc), 'and so is every field\u2019s own label, which sits on a white box inside it');
+  /* leading-4 → leading-[13px] when the campaign-compaction brief took the
+     air out of this panel; `text-center` keeps this needle on the FIELD label
+     rather than on the header subtitle the line above already covers. The
+     token being checked — mist-300 and not mist-500 — is unchanged. */
+  is(
+    /text-center text-\[10px\] font-bold leading-\[13px\] text-mist-300/.test(panelSrc),
+    'and so is every field\u2019s own label, which sits on a white box inside it',
+  );
   /* The days are labelled for a screen reader by the group they are in, since
      the visible "ימי פרסום" line the reference replaced with a subtitle is no
      longer there to read. */

@@ -141,7 +141,10 @@ export function CampaignScheduleBoard({
    */
   const shown = shownSchedule(schedule);
   return (
-    <div data-schedule-board className="mt-3">
+    /* mt-3 → mt-1.5 and p-2.5 → p-2 inside, both from the compaction brief:
+       "יש לצמצם את הגובה הכולל של אזור הקמפיין והגדרות התזמון בכ־30%–40%".
+       Padding and gaps only — no row of this block was removed. */
+    <div data-schedule-board className="mt-1.5">
       {/* ─── the lavender block: header, then the three readouts ────────── */}
       {/* `@container` ON THE BLOCK, so the row below asks about the width it
           actually has rather than the phone's. A container query measures this
@@ -149,7 +152,7 @@ export function CampaignScheduleBoard({
           three boxes are laid out in — the one number the breakpoint is about.
           The card is also drawn at half width in the desktop grid, where the
           viewport says 1280 and the boxes have 300. */}
-      <div className="@container rounded-2xl bg-brand-300/10 p-2.5">
+      <div className="@container rounded-2xl bg-brand-300/10 p-2">
         {/*
           HEADER. Calendar and title at the start — the card's RIGHT on this
           RTL page — and the word with its switch at the other end, which is
@@ -375,7 +378,7 @@ export function CampaignScheduleBoard({
         /* Straight through to the line that answers "when does the next one
            go out" — see the prop's own note. */
         frozenUntil={frozenUntil}
-        className="mt-1.5"
+        className="mt-1"
       />
     </div>
   );

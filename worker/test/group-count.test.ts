@@ -461,8 +461,16 @@ const card = readFileSync(new URL('../../src/components/social/CampaignCard.tsx'
 
 {
   pin('the hero builds the group view', hero, 'const groups = groupProgress(state, targetCount ?? undefined);');
-  pin('the hero ratio counts groups that got the post', hero, 'done={groups.published}');
-  pin('out of the groups the round reaches', hero, 'total={groups.total}');
+  /*
+   * RE-POINTED, SAME RULE. The hero drew this pair through a <Ratio> element
+   * with `done`/`total` props; the campaign-compaction brief folded that
+   * element into one line of the blue header and one of the strip below it,
+   * and the pair is now written out as a template literal in both. The needle
+   * is the new spelling of the same two values — what is pinned here is that
+   * the headline figure on this card is groups-that-got-the-post over
+   * groups-the-round-reaches, and that has not moved.
+   */
+  pin('the hero ratio counts groups that got the post, out of the groups the round reaches', hero, '${groups.published} / ${groups.total}');
   pin('the ring is the same fraction', hero, 'percent={groups.usable ? groups.percent : view.percent}');
   pin('and the bar is drawn over the same pair', hero, 'segments={[{ value: groups.published, className: TONE_FILL.good }]}');
   pin('the sentence under it is the group one', hero, 'groups.label,');
@@ -476,7 +484,7 @@ const card = readFileSync(new URL('../../src/components/social/CampaignCard.tsx'
   pin('skipped publications say they are publications', hero, "'פרסום אחד דולג', 'פרסומים דולגו'");
   pin('and so do failed ones', hero, "'פרסום אחד נכשל', 'פרסומים נכשלו'");
   /* THE FALLBACK IS STILL THERE, and it is the card exactly as it was. */
-  pin('with no group count the hero draws what it always drew', hero, 'done={view.handled}');
+  pin('with no group count the hero draws what it always drew', hero, '${view.handled} / ${view.total}');
   /* THE NOTE FIRES WHERE THE PAIR IS MISSING, not where it is hedged — the
      corrected gate. A card that cannot count published groups draws the
      publications ratio it always drew, plus one line naming the one file. */

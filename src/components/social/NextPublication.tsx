@@ -192,9 +192,17 @@ export function NextPublication({
        * block's edge instead of a darker fill, which is what the summary strip
        * above it already does.
        */
-      className={`rounded-2xl border border-brand-300/35 bg-brand-300/10 px-3 py-2.5 ${className}`}
+      /* py-2.5 → py-1.5 and px-3 → px-2.5, from the compaction brief:
+         "יש לצמצם את הגובה הכולל של אזור הקמפיין והגדרות התזמון בכ־30%–40%".
+         The block held three lines of text in 20px of vertical padding; it
+         holds the same three in 12. No line, figure or caveat was removed —
+         `data-must-fit` on the sentence below still has its full width, and
+         the two screens that draw this block both get the cut. */
+      className={`rounded-2xl border border-brand-300/35 bg-brand-300/10 px-2.5 py-1.5 ${className}`}
     >
-      <p className="flex items-center gap-1.5 text-[10.5px] font-extrabold leading-4 text-brand-400">
+      {/* leading-4 → leading-[13px]: a 10.5px caption in a 16px line box was
+          3px of air above a block the brief wants shorter. */}
+      <p className="flex items-center gap-1.5 text-[10.5px] font-extrabold leading-[13px] text-brand-400">
         <CalendarIcon aria-hidden className="h-3.5 w-3.5 shrink-0" />
         הפרסום הבא
       </p>
@@ -212,7 +220,7 @@ export function NextPublication({
             help a run with no strong character — it falls back to the RTL that
             caused it. Same fix the queue list and the summary strip use.
           */}
-          <p data-must-fit className="mt-1 text-[14px] font-extrabold leading-5 text-mist-100">
+          <p data-must-fit className="mt-0.5 text-[14px] font-extrabold leading-[17px] text-mist-100">
             {dayRelativeHe(new Date(at), new Date(now))}
             {', '}
             <span dir="ltr" className="inline-block tabular-nums">{formatDayMonthHe(at)}</span>
@@ -360,7 +368,7 @@ function Words({
     const slow = secs >= 120;
     return (
       <>
-        <p className={`mt-1 text-[14px] font-extrabold leading-5 ${slow ? 'text-warning-400' : 'text-brand-400'}`}>
+        <p className={`mt-0.5 text-[14px] font-extrabold leading-[17px] ${slow ? 'text-warning-400' : 'text-brand-400'}`}>
           {slow ? 'הסבב הושק — התור עדיין לא נבנה' : 'הסבב הושק — בונים את התור'}
         </p>
         <p dir="auto" className="mt-0.5 text-[11.5px] font-bold leading-4 text-mist-300">
@@ -380,7 +388,7 @@ function Words({
   if (neverLaunched && (readout.kind === 'window-open' || readout.kind === 'window-next' || readout.kind === 'none')) {
     return (
       <>
-        <p className="mt-1 text-[14px] font-extrabold leading-5 text-warning-400">הסבב עוד לא הושק</p>
+        <p className="mt-0.5 text-[14px] font-extrabold leading-[17px] text-warning-400">הסבב עוד לא הושק</p>
         <p className="mt-0.5 text-[11.5px] font-bold leading-4 text-mist-300">
           הוסיפו פוסט, בחרו קבוצות ושלחו — ומאותו רגע התזמון יעבוד לבד
         </p>
@@ -390,7 +398,7 @@ function Words({
   if (readout.kind === 'paused') {
     return (
       <>
-        <p className="mt-1 text-[14px] font-extrabold leading-5 text-warning-400">מושהה</p>
+        <p className="mt-0.5 text-[14px] font-extrabold leading-[17px] text-warning-400">מושהה</p>
         {/*
           THE PLANNED MINUTE, LABELLED AS PLANNED. "אם הקמפיין מושהה, יש להציג
           את המועד המתוכנן לצד סטטוס מושהה, בלי להציג אותו כפרסום שעומד
@@ -419,7 +427,7 @@ function Words({
   if (readout.kind === 'no-day') {
     return (
       <>
-        <p className="mt-1 text-[14px] font-extrabold leading-5 text-warning-400">לא נבחר יום פרסום</p>
+        <p className="mt-0.5 text-[14px] font-extrabold leading-[17px] text-warning-400">לא נבחר יום פרסום</p>
         <p className="mt-0.5 text-[11.5px] font-bold leading-4 text-mist-300">
           התור מוחזק — בחרו לפחות יום אחד למעלה והפרסומים יֵצאו
         </p>
@@ -432,7 +440,7 @@ function Words({
        מתוזמנים" over these was the card reporting them as nothing. */
     return (
       <>
-        <p className="mt-1 text-[14px] font-extrabold leading-5 text-warning-400">
+        <p className="mt-0.5 text-[14px] font-extrabold leading-[17px] text-warning-400">
           {counted(readout.waiting, 'פרסום אחד ממתין לך', 'פרסומים ממתינים לך', 'שני פרסומים ממתינים לך')}
         </p>
         <p className="mt-0.5 text-[11.5px] font-bold leading-4 text-mist-300">הם לא ממתינים לשעה — הם ממתינים לאישור שלכם</p>
@@ -443,7 +451,7 @@ function Words({
   if (readout.kind === 'ended') {
     return (
       <>
-        <p className="mt-1 text-[14px] font-extrabold leading-5 text-mist-100">{readout.stopped ? 'הסבב הופסק' : 'הסבב הסתיים'}</p>
+        <p className="mt-0.5 text-[14px] font-extrabold leading-[17px] text-mist-100">{readout.stopped ? 'הסבב הופסק' : 'הסבב הסתיים'}</p>
         <p className={`mt-0.5 text-[11.5px] font-bold leading-4 ${readout.repeats ? 'text-warning-400' : 'text-mist-300'}`}>
           {readout.repeats ? (
             /*
@@ -515,7 +523,7 @@ function Words({
             a second one here would be the same hedge printed twice on one
             card, which is the noise the owner pointed at. What is missing
             HERE is specifically the next publication's minute. */}
-        <p className="mt-1 text-[14px] font-extrabold leading-5 text-mist-100">לא ידוע מתי הפרסום הבא</p>
+        <p className="mt-0.5 text-[14px] font-extrabold leading-[17px] text-mist-100">לא ידוע מתי הפרסום הבא</p>
         <p className="mt-0.5 text-[11.5px] font-bold leading-4 text-mist-300">הרשימה ארוכה מכדי לחשב כאן — פתחו את הסבב כדי לראות</p>
       </>
     );
@@ -532,7 +540,7 @@ function Words({
    */
   return (
     <>
-      <p className="mt-1 text-[14px] font-extrabold leading-5 text-mist-100">אין פרסומים מתוזמנים</p>
+      <p className="mt-0.5 text-[14px] font-extrabold leading-[17px] text-mist-100">אין פרסומים מתוזמנים</p>
       <p className="mt-0.5 text-[11.5px] font-bold leading-4 text-mist-300">
         {readout.kind === 'window-next' ? (
           <>

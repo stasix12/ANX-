@@ -110,9 +110,17 @@ async function main(): Promise<void> {
     /* BY ITS OWN ATTRIBUTE. "the last <p>" happened to be the summary while
        the panel was four elements; it carries a next-publication block and a
        repeat row now, and a locator that finds the wrong element cannot fail
-       for the right reason. innerText rather than textContent, so the two
-       lines the reference draws come back with a break between them instead of
-       "…ה׳משעה 08:00". */
+       for the right reason.
+
+       THE EXPECTED STRINGS CARRY "|" NOW. The summary was two stacked lines;
+       the campaign-compaction brief asks for "שורה קומפקטית ובהירה" and the
+       reference draws one line with a vertical rule between its three fields
+       — "ימי פרסום: … | משעה 15:10 | כל 40 שניות". Same three values, same
+       order, one separator spelled the way the image spells it.
+
+       innerText rather than textContent is kept: the line still WRAPS on a
+       narrow screen rather than truncating the days, and the collapse below
+       turns that break back into a space. */
     const summary = () => page.locator('[data-schedule] [data-summary]').innerText();
     const day = (name: string) => page.locator(`[data-schedule] [aria-label="${name}"]`);
     const changes = () => page.evaluate(() => window.__changes);
@@ -120,7 +128,7 @@ async function main(): Promise<void> {
     /* The state the owner's screen opens in. */
     eq(
       (await summary()).replace(/\s+/g, ' ').trim(),
-      'ימי פרסום: א׳, ב׳, ג׳, ד׳, ה׳ משעה 08:00 · כל 10 דקות',
+      'ימי פרסום: א׳, ב׳, ג׳, ד׳, ה׳ | משעה 08:00 | כל 10 דקות',
       'the panel opens on the reference’s own setting',
     );
 
@@ -130,13 +138,13 @@ async function main(): Promise<void> {
     await day('יום שישי').click();
     eq(
       (await summary()).replace(/\s+/g, ' ').trim(),
-      'ימי פרסום: א׳, ב׳, ג׳, ד׳, ה׳, ו׳ משעה 08:00 · כל 10 דקות',
+      'ימי פרסום: א׳, ב׳, ג׳, ד׳, ה׳, ו׳ | משעה 08:00 | כל 10 דקות',
       'ADDING A SIXTH DAY KEEPS THE OTHER FIVE — a row that behaved like radio buttons would read "ו׳" alone here',
     );
     eq(await day('יום שישי').getAttribute('aria-pressed'), 'true', 'and the chip says it is chosen');
 
     await day('שבת').click();
-    eq((await summary()).replace(/\s+/g, ' ').trim(), 'ימי פרסום: כל הימים משעה 08:00 · כל 10 דקות', 'all seven is a sentence, not seven labels');
+    eq((await summary()).replace(/\s+/g, ' ').trim(), 'ימי פרסום: כל הימים | משעה 08:00 | כל 10 דקות', 'all seven is a sentence, not seven labels');
 
     /* And off again: "חובה לאפשר Multi Select" says nothing about a day being
        un-choosable, and a control that refuses its own last press is one the
@@ -144,7 +152,7 @@ async function main(): Promise<void> {
     await day('יום רביעי').click();
     eq(
       (await summary()).replace(/\s+/g, ' ').trim(),
-      'ימי פרסום: א׳, ב׳, ג׳, ה׳, ו׳, ש׳ משעה 08:00 · כל 10 דקות',
+      'ימי פרסום: א׳, ב׳, ג׳, ה׳, ו׳, ש׳ | משעה 08:00 | כל 10 דקות',
       'a chosen day un-chooses, and the list closes over the gap in week order rather than in tap order',
     );
     eq(await day('יום רביעי').getAttribute('aria-pressed'), 'false', 'and the chip says so');
@@ -282,7 +290,7 @@ async function main(): Promise<void> {
     is((await summary()).includes('כל 25 דקות'), 'and so does the interval');
     eq(
       (await summary()).replace(/\s+/g, ' ').trim(),
-      'ימי פרסום: א׳, ב׳, ג׳, ה׳, ו׳, ש׳ משעה 06:30 · כל 25 דקות',
+      'ימי פרסום: א׳, ב׳, ג׳, ה׳, ו׳, ש׳ | משעה 06:30 | כל 25 דקות',
       'and both at once, with the days from the taps above still in it',
     );
     /* AND NOWHERE IN IT IS A SECOND HOUR. A range is written with a dash; its
@@ -349,7 +357,7 @@ async function main(): Promise<void> {
     );
     eq(
       (await summary()).replace(/\s+/g, ' ').trim(),
-      'מפרסם בכל יום, בכל שעה · כל 25 דקות',
+      'מפרסם בכל יום, בכל שעה | כל 25 דקות',
       'and the summary says the consequence in one sentence instead of naming a switch position',
     );
 

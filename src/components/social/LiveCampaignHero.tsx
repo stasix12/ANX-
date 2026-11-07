@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
-import { CalendarIcon, ChevronIcon, PauseIcon, RepeatIcon, SpinnerIcon } from '@/components/icons';
+import { CalendarIcon, ChevronIcon, MegaphoneIcon, PauseIcon, RepeatIcon, SpinnerIcon } from '@/components/icons';
 import {
   canPauseRun,
   canResumeRun,
@@ -489,7 +489,17 @@ export function LiveCampaignHero({
   const [editingSchedule, setEditingSchedule] = useState(true);
 
   return (
-    <HeroPanel ariaLabel="הסבב הפעיל" className="p-3.5">
+    /*
+     * p-3.5 → p-3, AND THAT IS NOT A TASTE CHANGE.
+     *
+     * The blue block above bleeds out of this padding with `-mx-3 -mt-3`, and
+     * a bleed has to equal the padding it cancels or the gradient stops 2px
+     * short of the card's edge on both sides — visible as a hairline of white
+     * down the outside of the header. 14 and 12 were the two numbers in this
+     * file; the reference's header reaches the edge, so the card came down to
+     * meet the bleed rather than the other way round.
+     */
+    <HeroPanel ariaLabel="הסבב הפעיל" className="p-3">
       {/*
         ─── THE HEADER BLOCK OF THE REFERENCE ──────────────────────────────
         *
@@ -513,18 +523,44 @@ export function LiveCampaignHero({
         * tone — green for running, amber for attention — cannot keep that job
         * on a blue ground.
       */}
-      <div className="grad-hero -mx-3.5 -mt-3.5 mb-3 flex items-center gap-3 rounded-t-[inherit] p-3.5">
-        <PostCover media={media} className="h-16 w-16 shrink-0 sm:h-20 sm:w-20" />
+      {/*
+        px-4 AND NOT px-2, WHICH IS A CLEARANCE AND NOT A TASTE.
+        *
+        * The card's corner is a 20px arc and the ring at the end of this row
+        * is a 58px circle: at 8px of padding the circle's centre sits 24px
+        * from the arc's centre and the ring pokes 5px THROUGH the corner —
+        * visible in the first screenshot of this block as a slice of white
+        * cut out of the track. 16px puts the centre 30.2px out, which clears
+        * a 29px radius. Horizontal only: the row's height is unchanged.
+      */}
+      <div className="grad-hero -mx-3 -mt-3 mb-1.5 flex items-center gap-2.5 rounded-t-[inherit] px-4 py-2">
+        {/*
+          ─── SHORTER, AND THE REFERENCE IS THE SPEC ─────────────────────
+          *
+          * "יש לצמצם את הגובה הכולל של אזור הקמפיין והגדרות התזמון בכ־30%–40%."
+          *
+          * Measured at 390px before this: the blue block was 114px and the
+          * two rows under it 110 more, for 224px of card saying the ratio
+          * three times — in the ring, beside the name, and again over the
+          * bar. The reference says it once per place it means something: the
+          * ring is the percentage, the line under the name is the count, and
+          * the strip below is today.
+          *
+          * Nothing here reads a new value. The cover is the same media, the
+          * ring the same percent, the figures the same pair.
+        */}
+        <PostCover media={media} className="h-11 w-14 shrink-0 sm:h-14 sm:w-[72px]" />
         <div className="min-w-0 grow">
           <Link
             href={`/social/campaigns/${campaign.id}`}
             dir="auto"
-            /* min-h-11 AND the padding come across with it. The name is a
+            /* min-h-10 AND the padding come across with it. The name is a
                LINK to the run's own screen, so it is a tap target, and moving
                it into the header dropped it to 20px — dashboard-hero.test.ts
                hit-tests every control against the product's 40px floor and
-               caught it on the first run. */
-            className="flex min-h-11 min-w-0 items-center truncate py-1.5 text-[15px] font-extrabold leading-5 text-white"
+               caught it on the first run. 40 exactly, which is that floor:
+               the row it is in has to come down by a third. */
+            className="flex min-h-10 min-w-0 items-center truncate py-0.5 text-[14px] font-extrabold leading-[18px] text-white"
           >
             {campaign.name}
           </Link>
@@ -544,105 +580,86 @@ export function LiveCampaignHero({
               {`${state.truncated ? 'לפחות ' : ''}${counted(targetCount ?? 0, 'קבוצה אחת', 'קבוצות', 'שתי קבוצות')}`}
             </span>
           )}
-          <p dir="ltr" className="mt-1.5 text-[13px] font-extrabold tabular-nums text-white">
-            {/* NO HEDGE MARK ON THIS LINE, and that is the card's existing
+          {/* The reference's own hairline, and the word beside the figure
+              rather than under it: two lines became one, and the sentence
+              that was the second one is the strip below. */}
+          {/* my-1 → my-0.5: 8px of white space around a 1px rule was the
+              last thing setting this block's height — the column it is in
+              measured 65 against a 58px ring, so the whole blue row was 7px
+              taller than the ring that decides it. 4px of air still reads as
+              a separator. */}
+          <span aria-hidden className="my-0.5 block h-px w-full bg-white/25" />
+          <p dir="auto" className="flex min-w-0 items-center gap-1.5 text-[12px] font-extrabold leading-4 text-white">
+            <MegaphoneIcon aria-hidden className="h-3.5 w-3.5 shrink-0 text-white/85" />
+            <span className="truncate">פרסומים</span>
+            {/* NO HEDGE MARK ON THIS FIGURE, and that is the card's existing
                 rule rather than a new one: `view.handled / view.total` never
                 carried "לפחות" either — the hedge belongs to the sentence
-                three lines down, which has room to say the word, and to the
-                note under it that says what to do about it. */}
-            {groups.usable ? `${groups.published} / ${groups.total}` : `${view.handled} / ${view.total}`}
-          </p>
-          <p dir="auto" className="text-[11px] font-bold text-white/85">
-            {groups.usable
-              ? `${agree(groups.published, 'קבוצה קיבלה', 'קבוצות קיבלו')} את הפוסט${state.todayOnly ? ' היום' : ''}`
-              : `${agree(view.handled, 'טופל', 'טופלו')}${state.todayOnly ? ' היום' : ''}`}
+                below, which has room to say the word, and to the note under
+                it that says what to do about it. */}
+            <span dir="ltr" className="shrink-0 tabular-nums">
+              {groups.usable ? `${groups.published} / ${groups.total}` : `${view.handled} / ${view.total}`}
+            </span>
           </p>
         </div>
+        {/* THE REFERENCE'S OWN VERTICAL RULE. It draws two separators in this
+            block, not one: the hairline under the name, and this rule between
+            the name and the ring. Same white at 25% as the hairline, 40px so
+            it matches the name's line rather than the ring's diameter. */}
+        <span aria-hidden className="h-10 w-px shrink-0 bg-white/25" />
         <ProgressRing
           percent={groups.usable ? groups.percent : view.percent}
           label={`${groups.usable ? groups.percent : view.percent}%`}
           sub={groups.usable ? 'מהקבוצות' : 'התקדמות'}
-          size={78}
-          stroke={8}
+          /* 78 → 62: the ring is a glance, not the headline it is on the
+             round's own screen. 62 and not 58, which is where I first put it:
+             at 58 the hole is 46px across and "מהקבוצות" is 38 — the word
+             reached the inner edge of the track at its own baseline, where
+             the chord is only 34. Four pixels of diameter buy nine of chord
+             and cost one of row height, because the name column beside it is
+             61 tall. The reference's own ring measures ~61. */
+          size={62}
+          stroke={6}
           tone="on-brand"
         />
       </div>
 
       {/*
-        WHAT IS LEFT OF THE OLD TOP ROW, and it is deliberately little.
-        The cover, the name and the group count moved into the header above —
-        "כל נתון יוצג פעם אחת בלבד" — so what remains is the one fact the
-        header has no room for and the pill, which needs a light ground to
-        carry its tone.
+        ─── ONE STRIP INSTEAD OF TWO ROWS AND A HEADING ───────────────────
+        *
+        * The reference draws a single line under the blue block: the day's
+        * figure, the bar, the percentage, the state. It replaces a row that
+        * held "התחיל לפני 6 שעות" and the pill, and a second row that held
+        * the figure and the percentage over the bar — 110px of card for four
+        * facts, three of which were already above.
+        *
+        * Everything still here: the figure, the bar (segments unchanged), the
+        * percentage, the pill with its link. "התחיל לפני" moved to the front
+        * of the sentence below, which is the line that describes the run in
+        * words and had room for it.
       */}
-      <div className="flex min-w-0 items-center justify-between gap-2">
-        <p dir="auto" className="min-w-0 truncate text-xs leading-4 text-mist-500">
-          {startedAt
-            ? `התחיל ${relativeHe(startedAt)}`
-            : state.everPublished > 0
-              ? 'יצאו פרסומים בעבר'
-              : 'טרם יצא פרסום'}
+      <div className="flex min-w-0 items-center gap-2">
+        <CalendarIcon aria-hidden className="h-4 w-4 shrink-0 text-brand-400" />
+        {/* The numbers never shrink and never wrap; the WORD beside them
+            truncates if the screen is narrow. A truncated count is a wrong
+            count, which is the one thing this strip may not produce. */}
+        <p dir="auto" className="flex min-w-0 shrink items-baseline gap-1">
+          <span dir="ltr" className="shrink-0 text-[13px] font-extrabold tabular-nums text-mist-100">
+            {groups.usable ? `${groups.published} / ${groups.total}` : `${view.handled} / ${view.total}`}
+          </span>
+          <span className="truncate text-[11px] font-bold leading-4 text-mist-500">
+            {groups.usable
+              ? `${agree(groups.published, 'קבוצה קיבלה', 'קבוצות קיבלו')}${state.todayOnly ? ' היום' : ''}`
+              : `${agree(view.handled, 'טופל', 'טופלו')}${state.todayOnly ? ' היום' : ''}`}
+          </span>
         </p>
-        <StatePill tone={pillTone} label={badge.label} live={badge.live} href={runBadgeHref(badge, campaign.id)} />
-      </div>
-
-      <div className="mt-3">
-        <div className="flex items-baseline justify-between gap-2">
-          {/*
-            "היום" IS PART OF THE SENTENCE, NOT AN EXTRA LINE BESIDE IT.
-
-            runProgress() puts the scope INTO handledLabel for exactly this
-            reason — campaign.ts: "'היום' IS PART OF THE SENTENCE … a true
-            number under a sentence that does not say what it is about" — and
-            this card renders the raw figures instead of that label, so the
-            word never arrived. A repeating round that has published three
-            thousand times showed "27 / 269 טופלו" with nothing saying those
-            are today's, directly under a schedule block reading "כל דקה".
-          */}
-          {/*
-            RE-POINTED FROM ROWS TO GROUPS, and the rule the old pair carried
-            is intact: the big figure beside a bar may not be the SUCCESS
-            count drawn over a PROGRESS bar, which is how one failed row of 29
-            printed "0%". Both figures here are the same pair now — groups
-            reached out of groups planned — so the bar, the ring and the digits
-            cannot disagree about what they are a fraction of.
-          */}
+        <div className="min-w-0 grow">
           {groups.usable ? (
-            <Ratio
-              done={groups.published}
-              total={groups.total}
-              suffix={`${agree(groups.published, 'קבוצה קיבלה', 'קבוצות קיבלו')} את הפוסט${state.todayOnly ? ' היום' : ''}`}
-            />
-          ) : (
-            <Ratio
-              done={view.handled}
-              total={view.total}
-              suffix={`${agree(view.handled, 'טופל', 'טופלו')}${state.todayOnly ? ' היום' : ''}`}
-            />
-          )}
-          <p className="text-lg font-extrabold tabular-nums text-brand-400">{groups.usable ? groups.percent : view.percent}%</p>
-        </div>
-        {/* Segmented, and that is forced by the figure above it: a single
-            green fill drawn at the HANDLED ratio would paint a failed row
-            green. The same three segments the runs list draws, from the same
-            tone maps, so the two bars now mean the same thing on both
-            screens. Their total width is view.percent by construction. */}
-        <div className="mt-2">
-          {groups.usable ? (
-            /*
-              ONE SEGMENT, BECAUSE THERE IS ONLY ONE GROUP-WISE OUTCOME WE CAN
-              HONESTLY DRAW. The three-segment bar was rows: published, failed,
-              skipped, each a count of publications. There is no group-wise
-              "failed" — one group can hold a published row and a failed row at
-              once — so inventing a second segment here would be a bar whose
-              widths are three counts of two different things. The publications
-              that did not make it are named in words under the bar instead.
-            */
             <ProgressBar
               segments={[{ value: groups.published, className: TONE_FILL.good }]}
               total={groups.total}
               ariaLabel={groups.ariaLabel}
-              height="h-2.5"
+              height="h-2"
             />
           ) : (
             <ProgressBar
@@ -653,10 +670,50 @@ export function LiveCampaignHero({
               ]}
               total={progress.total}
               ariaLabel={view.ariaLabel}
-              height="h-2.5"
+              height="h-2"
             />
           )}
         </div>
+        {/*
+          ─── THE PERCENTAGE, WHICH THE REFERENCE DOES PRINT TWICE ─────────
+          *
+          * I took this out under "יש לאחד נתונים סטטיסטיים חוזרים" — it is
+          * `groups.usable ? groups.percent : view.percent`, the same
+          * expression the ring above is drawn from. Then I put the reference
+          * beside the screenshot: its blue block carries "0% / התקדמות" in
+          * the ring AND its strip carries "0%" next to the bar, with a rule
+          * between that and the state chip.
+          *
+          * The image is the binding half of the brief ("לשחזר את העיצוב
+          * מהתמונה המצורפת"), and the two are not really the same statement:
+          * the ring is the campaign's headline, this is the figure the bar
+          * beside it is at. So it is back, and the de-duplication the brief
+          * asks for is spent where it changes what is on screen — the three
+          * counts this card used to carry are one, and the schedule's days
+          * are printed once.
+        */}
+        <p className="shrink-0 text-[13px] font-extrabold tabular-nums text-brand-400">
+          {groups.usable ? groups.percent : view.percent}%
+        </p>
+        {/* The reference's own rule between the figures and the state chip. */}
+        <span aria-hidden className="h-4 w-px shrink-0 bg-ink-700" />
+        <StatePill tone={pillTone} label={badge.label} live={badge.live} href={runBadgeHref(badge, campaign.id)} />
+      </div>
+
+      <div className="mt-1.5">
+        {/*
+          THE OLD PAIR AND THE OLD BAR ARE GONE FROM HERE, AND BOTH ARE IN
+          THE STRIP ABOVE — figure, bar, percentage, in one row.
+
+          What they carried has not changed: the same `groups.usable` branch,
+          the same segments from the same tone maps, the same ariaLabel, and
+          the same rule behind them — the big figure beside a bar may not be
+          the SUCCESS count drawn over a PROGRESS bar, which is how one failed
+          row of 29 printed "0%". Both figures up there are still the same
+          pair, so the bar, the ring and the digits cannot disagree about what
+          they are a fraction of. And "היום" is still part of the sentence
+          rather than an extra line beside it.
+        */}
         {/* What the run actually produced, and what became of the rest — one
             word per outcome instead of one word covering three. This line is
             deliberately directly under the bar: the bar says how far the round
@@ -668,7 +725,25 @@ export function LiveCampaignHero({
             whole queue), and this is openRows() for one run. Two correct
             numbers under one phrase is how the screen started arguing with
             itself. */}
-        <p className="mt-1.5 text-xs text-mist-500">
+        {/* text-xs/leading-4 → 11px/leading-[14px]. This sentence is the one
+            element in the campaign block whose height is set by how much it
+            has to say rather than by padding: three clauses and a hedge took
+            three lines on a 360px phone. A point of type and two of leading
+            is a line back on the narrow screens and 4px on every other, with
+            nothing dropped from the sentence — "ככל שניתן מבלי לפגוע
+            בשימושיות" cuts the box, not the words. */}
+        <p className="mt-1 text-[11px] leading-[14px] text-mist-500">
+          {/* THE ROUND'S OWN AGE, at the front of the line that describes it.
+              It had a row to itself beside the pill; the reference has no such
+              row, and the fact is worth a word, not 24px. */}
+          <span className="font-bold">
+            {startedAt
+              ? `התחיל ${relativeHe(startedAt)}`
+              : state.everPublished > 0
+                ? 'יצאו פרסומים בעבר'
+                : 'טרם יצא פרסום'}
+          </span>
+          {' · '}
           {groups.usable
             ? /* THE GROUP SENTENCE, THEN WHAT IS LEFT, THEN WHAT WAS LOST —
                  and every number in it names its own unit. "48 קבוצות עוד לא
@@ -874,7 +949,8 @@ export function LiveCampaignHero({
           middle, so the two buttons sat at two thirds width with a hole
           between them. No button appears or disappears; the row stops
           reserving a slot for one that is not there. */}
-      <div className={`mt-3 grid gap-2 [&>*]:min-w-0 ${showResume || showPause ? 'grid-cols-3' : 'grid-cols-2'}`}>
+      {/* mt-3 → mt-2: the gap above the action row, cut with the rest. */}
+      <div className={`mt-2 grid gap-2 [&>*]:min-w-0 ${showResume || showPause ? 'grid-cols-3' : 'grid-cols-2'}`}>
         <ButtonLink href={`/social/campaigns/${campaign.id}`} variant="secondary" size="md" className="justify-center">
           {/* "פתח סבב", the same words the runs list uses for the same URL. */}
           פתח סבב

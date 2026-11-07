@@ -1844,10 +1844,38 @@ async function main(): Promise<void> {
    * worker/test/group-count.test.ts is where the arithmetic, the Hebrew, the
    * floor, the read and the migration behind these two lines are held.
    */
-  pin('LiveCampaignHero ratio counts the groups that got the post', hero, 'done={groups.published}');
-  pin('LiveCampaignHero ratio counts them out of the groups the round reaches', hero, 'total={groups.total}');
-  pin('and with no group count it draws the rows exactly as it did', hero, 'done={view.handled}');
-  pin('out of the round', hero, 'total={view.total}');
+  /*
+   * ─── RE-POINTED ONTO THE PAIR'S NEW SPELLING, NOT ONTO A WEAKER RULE ────
+   *
+   * These four read `done={groups.published}` / `total={groups.total}` and the
+   * two row-path equivalents, which were the props of a <Ratio> element. The
+   * compaction brief ("יש לצמצם את הגובה הכולל של אזור הקמפיין והגדרות
+   * התזמון בכ־30%–40%") folded that element into one line of the blue header
+   * and one of the strip under it, so the same two values are now written as
+   * a template literal in both places. Nothing about WHICH values they are
+   * changed, which is the whole of what these pins are for — so each needle
+   * is the new spelling of the same expression, and `{2}` is the count,
+   * because the pair appearing in only one of the two places would mean the
+   * header and the strip had started disagreeing about what they are a
+   * fraction of. That is the "0%" fault these pins exist to catch.
+   */
+  const pairCount = (needle: string) => hero.split(needle).length - 1;
+  expect(
+    'guards',
+    'source-drift',
+    'LiveCampaignHero draws the group pair — groups reached out of groups the round reaches — in both places it prints a ratio',
+    pairCount('${groups.published} / ${groups.total}'),
+    2,
+    NONE,
+  );
+  expect(
+    'guards',
+    'source-drift',
+    'and with no group count both fall back to the rows exactly as they did — handled out of the round',
+    pairCount('${view.handled} / ${view.total}'),
+    2,
+    NONE,
+  );
   /* AND IT SAYS WHICH DAY IT IS ABOUT. runProgress() puts "היום" into
      handledLabel for a repeating round on purpose; this card renders the raw
      figures instead of that label, so the word never reached the screen — a

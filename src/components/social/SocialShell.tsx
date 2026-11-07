@@ -13,7 +13,6 @@ import {
   MonitorIcon,
   HomeIcon,
   LogOutIcon,
-  MenuIcon,
   RepeatIcon,
   SearchIcon,
   SparklesIcon,
@@ -28,7 +27,7 @@ import { InstallPrompt } from './InstallPrompt';
 import { NotificationBell } from './NotificationBell';
 import { BrowserStatusCard } from './BrowserStatusCard';
 import { UpdateBanner } from './UpdateBanner';
-import { Sheet, TONE_TEXT, TONE_TINT, WorkingNote, useConfirm, type Tone } from './ui';
+import { TONE_TEXT, TONE_TINT, WorkingNote, useConfirm, type Tone } from './ui';
 
 /*
  * The dot beside the status line, in the INDICATOR step of each tone rather
@@ -540,7 +539,6 @@ export function SocialShell({
   const { session, loading } = useAdminSession();
   const router = useRouter();
   const pathname = usePathname();
-  const [moreOpen, setMoreOpen] = useState(false);
   const [leaving, setLeaving] = useState(false);
   const confirm = useConfirm();
 
@@ -828,10 +826,12 @@ export function SocialShell({
     void readWorkers();
   }
 
-  // A tap through the sheet navigates; make sure it never stays open behind
-  // the new screen.
+  // A tap through a panel navigates; make sure none stays open behind the
+  // new screen. (The "עוד" sheet was the third of these until it was
+  // deleted; the account panel under the face closes itself on each link,
+  // and this is the backstop for a route change from anywhere else.)
   useEffect(() => {
-    setMoreOpen(false);
+    setWhoOpen(false);
     setPcOpen(false);
   }, [pathname]);
 
@@ -853,14 +853,15 @@ export function SocialShell({
 
   const isActive = (href: string, exact: boolean) => (exact ? pathname === href : Boolean(pathname?.startsWith(href)));
   /*
-   * "עוד" is the active tab on six of the eleven routes (library, targets,
-   * settings, posts/new, posts/[id], manual/[id]), and it used to show only
-   * half the active state the four real tabs show — blue text, but no pill
-   * behind the icon. So the bar looked like a different bar depending on
-   * which screen you were on. One condition, read by both the text colour
-   * and the pill.
+   * NO moreActive ANY MORE. It existed so that the "עוד" tab could show the
+   * same active state the four real tabs show on the six routes that had no
+   * tab of their own — blue text AND the pill behind the icon, so the bar did
+   * not look like a different bar depending on which screen you were on.
+   *
+   * With the tab deleted there is nothing to light up: on those routes the
+   * bar now shows no active tab at all, which is the honest answer. The four
+   * that remain each light themselves.
    */
-  const moreActive = moreOpen || !MOBILE_TABS.some((h) => isActive(h, h === '/social'));
 
   /*
    * THE BAR SAYS SOMETHING ONLY WHEN THERE IS SOMETHING TO SAY.
@@ -1090,6 +1091,81 @@ export function SocialShell({
                 >
                   מסך החשבון
                 </Link>
+                {/*
+                  דפי פייסבוק, AND IT IS HERE BECAUSE IT WAS ABOUT TO HAVE
+                  NOWHERE. Every other screen the deleted "עוד" sheet held is
+                  reachable from the screen it belongs to; this one was
+                  reachable from the sheet and from no other link in the
+                  product. It is an account-level thing — which Facebook
+                  identity's pages we publish to — so it belongs under the
+                  face, beside the identity switcher it is about.
+
+                  On a desktop it is also still in the toolbar above. This row
+                  is what a phone has.
+                */}
+                <Link
+                  href="/social/targets"
+                  onClick={() => setWhoOpen(false)}
+                  className="flex min-h-11 items-center gap-2 rounded-xl px-2 text-[12px] font-bold text-mist-100 hover:bg-ink-800 md:hidden"
+                >
+                  <TargetIcon className="h-4 w-4 shrink-0" />
+                  דפי פייסבוק
+                </Link>
+                {/*
+                  THE WAY OUT, MOVED HERE ON REQUEST — and it is the right
+                  place for a second reason.
+                  *
+                  * There was none at all until it was put under "עוד":
+                  * signOut() lives in adminAuth and is called from
+                  * /admin/settings and /crm, neither of which a customer who
+                  * lives on /social ever opens, and the session persists to
+                  * localStorage with an auto-refreshing token, so in practice
+                  * it does not end until somebody presses this. A lost phone,
+                  * a shared phone, an ex-employee.
+                  *
+                  * Under the face is where a person looks for it, and it is
+                  * the only item in this panel that ends the session rather
+                  * than switching one — hence the rule above it and the error
+                  * colour, so it cannot be mistaken for another identity in
+                  * the list.
+                */}
+                <div className="mt-1 border-t border-ink-700 pt-1">
+                  <button
+                    type="button"
+                    disabled={leaving}
+                    onClick={async () => {
+                      const ok = await confirm.ask({
+                        title: 'לצאת מהחשבון?',
+                        body: 'הפרסומים המתוזמנים ימשיכו לצאת כרגיל — יציאה מהחשבון לא עוצרת כלום. תצטרכו להתחבר שוב כדי לראות את לוח הבקרה.',
+                        confirmLabel: 'צא',
+                        danger: true,
+                      });
+                      if (!ok) return;
+                      setLeaving(true);
+                      setWhoOpen(false);
+                      await signOut();
+                      // A full load, not router.replace: the client cache
+                      // still holds the screens of the account being left.
+                      //
+                      // /social/login, not /crm/login — a customer signing out
+                      // of the publishing app must not land on a login for a
+                      // cleaning-jobs CRM they have never heard of.
+                      window.location.href = '/social/login';
+                    }}
+                    className="flex min-h-11 w-full items-center gap-2 rounded-xl px-2 text-start text-[12px] font-bold text-error-400 hover:bg-error-300/12 disabled:text-ink-600"
+                  >
+                    <LogOutIcon className="h-4 w-4 shrink-0" />
+                    {leaving ? 'יוצא…' : 'יציאה מהחשבון'}
+                  </button>
+                </div>
+                {/* Which build this device is actually running. It lived at
+                    the foot of the deleted sheet, and it is the one way to
+                    tell a cached copy from a deployed one — if this does not
+                    change after a deploy, a refresh is what is needed, not
+                    another fix. */}
+                <p className="pt-1 text-center text-[10px] text-mist-500">
+                  גרסת המערכת: <span dir="ltr" className="font-mono">{process.env.NEXT_PUBLIC_BUILD_STAMP || '—'}</span>
+                </p>
               </div>
             </>
           )
@@ -1289,21 +1365,6 @@ export function SocialShell({
                 </li>
               );
             })}
-          <li className="flex flex-1">
-            <button
-              type="button"
-              onClick={() => setMoreOpen(true)}
-              aria-expanded={moreOpen}
-              className={`flex flex-1 flex-col items-center gap-0.5 pb-1.5 pt-2 text-[11px] font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-300 ${
-                moreActive ? 'text-brand-400' : 'text-mist-500'
-              }`}
-            >
-              <span className={`grid h-7 w-13 place-items-center rounded-full transition-[background-color,transform] duration-200 ${moreActive ? 'scale-105 bg-brand-300/12 shadow-[0_4px_12px_rgba(124,58,237,0.18)]' : ''}`}>
-                <MenuIcon className="h-5.5 w-5.5" />
-              </span>
-              עוד
-            </button>
-          </li>
         </ul>
       </nav>
 
@@ -1332,85 +1393,34 @@ export function SocialShell({
         </div>
       )}
 
-      <Sheet open={moreOpen} onClose={() => setMoreOpen(false)} title="עוד">
-        <ul className="pb-2">
-          {nav
-            .filter((n) => !MOBILE_TABS.includes(n.href))
-            .map(({ href, label, icon: Icon, exact }) => (
-              <li key={href}>
-                <Link
-                  href={href}
-                  onClick={() => setMoreOpen(false)}
-                  className={`flex min-h-11 items-center gap-3 rounded-xl px-3 py-3.5 text-base font-bold ${
-                    isActive(href, exact) ? 'bg-brand-300/12 text-brand-400' : 'text-mist-100 hover:bg-ink-900'
-                  }`}
-                >
-                  <Icon className="h-5 w-5" />
-                  {label}
-                </Link>
-              </li>
-            ))}
-          <li>
-            <Link
-              href="/social/posts/new"
-              onClick={() => setMoreOpen(false)}
-              className="mt-1 flex min-h-11 items-center gap-3 rounded-xl bg-brand-300/12 px-3 py-3.5 text-base font-bold text-brand-400"
-            >
-              <ClipboardListIcon className="h-5 w-5" />
-              פוסט חדש
-            </Link>
-          </li>
-        </ul>
-        {/*
-          The way out.
-          
-          There was none. signOut() exists in adminAuth and is called from
-          /admin/settings and /crm, neither of which a customer who lives on
-          /social ever opens — and the session is persisted to localStorage
-          with an auto-refreshing refresh token, so in practice it does not end
-          until somebody presses this. A lost phone, a shared phone, an
-          ex-employee: no exit. It belongs here, under "עוד", where the rest of
-          the account-level items already are.
+      {/*
+        ─── THE "עוד" SHEET IS GONE, AND SO IS THE TAB THAT OPENED IT ─────
+        *
+        * "את התפריט המבורגר למטה בצד ימין למחוק, ההגדרות להשאיר למעלה
+        *  כמו שזה עכשיו. את היציאה מהחשבון להעביר איפה שלוחצים על תמונת
+        *  פרופיל משתמש" — 07.11.2026.
+        *
+        * THE BAR IS FOUR TABS NOW. What the sheet held was not one thing, so
+        * it did not all go to one place, and NOTHING went nowhere — that was
+        * checked route by route before the sheet was deleted, because a
+        * screen with no way in is the defect this product keeps removing:
+        *
+        *   הגדרות        the header's gear, on every screen (line ~412).
+        *                   This is the "להשאיר למעלה כמו שזה עכשיו".
+        *   גילוי קבוצות   the groups screen's own button.
+        *   היסטוריה       LiveBoard and LiveFlow, on the dashboard.
+        *   פעילות          the bell, and the dashboard's activity card.
+        *   פוסט חדש       five places, the library and the dashboard among them.
+        *   דפי פייסבוק     NOWHERE. It was reachable from this sheet and from
+        *                   nothing else in the product, so it moved into the
+        *                   panel under the face with the two items below.
+        *   יציאה מהחשבון  where he asked for it.
+        *   גרסת המערכת    with it — it is how you tell a cached build from a
+        *                   deployed one, and losing it loses that answer.
+        *
+        * The desktop toolbar is untouched: it renders the whole `nav` array
+        * and never used this sheet.
         */}
-        <div className="mt-2 border-t border-ink-700 pt-2">
-          <button
-            type="button"
-            disabled={leaving}
-            onClick={async () => {
-              const ok = await confirm.ask({
-                title: 'לצאת מהחשבון?',
-                body: 'הפרסומים המתוזמנים ימשיכו לצאת כרגיל — יציאה מהחשבון לא עוצרת כלום. תצטרכו להתחבר שוב כדי לראות את לוח הבקרה.',
-                confirmLabel: 'צא',
-                danger: true,
-              });
-              if (!ok) return;
-              setLeaving(true);
-              setMoreOpen(false);
-              await signOut();
-              // A full load, not router.replace: the client cache still holds
-              // the screens of the account being left.
-              //
-              // /social/login, not /crm/login. This pointed at the CRM's door
-              // because for a long time it was the only one — /social had no
-              // login screen of its own, and the owner reached this app on the
-              // CRM's session. For a customer that is somebody else's
-              // business: they would sign out of the publishing app and land
-              // on a login for a cleaning-jobs CRM they have never heard of.
-              window.location.href = '/social/login';
-            }}
-            className="flex min-h-11 w-full items-center gap-3 rounded-xl px-3 py-3.5 text-start text-base font-bold text-error-400 hover:bg-error-300/12 disabled:text-ink-600"
-          >
-            <LogOutIcon className="h-5 w-5" />
-            {leaving ? 'יוצא…' : 'יציאה מהחשבון'}
-          </button>
-        </div>
-        {/* Which build the phone is actually running. Two taps from any screen:
-            if this does not change after a deploy, the browser is serving a
-            cached copy and a refresh is what is needed — not another fix. */}
-        <p className="pb-2 pt-2 text-center text-[11px] text-mist-500">
-          גרסת המערכת: <span dir="ltr" className="font-mono">{process.env.NEXT_PUBLIC_BUILD_STAMP || '—'}</span>
-        </p>
-      </Sheet>
       {confirm.dialog}
     </>
   );

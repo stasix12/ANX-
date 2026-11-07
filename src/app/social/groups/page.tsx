@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { GroupCard } from '@/components/social/GroupCard';
 import { SocialShell } from '@/components/social/SocialShell';
 import { TargetAvatar } from '@/components/social/TargetAvatar';
@@ -138,6 +138,26 @@ export default function GroupsPage() {
   const [cityFor, setCityFor] = useState<string[] | null>(null);
   const [cityDraft, setCityDraft] = useState('');
   const [shown, setShown] = useState(CHUNK);
+  /*
+   * WHERE "הצג אותן" LANDS.
+   *
+   * "שאני לוחץ כאן הצג אותן הוא לא פותח כלום" — and it was not opening
+   * anything, in the only sense that matters: the filter WAS applied, and the
+   * list it filters sits below a search box and four chip rows, which on a
+   * phone is most of a screen away. Nothing under his thumb moved, so the
+   * link read as dead. A filter that changes something off-screen has not
+   * told anybody anything.
+   */
+  const resultsRef = useRef<HTMLDivElement | null>(null);
+  const showBlocked = useCallback(() => {
+    setStatus('blocked');
+    setQuery('');
+    setCityFilter('');
+    setCategoryFilter('');
+    /* After the state lands, not before — the list has to exist at its new
+       length before there is anything to scroll to. */
+    requestAnimationFrame(() => resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+  }, []);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const toast = useToast();
@@ -614,7 +634,7 @@ export default function GroupsPage() {
                 <p className="mt-0.5 text-xs leading-relaxed text-mist-500">
                   אף פרסום לא עלה מהן מעום, והניסיון האחרון נכשל — בדרוך כלל קבוצות מכירת פריטים,
                   שבהן פייסבוק מחליפה את תיבת הכתיבה במסלול של העלאת פריט.{' '}
-                  <button type="button" className="font-bold text-brand-400 underline" onClick={() => { setStatus('blocked'); setQuery(''); setCityFilter(''); setCategoryFilter(''); }}>
+                  <button type="button" className="font-bold text-brand-400 underline" onClick={showBlocked}>
                     הצג אותן
                   </button>
                   {blockedOn.length < blocked.length && ` ${blocked.length - blockedOn.length} כבר מושהות ולא ייגעו.`}
@@ -696,6 +716,23 @@ export default function GroupsPage() {
                  the filter out as "white medium star". */
               options={[
                 { value: 'all', label: 'הכל', count: groups ? statusCounts.all : undefined },
+                /*
+                 * SECOND, NOT LAST — and that is a bug fix, not a preference.
+                 *
+                 * This row scrolls sideways and does not scroll itself to the
+                 * selected chip (SegmentedControl has no scrollIntoView). Put
+                 * last, the chip sat past the right edge on a phone: pressing
+                 * "הצג אותן" selected a chip the owner could not see, in a
+                 * list he could not see either. Beside "הכל" it is the first
+                 * thing in reach, which is also where a count of groups that
+                 * can never publish belongs.
+                 *
+                 * STILL ONLY WHEN THERE IS ONE: "לא ניתן לפרסם 0" on a
+                 * healthy account is a worry with nothing behind it.
+                 */
+                ...(groups && statusCounts.blocked > 0
+                  ? [{ value: 'blocked' as const, label: 'לא ניתן לפרסם', count: statusCounts.blocked }]
+                  : []),
                 { value: 'active', label: 'פעילות', count: groups ? statusCounts.active : undefined },
                 /* Kept APART from "פורסם לאחרונה" rather than beside it. The
                    two read alike and answer opposite questions — one is where
@@ -706,13 +743,6 @@ export default function GroupsPage() {
                 { value: 'favorites', label: 'מועדפות', count: groups ? statusCounts.favorites : undefined },
                 { value: 'recent', label: 'פורסם לאחרונה', count: groups ? statusCounts.recent : undefined },
                 { value: 'paused', label: 'מושהות', count: groups ? statusCounts.paused : undefined },
-                /* LAST IN THE ROW, and only when there is one. A chip reading
-                   "לא ניתן לפרסם 0" on a healthy account is a worry with
-                   nothing behind it; the filter itself stays reachable because
-                   the card below links to it. */
-                ...(groups && statusCounts.blocked > 0
-                  ? [{ value: 'blocked' as const, label: 'לא ניתן לפרסם', count: statusCounts.blocked }]
-                  : []),
               ]}
             />
             <SegmentedControl
@@ -797,6 +827,7 @@ export default function GroupsPage() {
           />
         )}
 
+        <div ref={resultsRef} className="scroll-mt-20" />
         {visible.length > 0 && view === 'grid' && (
           <div className="space-y-5">
             {sections.map((section) => {

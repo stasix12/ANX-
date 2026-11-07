@@ -136,8 +136,33 @@ is(
 
   /* AND IT TAKES HIM TO THE LIST. He verified these by hand once; the card's
      job is to get him to the filtered list, not to be trusted instead of it. */
-  is(/setStatus\('blocked'\)/.test(page), 'the card links to the filtered list');
-  is(/setQuery\(''\); setCityFilter\(''\); setCategoryFilter\(''\)/.test(page), 'and clears the other filters, so the list it opens is the list it counted');
+  /*
+   * ── AND IT HAS TO MOVE SOMETHING ON SCREEN ─────────────────────────
+   *
+   * "שאני לוחץ כאן הצג אותן הוא לא פותח כלום" — shipped exactly like
+   * that, and the filter was working the whole time. The card sits above a
+   * search box and four chip rows; the list it filters is most of a phone
+   * screen below. Setting state that changes something off-screen is
+   * indistinguishable from a dead link.
+   *
+   * Two things were missing and both are pinned: the page has to scroll to
+   * the results, and the chip the press selects has to be somewhere the owner
+   * can see — this row scrolls sideways and SegmentedControl does not scroll
+   * itself to the selected option, so a chip placed last was off the right
+   * edge of the phone.
+   */
+  is(/const showBlocked = useCallback\(\(\) => \{/.test(page), 'the link is one function, not four setters inline');
+  is(/setStatus\('blocked'\);/.test(page), 'it selects the category');
+  is(/setQuery\(''\);/.test(page) && /setCityFilter\(''\);/.test(page) && /setCategoryFilter\(''\);/.test(page), 'and clears the other filters, so the list it opens is the list it counted');
+  is(/resultsRef\.current\?\.scrollIntoView\(\{ behavior: 'smooth', block: 'start' \}\)/.test(page), 'AND it scrolls the results into view — without this the press did nothing the owner could see');
+  is(/requestAnimationFrame\(\(\) =>/.test(page), 'after the state has landed, so there is a list at its new length to scroll to');
+  is(/<div ref=\{resultsRef\}/.test(page), 'and the anchor sits at the top of the results');
+  is(/onClick=\{showBlocked\}/.test(page), 'the card\u2019s link calls it');
+  /* THE CHIP IS IN REACH, not past the right edge of a sideways row. */
+  {
+    const row = page.slice(page.indexOf("value: 'all', label:"), page.indexOf("value: 'paused', label:"));
+    is(/value: 'blocked'/.test(row), 'the chip sits between "הכל" and "מושהות", not at the end of a row that scrolls off the phone');
+  }
 }
 
 console.log(`unpostable groups OK — ${checks} assertions over the rule, his 600-row distribution and the screen`);

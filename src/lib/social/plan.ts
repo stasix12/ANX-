@@ -1082,8 +1082,8 @@ export async function liveTargetIds(db: SupabaseClient, ids: string[]): Promise<
   const unique = [...new Set(ids.filter(Boolean))];
   for (let i = 0; i < unique.length; i += TARGET_ID_CHUNK) {
     const chunk = unique.slice(i, i + TARGET_ID_CHUNK);
-    const { data, error } = await db.from('social_targets').select('id').in('id', chunk);
-    const rows = (data ?? []) as { id: string }[];
+    const { data, error } = await db.from('social_targets').select('id, enabled').in('id', chunk);
+    const rows = (data ?? []) as { id: string; enabled?: boolean | null }[];
     /*
      * TWO WAYS TO LEARN NOTHING, AND NEITHER MEANS "DELETED".
      *
@@ -1104,7 +1104,36 @@ export async function liveTargetIds(db: SupabaseClient, ids: string[]): Promise<
       for (const id of chunk) live.add(id);
       continue;
     }
-    for (const row of rows) live.add(row.id);
+    /*
+     * ───── AND A GROUP THE OWNER SWITCHED OFF IS NOT ONE TO PLAN FOR ─────
+     *
+     * "מהיום כל קבוצה שאני משהה / מסיר זה מוריד אותן אוטומטית מהספירה
+     *  ומהפרסום והמספרים צריכים להתעדכן באותו הרגע." — 07.11.2026.
+     *
+     * rules.ts:252 already refuses a disabled group at claim time ("היעד X
+     * כבוי"), which is the right answer at the wrong moment: by then the row
+     * exists, it has been counted in "ממתינים היום" all day, and it costs a
+     * claim cycle and a "דולג" line to find out. He switched 21 groups off and
+     * the dashboard went on counting their 21 rows, because nothing between
+     * the switch and the claim had heard about it.
+     *
+     * It also closes the loop the other half of this fix would otherwise
+     * open: cancelling a paused group's waiting rows frees it from
+     * targetsAlreadyWaiting, and without this line the very next planner pass
+     * would queue it again. Switched off has to mean "not planned for", or
+     * the number bounces.
+     *
+     * NOT A WHERE CLAUSE, AND THAT IS THE CARE THIS FUNCTION NEEDS. Filtering
+     * in SQL would make a chunk whose hundred groups are ALL disabled come
+     * back empty — indistinguishable, three lines above, from the read that
+     * taught nothing, and that branch adds every id back as live. The filter
+     * is applied to rows that actually arrived, so the fail-open keeps
+     * meaning exactly what it meant.
+     *
+     * `!== false` rather than `=== true`, for the same reason: a column the
+     * read did not carry is not a switch the owner turned off.
+     */
+    for (const row of rows) if (row.enabled !== false) live.add(row.id);
   }
   return live;
 }

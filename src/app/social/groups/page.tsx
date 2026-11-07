@@ -31,6 +31,7 @@ import {
   addGroup,
   bulkDeleteTargets,
   bulkUpdateTargets,
+  pauseTargets,
   getBrowserSettings,
   getLimits,
   lastPublishedAt,
@@ -41,7 +42,7 @@ import {
   requestGroupRefresh,
   updateTarget,
 } from '@/lib/social/client';
-import { formatDayMonthHe } from '@/lib/social/time';
+import { counted, formatDayMonthHe } from '@/lib/social/time';
 import { projectQueue, spacingFrom } from '@/lib/social/projection';
 import { readSchedule, type CampaignSchedule } from '@/lib/social/campaign-schedule';
 import { KNOWN_CITIES, detectCity, sortCities } from '@/lib/social/cities';
@@ -406,7 +407,7 @@ export default function GroupsPage() {
       { label: 'צור פוסט לקבוצה הזו', icon: <PencilIcon className={mk} />, onSelect: () => router.push(`/social/posts/new?targets=${g.id}`) },
       { label: 'שייך לעיר', icon: <MapPinIcon className={mk} />, onSelect: () => setCityFor([g.id]) },
       { label: g.favorite ? 'הסר מהמועדפות' : 'הוסף למועדפות', icon: <StarIcon className={mk} />, onSelect: () => act(`fav-${g.id}`, () => updateTarget(g.id, { favorite: !g.favorite })) },
-      { label: g.enabled ? 'השהה קבוצה' : 'הפעל קבוצה', icon: g.enabled ? <PauseIcon className={mk} /> : <PlayIcon className={mk} />, onSelect: () => act(`on-${g.id}`, () => updateTarget(g.id, { enabled: !g.enabled }), g.enabled ? 'הקבוצה הושהתה.' : 'הקבוצה הופעלה.') },
+      { label: g.enabled ? 'השהה קבוצה' : 'הפעל קבוצה', icon: g.enabled ? <PauseIcon className={mk} /> : <PlayIcon className={mk} />, onSelect: () => act(`on-${g.id}`, () => (g.enabled ? pauseTargets([g.id]).then((r) => toast(r.cancelled ? `הקבוצה הושהתה — ${counted(r.cancelled, 'פרסום אחד שהמתין בוטל', 'פרסומים שהמתינו בוטלו', 'שני פרסומים שהמתינו בוטלו')}` : 'הקבוצה הושהתה.')) : updateTarget(g.id, { enabled: true }).then(() => toast('הקבוצה הופעלה.')))) },
       /* The same request as before — it clears last_synced_at and the worker
          re-opens the group — but the visit now also reads whether this account
          can still post there, so the label says both things it does. */
@@ -457,7 +458,7 @@ export default function GroupsPage() {
     },
     { label: 'נקה בחירה', icon: <CloseIcon className={mk} />, disabled: selected.length === 0, onSelect: () => setSelected([]) },
     { label: 'הפעל', icon: <PlayIcon className={mk} />, disabled: selected.length === 0, onSelect: () => act('bulk-on', () => bulkUpdateTargets(selected, { enabled: true }), 'הופעלו.') },
-    { label: 'השהה', icon: <PauseIcon className={mk} />, disabled: selected.length === 0, onSelect: () => act('bulk-off', () => bulkUpdateTargets(selected, { enabled: false }), 'הושהו.') },
+    { label: 'השהה', icon: <PauseIcon className={mk} />, disabled: selected.length === 0, onSelect: () => act('bulk-off', () => pauseTargets(selected).then((r) => toast(r.cancelled ? `הושהו — ${counted(r.cancelled, 'פרסום אחד שהמתין בוטל', 'פרסומים שהמתינו בוטלו', 'שני פרסומים שהמתינו בוטלו')}` : 'הושהו.'))) },
     { label: 'סמן כמועדפות', icon: <StarIcon className={mk} />, disabled: selected.length === 0, onSelect: () => act('bulk-fav', () => bulkUpdateTargets(selected, { favorite: true }), 'סומנו כמועדפות.') },
     { label: 'שייך לעיר', icon: <MapPinIcon className={mk} />, disabled: selected.length === 0, onSelect: () => setCityFor(selected) },
     { label: 'שייך לקטגוריה', icon: <TagIcon className={mk} />, disabled: selected.length === 0, onSelect: () => { setCategoryDraft(''); setCategoryOpen(true); } },
@@ -637,25 +638,38 @@ export default function GroupsPage() {
                   <button type="button" className="font-bold text-brand-400 underline" onClick={showBlocked}>
                     הצג אותן
                   </button>
-                  {blockedOn.length < blocked.length && ` ${blocked.length - blockedOn.length} כבר מושהות ולא ייגעו.`}
+                  {/* AND THIS SENTENCE USED TO SAY "ולא ייגעו", which stopped
+                      being true the moment the switch started clearing the
+                      queue: an already-paused group may still be holding
+                      waiting publications, and this button is the only way to
+                      cancel them. */}
+                  {blockedOn.length < blocked.length && ` ${blocked.length - blockedOn.length} כבר מושהות — יישארו כאלה, ואם נשארו להן פרסומים בתור הם יבוטלו.`}
                 </p>
               </div>
               <div className="flex shrink-0 flex-wrap gap-2">
                 <Button
                   variant="secondary"
                   busy={busy === 'blocked-off'}
-                  disabled={blockedOn.length === 0}
                   className="shrink-0 whitespace-nowrap"
                   onClick={() =>
                     act(
                       'blocked-off',
-                      () => bulkUpdateTargets(blockedOn.map((g) => g.id), { enabled: false }),
-                      blockedOn.length === 1 ? 'הקבוצה הושהתה — לא ייכנסו אליה פרסומים חדשים.' : `${blockedOn.length} קבוצות הושהו — לא ייכנסו אליהן פרסומים חדשים.`,
+                      /* THE WHOLE LIST, not only the ones still on. Calling
+                         this on a group that is already off is the repair
+                         path for every group switched off before the switch
+                         cleared the queue — and the only one he has. */
+                      () => pauseTargets(blocked.map((g) => g.id)).then((r) =>
+                        toast(
+                          r.cancelled
+                            ? `${blocked.length} קבוצות הושהו — ${counted(r.cancelled, 'פרסום אחד שהמתין בוטל', 'פרסומים שהמתינו בוטלו', 'שני פרסומים שהמתינו בוטלו')}`
+                            : `${blocked.length} קבוצות הושהו — לא נותרו פרסומים ממתינים אליהן.`,
+                        ),
+                      ),
                     )
                   }
                 >
                   <PauseIcon className="h-4 w-4" />
-                  {blockedOn.length > 1 ? `השהה את ${blockedOn.length}` : 'השהה אותה'}
+                  {blocked.length > 1 ? `השהה את ${blocked.length}` : 'השהה אותה'}
                 </Button>
                 <Button
                   variant="danger"

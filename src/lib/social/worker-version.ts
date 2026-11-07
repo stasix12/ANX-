@@ -643,7 +643,7 @@
  *
  * התזמון, סדר התור, מנגנון הפרסום וחישוב זמני הפרסום לא נגעו.
  */
-export const WORKER_VERSION = '4.52.0';
+export const WORKER_VERSION = '4.53.0';
 
 /**
  * A FINGERPRINT OF EVERYTHING THE INSTALLER CARRIES.
@@ -1199,5 +1199,35 @@ export const WORKER_VERSION = '4.52.0';
    IT WILL, THOUGH, AND DELIBERATELY. The predicate was put in status.ts
    rather than in the page because the quarantine this is the manual version
    of belongs in the worker, and two copies of the rule would drift towards
-   deleting a working group. When that lands, the version bumps with it. */
-export const WORKER_FINGERPRINT = '848fbc73a01b1bcb';
+   deleting a working group. When that lands, the version bumps with it.
+
+   ─── AND IT LANDED, SO THE VERSION BUMPS: 4.52.0 → 4.53.0.
+
+   "על תציע לי פתרון חלקי — מהיום כל קבוצה שאני משהה / מסיר זה מוריד אותן
+   אוטומטית מהספירה ומהפרסום והמספרים צריכים להתעדכן באותו הרגע." — 07.11.2026.
+
+   liveTargetIds() in plan.ts now leaves a switched-off group out of the
+   plan, and THIS ONE RUNS ON THE PC. Asked of the build rather than reasoned
+   at, which is what this guard is for:
+
+     npm run build:app
+     grep -c liveTargetIds  dist/app/worker.cjs → 4
+     grep -c planQueue      dist/app/worker.cjs → 3
+     grep -c pauseTargets   dist/app/worker.cjs → 0
+
+   The planner and the function it calls are both in there; the browser half
+   is not, as it should not be. A machine that does not update keeps queueing
+   publications into groups its owner switched off.
+
+   The browser half — pauseTargets(), which cancels the waiting rows —
+   reaches him the moment Vercel finishes and is correct on its own. But the
+   two are designed as a PAIR, and only the pair stops the number bouncing:
+   cancelling a paused group's rows frees it from targetsAlreadyWaiting, and
+   an un-updated planner queues it straight back on its next pass. Shipping
+   the browser half alone would have been the partial fix he refused.
+
+   AND THE NUMBER WAS CHECKED AGAINST THE RELEASE LIST, not against this
+   file. The workflow refuses a version that is already published; on
+   07.11.2026 GitHub's newest published tag was v4.52.0, so 4.53.0 is free.
+   This file cannot answer that question and must not be trusted to. */
+export const WORKER_FINGERPRINT = '58f16233fd8ba76d';

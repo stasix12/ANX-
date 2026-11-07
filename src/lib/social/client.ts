@@ -558,6 +558,66 @@ async function forgetTargetsInSchedules(ids: string[]): Promise<void> {
   }
 }
 
+/**
+ * ───── SWITCHING A GROUP OFF TAKES ITS WAITING PUBLICATIONS WITH IT ─────
+ *
+ * "השהיתי עכשיו את הקבוצות האלה, למה זה לא ירד במספר ב״ממתינים היום״" ·
+ * "מהיום כל קבוצה שאני משהה / מסיר זה מוריד אותן אוטומטית מהספירה ומהפרסום
+ *  והמספרים צריכים להתעדכן באותו הרגע." — 07.11.2026.
+ *
+ * THE MEASUREMENT, from his own database at the moment he asked: 284 rows
+ * waiting for today, 21 of them belonging to the 21 groups he had switched
+ * off ninety seconds earlier. The switch did two of the three things it
+ * reads as doing — the planner would stop adding, and rules.ts:252 would
+ * refuse each row at claim time — and left the third undone. So the rows sat
+ * there being counted until their own instants came round that evening,
+ * burning a claim and a "דולג" line each to reach a verdict the owner had
+ * already given.
+ *
+ * SO THE SWITCH DOES ALL THREE NOW, and the third one is this function.
+ *
+ * IT IS DELIBERATELY IDEMPOTENT. Calling it on a group that is already off
+ * is not a mistake to guard against — it is the repair path for every group
+ * switched off before this existed, and the only one the owner has.
+ *
+ * WHAT IT WILL NOT TOUCH, and these are the same two exclusions
+ * removeTargetFromQueue() carries, for the same reasons:
+ *   • a row whose step is MAYBE_LIVE_STEP — the post may already be on the
+ *     page, and cancelling it would hide a publication that happened;
+ *   • anything outside CANCELLABLE_STATUSES — published and failed rows are
+ *     history, and a row in flight is not ours to re-decide.
+ *
+ * AND IT DOES NOT UNPLAN. removeTargetFromQueue() takes the group out of the
+ * round's target_ids because removing is final; a pause is not. The group
+ * stays in the round, liveTargetIds() skips it while it is off, and
+ * switching it back on puts it in the next plan with nothing to re-add by
+ * hand. That pairing is the whole design: without the planner change this
+ * would free the group from targetsAlreadyWaiting and the next pass would
+ * queue it straight back.
+ */
+export async function pauseTargets(ids: string[]): Promise<{ cancelled: number }> {
+  if (!ids.length) return { cancelled: 0 };
+  unwrap(await db().from('social_targets').update({ enabled: false }).in('id', ids));
+  const rows = unwrap<{ id: string }[]>(
+    await db()
+      .from('social_queue')
+      .update({ status: 'skipped', step: '', skip_reason: 'הקבוצה הושהתה' })
+      .neq('step', MAYBE_LIVE_STEP)
+      .in('target_id', ids)
+      .in('status', CANCELLABLE)
+      .select('id'),
+  );
+  if (rows.length) {
+    await logClientActivity(
+      'info',
+      'queue_target_removed',
+      `${ids.length === 1 ? 'קבוצה הושהתה' : `${ids.length} קבוצות הושהו`} — ${counted(rows.length, 'פרסום אחד שהמתין בוטל', 'פרסומים שהמתינו בוטלו', 'שני פרסומים שהמתינו בוטלו')}`,
+      { targetIds: ids.slice(0, 50), targets: ids.length, cancelled: rows.length },
+    );
+  }
+  return { cancelled: rows.length };
+}
+
 export async function bulkDeleteTargets(ids: string[]): Promise<void> {
   if (!ids.length) return;
   await dismissDiscoveredFor(ids);

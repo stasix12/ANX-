@@ -120,10 +120,17 @@ is(
   is(/statusCounts\.blocked > 0/.test(page), 'and it only appears when there is something in it');
 
   /* THE TWO BUTTONS, AND WHICH ROWS EACH ONE TOUCHES. */
-  is(/const blockedOn = useMemo\(\(\) => blocked\.filter\(\(g\) => g\.enabled\), \[blocked\]\)/.test(page), 'switching off acts on the ones still ON');
-  is(/bulkUpdateTargets\(blockedOn\.map\(\(g\) => g\.id\), \{ enabled: false \}\)/.test(page), 'and it switches them off — reversible, history kept');
+  /*
+   * BOTH BUTTONS ACT ON THE WHOLE LIST, and the pause one did not at first.
+   * It was scoped to the groups still switched ON, which reads sensible and
+   * leaves no way to repair the ones switched off BEFORE the switch learned
+   * to clear the queue — the 21 rows he was looking at. pauseTargets() is
+   * idempotent precisely so this button can be the repair path.
+   */
+  is(/pauseTargets\(blocked\.map\(\(g\) => g\.id\)\)/.test(page), 'switching off acts on the whole list, so it also clears a queue left behind by an earlier pause');
+  is(!/כבר מושהות ולא ייגעו/.test(page), 'and the card no longer claims it will not touch the already-paused ones — it does, to clear their queue');
   is(/bulkDeleteTargets\(blocked\.map\(\(g\) => g\.id\)\)/.test(page), 'and delete acts on the whole list, as he asked for');
-  is(/disabled=\{blockedOn\.length === 0\}/.test(page), 'the switch-off button is disabled once they are all off, so a second press cannot read as "it did nothing"');
+  is(!/disabled=\{blockedOn\.length === 0\}/.test(page), 'and the pause button is not disabled when they are already off — there may still be rows to cancel');
 
   /* DELETE GOES THROUGH THE SAME WARNING THE BULK BAR USES. It takes the
      group's whole publication history with it — which is also the only
@@ -163,6 +170,67 @@ is(
     const row = page.slice(page.indexOf("value: 'all', label:"), page.indexOf("value: 'paused', label:"));
     is(/value: 'blocked'/.test(row), 'the chip sits between "הכל" and "מושהות", not at the end of a row that scrolls off the phone');
   }
+}
+
+/* ── 6. SWITCHING A GROUP OFF HAS TO MEAN ALL THREE THINGS ─────────── */
+{
+  /*
+   * "השהיתי עכשיו את הקבוצות האלה, למה זה לא ירד במספר ב״ממתינים היום״" ·
+   * "על תציע לי פתרון חלקי — מהיום כל קבוצה שאני משהה / מסיר זה מוריד אותן
+   *  אוטומטית מהספירה ומהפרסום והמספרים צריכים להתעדכן באותו הרגע."
+   *
+   * Measured at the moment he asked: 284 rows waiting for today, 21 of them
+   * in the 21 groups he had switched off ninety seconds earlier. The switch
+   * stopped the planner adding more and rules.ts:252 would refuse each row at
+   * claim time — but the rows already queued stayed, were counted all day,
+   * and would each have cost a claim and a "דולג" line that evening.
+   *
+   * THE TWO HALVES ONLY WORK TOGETHER, and that is the thing to protect:
+   * cancelling a paused group's rows frees it from targetsAlreadyWaiting, so
+   * without the planner also skipping it the very next pass queues it again
+   * and the number bounces. Either half alone is worse than neither.
+   */
+  const strip = (src: string) => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  const client = strip(readFileSync('src/lib/social/client.ts', 'utf8'));
+  const plan = strip(readFileSync('src/lib/social/plan.ts', 'utf8'));
+  const page = strip(readFileSync('src/app/social/groups/page.tsx', 'utf8'));
+
+  /* ── half one: the switch clears the queue ── */
+  const pause = client.slice(client.indexOf('export async function pauseTargets'));
+  const body = pause.slice(0, pause.indexOf('\n}\n'));
+  is(/export async function pauseTargets\(ids: string\[\]\)/.test(client), 'switching off is one function, so every path does the same thing');
+  is(/\.update\(\{ enabled: false \}\)\.in\('id', ids\)/.test(body), 'it switches the groups off');
+  is(/status: 'skipped', step: '', skip_reason: 'הקבוצה הושהתה'/.test(body), 'and cancels their waiting publications, with a reason a person can read');
+  /* THE TWO EXCLUSIONS, the same ones removeTargetFromQueue carries. */
+  is(/\.neq\('step', MAYBE_LIVE_STEP\)/.test(body), 'never a row that may already be live — cancelling it would hide a publication that happened');
+  is(/\.in\('status', CANCELLABLE\)/.test(body), 'and never history or a row in flight');
+  /* A PAUSE IS NOT A REMOVAL: the group stays in the round so switching it
+     back on needs nothing re-added by hand. */
+  is(!/unplanTarget/.test(body), 'and it does NOT take the group out of the round — that is what removing does, and a pause is reversible');
+
+  /* ── half two: the planner stops queueing it ── */
+  const live = plan.slice(plan.indexOf('export async function liveTargetIds'));
+  const liveBody = live.slice(0, live.indexOf('\n}\n'));
+  is(/for \(const row of rows\) if \(row\.enabled !== false\) live\.add\(row\.id\);/.test(liveBody), 'the planner leaves a switched-off group out of the plan');
+  /*
+   * AND IT FILTERS THE ROWS THAT CAME BACK, NOT THE QUERY. A WHERE clause
+   * would make a chunk whose hundred groups are all disabled return empty —
+   * indistinguishable from the read that taught nothing, whose branch adds
+   * every id back as live. That is the bug this shape avoids.
+   */
+  is(/\.select\('id, enabled'\)\.in\('id', chunk\)/.test(liveBody), 'by reading the column, not by filtering in SQL');
+  is(!/\.eq\('enabled', true\)/.test(liveBody), 'because a chunk that is entirely disabled must not look like a failed read');
+  is(/if \(error \|\| rows\.length === 0\) \{/.test(liveBody), 'and the fail-open still means exactly what it meant');
+  is(!/row\.enabled === true/.test(liveBody), 'a column the read did not carry is not a switch the owner turned off');
+
+  /* ── and every path that pauses goes through it ── */
+  is(!/bulkUpdateTargets\(selected, \{ enabled: false \}\)/.test(page), 'the bulk bar no longer switches off without clearing the queue');
+  is(/pauseTargets\(selected\)/.test(page), 'it calls the one function');
+  is(/pauseTargets\(\[g\.id\]\)/.test(page), 'so does the single-group menu');
+  is(/pauseTargets\(blocked\.map\(\(g\) => g\.id\)\)/.test(page), 'and so does the card — over the WHOLE list, which is the repair path for groups switched off before this existed');
+  /* Switching back ON is still the plain write: there is no queue to clear,
+     and the planner brings the group back by itself. */
+  is(/updateTarget\(g\.id, \{ enabled: true \}\)/.test(page), 'switching back on stays a plain write');
 }
 
 console.log(`unpostable groups OK — ${checks} assertions over the rule, his 600-row distribution and the screen`);

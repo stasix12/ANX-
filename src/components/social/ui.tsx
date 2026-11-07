@@ -1103,6 +1103,44 @@ export function SkeletonList({ rows = 4 }: { rows?: number }) {
 }
 
 
+/**
+ * A BLUE CIRCLE THAT SAYS "THIS IS LOADING, NOT BROKEN".
+ *
+ * "שאני משנה מצב לוחץ על כפתור או משנה שעה במסך קופא (ממתין) במקום זה אני
+ *  רוצה שיהיה עיגול כחול של טעינה שאנשים יבינו שזה לא באג אלא טעינה."
+ *
+ * Every slow control in this product already knew it was working — the hour
+ * he changes re-times dozens of rows, and the panel around it goes `disabled`
+ * for as long as that takes. Disabled is the right behaviour and a terrible
+ * message: the controls grey out, nothing moves, and the only honest reading
+ * from the outside is that the app is stuck. A `Button` has had a spinner in
+ * it for months; the controls that only switch off had nothing.
+ *
+ * So this is that spinner, on its own, in the product's own blue — one shape
+ * for "working" wherever a control cannot say it for itself.
+ */
+export function WorkingNote({
+  label = 'שומר…',
+  className = '',
+}: {
+  /** What is happening, in the owner's words. Never a technical one. */
+  label?: string;
+  className?: string;
+}) {
+  return (
+    /* role="status" + aria-live: a screen reader hears it start, and hears it
+       stop, without the focus moving anywhere. */
+    <span
+      role="status"
+      aria-live="polite"
+      className={`inline-flex items-center gap-1.5 rounded-full bg-brand-300/12 px-2.5 py-1 text-[11.5px] font-extrabold leading-4 text-brand-400 ${className}`}
+    >
+      <SpinnerIcon aria-hidden className="h-3.5 w-3.5 shrink-0 animate-spin" />
+      {label}
+    </span>
+  );
+}
+
 /* --------------------------------------------------------------- toasts */
 
 type ToastTone = 'success' | 'error' | 'info';

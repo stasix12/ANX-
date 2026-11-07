@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
-import { CalendarIcon, ChevronIcon, PauseIcon, RepeatIcon } from '@/components/icons';
+import { CalendarIcon, ChevronIcon, PauseIcon, RepeatIcon, SpinnerIcon } from '@/components/icons';
 import {
   canPauseRun,
   canResumeRun,
@@ -826,6 +826,9 @@ export function LiveCampaignHero({
                 roundProgress={state.byRound}
                 campaignName={campaign.name}
                 disabled={scheduleBusy}
+                /* …and WHY it is disabled: the blue circle, where he is
+                   looking when he changes the hour. */
+                busy={scheduleBusy}
                 /* The second gate, so the panel can say which of the two is
                    actually deciding — see the note on the prop. */
                 accountFloorSeconds={spacing ? accountGapSeconds(spacing, spacing, true) : undefined}
@@ -924,8 +927,12 @@ export function LiveCampaignHero({
           type="button"
           onClick={onReset}
           disabled={busy}
-          className="mt-2 min-h-11 w-full rounded-xl text-sm font-bold text-mist-500 transition-colors hover:bg-ink-900 hover:text-mist-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-300 focus-visible:ring-offset-2 focus-visible:ring-offset-ink-850 disabled:text-ink-600"
+          aria-busy={busy || undefined}
+          className="mt-2 inline-flex min-h-11 w-full items-center justify-center gap-1.5 rounded-xl text-sm font-bold text-mist-500 transition-colors hover:bg-ink-900 hover:text-mist-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-300 focus-visible:ring-offset-2 focus-visible:ring-offset-ink-850 disabled:text-ink-600"
         >
+          {/* It only went grey before, which from the outside is a button that
+              stopped working. The circle is what says it is running. */}
+          {busy && <SpinnerIcon aria-hidden className="h-4 w-4 shrink-0 animate-spin text-brand-400" />}
           סיים את הסבב ואפס את המונה
         </button>
       )}

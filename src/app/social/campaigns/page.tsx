@@ -811,6 +811,16 @@ export default function CampaignsPage() {
     <SocialShell
       /* PULL DOWN TO RELOAD — the same loader this screen's own actions call. */
       onRefresh={load}
+      /*
+       * THE BLUE CIRCLE WHILE SOMETHING IS BEING WRITTEN.
+       *
+       * "במסך קופא (ממתין) … אני רוצה שיהיה עיגול כחול של טעינה שאנשים יבינו
+       *  שזה לא באג אלא טעינה." Every action on this screen sets one of these
+       * two: `busy` is the one-at-a-time actions (pause, reset, run now, the
+       * queue), `scheduleBusy` is a campaign's own row being re-timed, which
+       * is the slow one — it re-times every waiting publication of the round.
+       */
+      working={Boolean(busy) || Object.values(scheduleBusy).some(Boolean)}
       title="קמפיינים"
       lede="כל קמפיין שהפעלתם — מה יצא, מה עוד יוצא, ומה אפשר לעצור"
       /*

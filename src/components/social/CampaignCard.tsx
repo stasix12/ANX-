@@ -684,6 +684,7 @@ export function CampaignCard({
             onRepeatChange={onRepeatChange}
             campaignName={campaign.name}
             disabled={scheduleBusy}
+            busy={scheduleBusy}
             accountFloorSeconds={spacing ? accountGapSeconds(spacing, spacing, true) : undefined}
             onAccountGapChange={onAccountGapChange}
             /* The account's own repeat floor, so the card judges the rounds

@@ -31,6 +31,14 @@ import { type ScheduleReadout } from '@/lib/social/schedule-readout';
 declare global {
   interface Window {
     __changes: CampaignSchedule[];
+    /**
+     * THE SECONDS AFTER A TAP, WHICH IS WHEN HE SAID IT LOOKS BROKEN.
+     *
+     * "שאני משנה מצב לוחץ על כפתור או משנה שעה במסך קופא (ממתין)." The page
+     * switches this on while the campaign's row is being written and its
+     * queue re-timed; the panel has to say so rather than only go grey.
+     */
+    __busy: (on: boolean) => void;
   }
 }
 window.__changes = [];
@@ -56,6 +64,8 @@ function Harness() {
   /* The reference's own setting, switched on — the state the owner's screen
      is in when he looks at it. */
   const [schedule, setSchedule] = useState<CampaignSchedule>({ ...DEFAULT_CAMPAIGN_SCHEDULE, enabled: true });
+  const [busy, setBusy] = useState(false);
+  window.__busy = setBusy;
   return (
     <div className="social-theme" style={{ padding: 16, maxWidth: 360 }}>
       <CampaignSchedulePanel
@@ -68,6 +78,10 @@ function Harness() {
           window.__changes.push(next);
           setSchedule(next);
         }}
+        /* Exactly as both callers pass them: switched off while it saves,
+           and saying why. */
+        disabled={busy}
+        busy={busy}
       />
     </div>
   );

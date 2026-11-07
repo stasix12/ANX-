@@ -27,7 +27,7 @@ import { InstallPrompt } from './InstallPrompt';
 import { NotificationBell } from './NotificationBell';
 import { BrowserStatusCard } from './BrowserStatusCard';
 import { UpdateBanner } from './UpdateBanner';
-import { Sheet, TONE_TEXT, useConfirm, type Tone } from './ui';
+import { Sheet, TONE_TEXT, WorkingNote, useConfirm, type Tone } from './ui';
 
 /*
  * The dot beside the status line, in the INDICATOR step of each tone rather
@@ -130,6 +130,7 @@ export function SocialShell({
   systemState,
   onControlChanged,
   onRefresh,
+  working = false,
   children,
 }: {
   title: string;
@@ -147,6 +148,23 @@ export function SocialShell({
    * still shows its title, so this is a prop rather than a deletion.
    */
   hideTitle?: boolean;
+  /**
+   * SOMETHING THE OWNER STARTED IS STILL RUNNING.
+   *
+   * "שאני משנה מצב לוחץ על כפתור או משנה שעה במסך קופא (ממתין) … אני רוצה
+   *  שיהיה עיגול כחול של טעינה שאנשים יבינו שזה לא באג אלא טעינה."
+   *
+   * Controls that can speak for themselves do — a Button carries its own
+   * spinner, the scheduling panel carries one at the top of its block. This
+   * is the screen-level answer for everything else: a write that re-times a
+   * queue takes seconds, and for those seconds the only thing on screen was
+   * a few greyed-out controls.
+   *
+   * It lands where the toasts land, because that is where this app already
+   * speaks, and it says what is happening rather than that something is.
+   * `true` uses the default wording.
+   */
+  working?: boolean | string;
   /**
    * PULL DOWN AT THE TOP TO RELOAD THIS SCREEN.
    *
@@ -1157,6 +1175,30 @@ export function SocialShell({
       </nav>
 
       {/* Overflow sheet: the screens that do not earn a permanent tab. */}
+      {/*
+        THE BLUE CIRCLE FOR THE WHOLE SCREEN.
+
+        In the toasts' own place: bottom centre on a phone, above the tab bar,
+        and out of the corner on a desktop. z-[59] keeps it under them — a
+        toast is the ANSWER and must never be covered by the question.
+
+        It is in `furniture` rather than in the page, so the pull-to-refresh
+        gesture cannot carry it off the bottom of the screen: a wrapper with a
+        transform on it is the containing block for everything fixed inside
+        it, which is the fault this file carries a long note about.
+      */}
+      {working && (
+        <div
+          data-working
+          className="pointer-events-none fixed inset-x-0 bottom-[calc(5.5rem+var(--safe-b))] z-[59] flex justify-center px-4 md:bottom-6 md:justify-end"
+        >
+          <WorkingNote
+            label={typeof working === 'string' ? working : 'רגע, שומר…'}
+            className="border border-ink-700 bg-ink-850 px-3 py-1.5 text-[12px] shadow-[0_4px_14px_rgba(40,20,80,0.06),0_18px_44px_-12px_rgba(46,16,101,0.18)]"
+          />
+        </div>
+      )}
+
       <Sheet open={moreOpen} onClose={() => setMoreOpen(false)} title="עוד">
         <ul className="pb-2">
           {nav

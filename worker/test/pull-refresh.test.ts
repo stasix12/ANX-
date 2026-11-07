@@ -440,6 +440,19 @@ async function main(): Promise<void> {
         holder && shell.slice(shell.indexOf('</PullToRefresh>')).includes(`{${holder.name}}`),
         'and it is still rendered, after the wrapper rather than inside it',
       );
+      /*
+       * AND SO IS THE "SAVING" PILL, for exactly the same reason.
+       *
+       * "אני רוצה שיהיה עיגול כחול של טעינה שאנשים יבינו שזה לא באג אלא
+       *  טעינה." It is `position: fixed` at the foot of the screen, so a
+       * wrapper with a transform on it would carry it off the bottom mid-pull
+       * — the fault this whole section exists for. It belongs in the same
+       * block as the bar.
+       */
+      is(
+        holder && shell.slice(holder.at, holder.end).includes('data-working'),
+        'the saving pill is in the block the gesture does NOT lift, beside the bar',
+      );
     }
 
     eq(crashes, [], 'the gesture threw');

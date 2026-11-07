@@ -31,7 +31,7 @@ import { accountGapLabel } from '@/lib/social/rules';
 import { type ScheduleReadout } from '@/lib/social/schedule-readout';
 import { CalendarIcon, CheckIcon, ChevronDownIcon, ClockIcon, MoreIcon, PlusIcon, RepeatIcon, TrashIcon } from '@/components/icons';
 import { NextPublication } from './NextPublication';
-import { InfoDot, Toggle } from './ui';
+import { InfoDot, Toggle, WorkingNote } from './ui';
 
 /**
  * "תזמון פרסום" — the panel inside every campaign card.
@@ -149,6 +149,7 @@ export function CampaignSchedulePanel({
   onChange,
   campaignName,
   disabled = false,
+  busy = false,
   repeat,
   onRepeatChange,
   roundProgress,
@@ -187,6 +188,19 @@ export function CampaignSchedulePanel({
   campaignName: string;
   /** While the campaign's own row is being written by something else. */
   disabled?: boolean;
+  /**
+   * AND WHY IT IS DISABLED, when the reason is "it is saving right now".
+   *
+   * "שאני משנה מצב לוחץ על כפתור או משנה שעה במסך קופא (ממתין) … אני רוצה
+   *  שיהיה עיגול כחול של טעינה שאנשים יבינו שזה לא באג אלא טעינה."
+   *
+   * Changing the hour re-times every waiting row of the round — 53 of them on
+   * the screen he photographed — and for those seconds every control here was
+   * switched off with nothing to say for itself. Separate from `disabled` on
+   * purpose: a caller that switches the panel off for any OTHER reason must
+   * not claim to be saving.
+   */
+  busy?: boolean;
   /**
    * Whether to draw the title and the switch.
    *
@@ -397,8 +411,21 @@ export function CampaignSchedulePanel({
      * measured suite selects to find "the scheduling area", and that area is
      * all three.
      */
-    <div data-schedule className="mt-1.5">
+    <div data-schedule aria-busy={busy || undefined} className="mt-1.5">
       <div className="rounded-2xl bg-brand-300/10 p-2">
+        {/*
+          THE BLUE CIRCLE, FIRST IN THE BLOCK.
+
+          The dashboard hides this panel's own header, so this row is the top
+          of what he sees — and it is the row that changes the instant a day,
+          an hour or the interval is touched. The controls below stay switched
+          off while the write runs, which is right; this is what says so.
+        */}
+        {busy && (
+          <div data-saving className="mb-1.5 flex justify-center">
+            <WorkingNote label="שומר את השינוי…" />
+          </div>
+        )}
         {/* ─── 1. the header: calendar, title, subtitle, switch ───────────── */}
         <div className={`items-start gap-2 ${showHeader ? 'flex' : 'hidden'}`}>
           {/* The image's own white icon tile. It is not a control, so it has

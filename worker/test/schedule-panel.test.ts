@@ -416,6 +416,69 @@ async function main(): Promise<void> {
       'and it reaches the network for none of it',
     );
 
+    /* ── WHILE IT SAVES, IT SAYS SO ──────────────────────────────────── */
+    /*
+     * "שאני משנה מצב לוחץ על כפתור או משנה שעה במסך קופא (ממתין) במקום זה אני
+     *  רוצה שיהיה עיגול כחול של טעינה שאנשים יבינו שזה לא באג אלא טעינה."
+     *
+     * Changing the hour here re-times every waiting row of the round — 53 of
+     * them on the screen he photographed — and for those seconds the panel
+     * went `disabled` and nothing else. Grey controls that do not respond are
+     * indistinguishable from a broken screen, which is exactly how he read
+     * them.
+     *
+     * FOUR THINGS, because three of them are the ways this could be faked:
+     * the circle is THERE, it is BLUE, it is actually TURNING (an icon that
+     * merely carries a spin class is not a spinner — see live-flow §8 on
+     * `animation-name`), and the controls underneath are still switched off,
+     * because saying "saving" over live controls would be the other lie.
+     */
+    {
+      await page.evaluate(() => window.__busy(true));
+      await page.waitForTimeout(150);
+      const saving = await page.evaluate(() => {
+        const note = document.querySelector('[data-schedule] [data-saving]') as HTMLElement | null;
+        if (!note) return null;
+        const circle = note.querySelector('svg') as SVGElement | null;
+        const box = note.getBoundingClientRect();
+        return {
+          text: (note.textContent ?? '').trim(),
+          shown: box.width > 0 && box.height > 0 && getComputedStyle(note).visibility !== 'hidden',
+          colour: circle ? getComputedStyle(circle).color : '',
+          /* A real animation, running, on the circle itself. */
+          turning: circle ? (circle as unknown as Element).getAnimations({ subtree: true }).length : 0,
+          /* And the panel still says it is busy to anything listening. */
+          aria: (document.querySelector('[data-schedule]') as HTMLElement).getAttribute('aria-busy'),
+          /* The controls under it: a day chip and the hour. */
+          dayOff: (document.querySelector('[data-schedule] [role="group"] button') as HTMLButtonElement | null)?.disabled ?? null,
+          hourOff: (document.querySelector('[data-schedule] input[type="time"]') as HTMLInputElement | null)?.disabled ?? null,
+        };
+      });
+      is(saving, 'the panel shows something while it saves');
+      is(saving!.shown, 'and it is on screen, with a box of its own');
+      is(saving!.text.includes('שומר'), `and it says what is happening — "${saving!.text}"`);
+      is(saving!.turning > 0, 'THE CIRCLE IS ACTUALLY TURNING — a spin class with no animation behind it is a still picture');
+      eq(saving!.colour, 'rgb(21, 80, 196)', 'and it is the product\'s own blue, as he asked');
+      eq(saving!.aria, 'true', 'the panel announces itself busy to a screen reader too');
+      eq(saving!.dayOff, true, 'the days stay switched off while the write runs — the old behaviour, which was right');
+      eq(saving!.hourOff, true, 'and so does the hour');
+
+      /* AND IT GOES AWAY. A spinner that outlives its write is the same bug
+         wearing the opposite costume. */
+      await page.evaluate(() => window.__busy(false));
+      await page.waitForTimeout(150);
+      eq(
+        await page.evaluate(() => document.querySelectorAll('[data-schedule] [data-saving]').length),
+        0,
+        'and the moment the write lands it is gone',
+      );
+      eq(
+        await page.evaluate(() => (document.querySelector('[data-schedule] [role="group"] button') as HTMLButtonElement).disabled),
+        false,
+        'with every control usable again',
+      );
+    }
+
     eq(crashes, [], `the panel threw in the browser: ${crashes.join(' | ')}`);
     await page.close();
   } finally {

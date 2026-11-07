@@ -1,4 +1,4 @@
-import { nextAllowedAt, nextOpeningAt, nextPublishAt, startOfNextZonedDay, type CampaignSchedule } from './campaign-schedule';
+import { nextAllowedAt, nextPublishAt, type CampaignSchedule } from './campaign-schedule';
 import { TIMEZONE } from './types';
 import { zonedDateISO, zonedToUtc } from './time';
 import { accountGapSeconds } from './rules';
@@ -476,10 +476,26 @@ export function windowedStagger(
  * OPENING would have dragged that round into tonight, which is why the
  * pull-back is expressed in openings and not in "the first legal moment".
  *
- * AN OVERDUE ROUND IS NOT PULLED ANYWHERE. When `headAt` has already gone by,
- * the round is late rather than misplaced and `floor` — a settle's worth from
- * now — is the honest answer; sending it to tonight's opening instead would
- * be this function inventing a delay the owner never asked for.
+ * TWO CONDITIONS AND NOT ONE MORE, because a guard that cannot fire is a
+ * guard no test can hold — and three of them could not. Mutation testing
+ * deleted each in turn and the suite stayed green, which is the only reliable
+ * way to find out:
+ *
+ *   • `headAt <= floor`, for an overdue round. With `headAt` in the past,
+ *     `want` is already floored to `floor`, so `onItsOwnDay` IS the first
+ *     instant the window permits from now and `today` computes the identical
+ *     instant. No special case was doing anything.
+ *   • `todayISO >= zonedDateISO(onItsOwnDay)`, meant to stop a round already
+ *     on today being recomputed. When those two days are the same the two
+ *     branches compute the same instant, for the same reason.
+ *   • `today < onItsOwnDay`, meant to guarantee this only ever moves a round
+ *     EARLIER. It does guarantee that — but nextAllowedAt() is monotonic in
+ *     `from`, and `max(opens(headDay), floor) >= floor`, so `today` can never
+ *     exceed `onItsOwnDay` to begin with. The property holds by construction.
+ *
+ * What is left is the spent-day gate and one question: is the first instant
+ * this window permits from now on TODAY's calendar date? Both are pinned, and
+ * deleting either turns the suite red.
  *
  * `floor` is the earliest instant that may be written at all — a settle from
  * now, so the worker cannot claim a row before the write that moved it has
@@ -513,14 +529,52 @@ export function roundAnchor(
      impossible. */
   const onItsOwnDay = nextAllowedAt(schedule, want) ?? from;
 
-  /* An overdue round is late, not misplaced. */
-  if (headAt.getTime() <= floor.getTime()) return onItsOwnDay;
+  if (!todayIsFree) return onItsOwnDay;
 
-  /* The pull-back, from today when today is still free and from tomorrow's
-     first instant when it is not. */
-  const searchFrom = todayIsFree ? floor : startOfNextZonedDay(floor, TIMEZONE);
-  const soonest = nextOpeningAt(schedule, searchFrom, TIMEZONE);
-  return soonest && soonest.getTime() < onItsOwnDay.getTime() ? soonest : onItsOwnDay;
+  /*
+   * TODAY, AND A DAY IS PUBLISHABLE UNTIL MIDNIGHT — NOT UNTIL ITS START HOUR.
+   *
+   * This was written as "the first OPENING at or after floor", and an
+   * adversarial review broke it by running it: an opening that has already
+   * gone by is unreachable, so a chosen, free day whose window is still open
+   * for hours was still lost.
+   *
+   *   start 18:45, round on Sunday, owner edits Saturday 19:00
+   *     → Sunday 18:45, with five free Saturday hours unused
+   *   start 08:00 (DEFAULT_CAMPAIGN_SCHEDULE), owner edits Saturday 10:38
+   *     → Sunday 08:00 — the reported bug, untouched
+   *   start 08:00, only Saturday chosen, owner edits Saturday 10:38
+   *     → Saturday NEXT WEEK, six days past the head's own day
+   *   start '00:00' (DAY_OPENS, what "no hour limit" stores)
+   *     → unreachable for all but one second of the day
+   *
+   * A cliff at the opening minute, too: an edit at 07:59 kept the day and an
+   * edit at 08:00 lost it. The live incident was only repaired because his
+   * start is 18:45 and he happened to edit eight hours before it.
+   *
+   * So the question is asked at DAY granularity — is there a chosen day
+   * earlier than the one the round is sitting on that it can still publish
+   * on — and the instant inside that day is nextAllowedAt()'s: the window's
+   * opening if it has not come yet, otherwise now. Which is also the answer
+   * the engine itself would give.
+   *
+   * ONLY TODAY, NEVER AN INTERMEDIATE DAY. The owner is editing the schedule
+   * at this moment, and today is the day that edit can be read as being
+   * about. It also keeps the rule sayable in one sentence: if today is one of
+   * your publishing days, its window is still open, and nothing of this round
+   * has gone out on it, the round comes back to today.
+   *
+   * THE KNOWN COST, named rather than hidden: a round deliberately placed on
+   * a LATER day — a one-off, with no daily repeat — is pulled to today by an
+   * edit to its hour, where before it would only have changed hour. It is
+   * gated on the day being unspent, it fires only on an explicit save, the
+   * toast and the activity line now name the day it moved to, and un-choosing
+   * today puts it back. Against that: every shape above, which is most of
+   * them, and the owner's own round losing a day in silence.
+   */
+  const todayISO = zonedDateISO(floor, TIMEZONE);
+  const today = nextAllowedAt(schedule, floor);
+  return today && zonedDateISO(today, TIMEZONE) === todayISO ? today : onItsOwnDay;
 }
 
 /**

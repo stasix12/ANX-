@@ -1133,5 +1133,49 @@ export const WORKER_VERSION = '4.52.0';
      grep -c campaignState        dist/app/worker.cjs → 0
      grep -c campaign_targets     dist/app/worker.cjs → 0
      grep -c startDraft           dist/app/worker.cjs → 0
-     grep -c TimePick             dist/app/worker.cjs → 0 */
-export const WORKER_FINGERPRINT = 'd68f063c61c06561';
+     grep -c TimePick             dist/app/worker.cjs → 0
+
+   ─── RE-PINNED: a round that left a day now comes back to it. 4.52.0 stays.
+
+   "אני מפעיל את הקמפיין גם ביום שבת בשעה 18:45, למה הוא מתכוון לפרסם רק
+   מחרתיים?" · "תתקן את זה שלא יחזור." — 07.11.2026.
+
+   roundAnchor() built the window's opening from the date of the FIRST ROW IN
+   THE QUEUE, and nextAllowedAt() only moves forward, so a round pushed off
+   Saturday — correctly, while Saturday was unchosen — could not return when
+   Saturday was re-chosen. It now also asks whether the first instant the
+   window permits FROM NOW falls on today's calendar date, and takes it when
+   it does and the day is unspent.
+
+   DOES THIS HAVE TO REACH THE PC? No, and the build was asked rather than
+   reasoned at:
+
+     npm run build:app
+     grep -c roundAnchor             dist/app/worker.cjs → 0
+     grep -c dayIsUnspent            dist/app/worker.cjs → 0
+     grep -c todayIsFree             dist/app/worker.cjs → 0
+     grep -c rescheduleCampaignQueue dist/app/worker.cjs → 0
+     grep -c roundMovedTo            dist/app/worker.cjs → 0
+
+   The controls in the same build show the walk is not blind: planQueue 3,
+   targetsAlreadyWaiting 4, nextAllowedAt 5, windowedCascade 3.
+
+   AND ONE CORRECTION TO THE FIRST ATTEMPT AT THIS NOTE, because it had the
+   wrong answer written out with evidence beside it. The first draft of the
+   fix added an exported helper named startOfNextZonedDay to
+   campaign-schedule.ts; this note then recorded 'grep -c startOfNextZonedDay
+   → 3' and explained the three hits as campaign-schedule.ts shipping whole.
+   They were nothing of the kind. rules.ts has had a PRIVATE function of that
+   exact name since long before (rules.ts:203, used by the daily ceilings at
+   :547), and those were its three hits. The helper was removed with the
+   second draft, the count is still 3, and it never had anything to do with
+   this change — a reminder that a grep over a bundle answers "is this string
+   present", not "is this code mine".
+
+   AND THE FIX DOES NOT NEED THE MACHINE ANYWAY. The re-stamp lives in
+   client.ts, which carries 'use client' and runs on the owner's phone when he
+   saves the schedule. It takes effect the moment Vercel finishes — a PC still
+   on an older build publishes exactly as it did, from a queue whose instants
+   the dashboard has corrected. Bumping the version would make every
+   customer's machine download and restart for code it cannot reach. */
+export const WORKER_FINGERPRINT = 'b3587bb7d45906c5';

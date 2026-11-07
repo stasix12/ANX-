@@ -14,7 +14,7 @@ import {
   type ProjectableRow,
 } from '../../src/lib/social/projection';
 import { scheduleReadout } from '../../src/lib/social/schedule-readout';
-import { nextOpeningAt, readSchedule, type CampaignSchedule } from '../../src/lib/social/campaign-schedule';
+import { DEFAULT_CAMPAIGN_SCHEDULE, DAY_OPENS, readSchedule, type CampaignSchedule } from '../../src/lib/social/campaign-schedule';
 import type { CampaignState } from '../../src/lib/social/campaign';
 
 /**
@@ -947,55 +947,111 @@ const row = (id: string, scheduledAt: string, extra: Partial<ProjectableRow> = {
   );
 
   /*
-   * ── THE OTHER HALF OF THE OLD COMMENT, WHICH STILL STANDS ────────────
+   * ── A DAY IS PUBLISHABLE UNTIL MIDNIGHT, NOT UNTIL ITS START HOUR ─────
    *
-   * "Anchoring at `now` instead would drag tomorrow's round into tonight,
-   * which is not what changing an hour means." It would — which is why the
-   * pull-back is expressed in OPENINGS and not in "the first legal moment":
-   * at 14:00 on a 10:00 window today's opening is behind us, so there is
-   * nothing earlier to come back to and the round keeps its day.
+   * Every case below went the wrong way when the pull-back was expressed as
+   * "the first OPENING at or after now", which is how it was written first.
+   * An adversarial review broke that by running it, and his own incident was
+   * only repaired by the coincidence that his start is 18:45 and he edited at
+   * 10:18 — eight hours before the opening.
    */
+  /* His hour, but edited AFTER it: five free Saturday hours were going unused
+     and the round still left for Sunday. */
+  eq(
+    roundAnchor(everyDay, head, new Date(at('2026-11-07T19:00').getTime() + 10_000), true).toISOString(),
+    new Date(at('2026-11-07T19:00').getTime() + 10_000).toISOString(),
+    'a day already open and still free takes the round NOW, not tomorrow',
+  );
+  /* THE PRODUCT'S OWN DEFAULT HOUR, which made this a cliff at 08:00: an edit
+     at 07:59 kept the day and an edit at 08:00 lost it. */
+  {
+    const eight: CampaignSchedule = { ...everyDay, start: DEFAULT_CAMPAIGN_SCHEDULE.start };
+    eq(DEFAULT_CAMPAIGN_SCHEDULE.start, '08:00', 'the default hour is still the one that made this a cliff');
+    const before = new Date(at('2026-11-07T07:59').getTime() + 10_000);
+    const after = new Date(at('2026-11-07T10:38').getTime() + 10_000);
+    eq(roundAnchor(eight, at('2026-11-08T08:00'), before, true).toISOString(), iso('2026-11-07T08:00'), 'edited before the opening, the round comes back to today');
+    eq(roundAnchor(eight, at('2026-11-08T08:00'), after, true).toISOString(), after.toISOString(), 'and edited two hours AFTER it, it still comes back to today — which is the half that was broken');
+  }
+  /* A SINGLE CHOSEN DAY lost a whole WEEK, not a day. */
+  eq(
+    roundAnchor({ ...everyDay, days: [6], start: '08:00' }, at('2026-11-08T08:00'), new Date(at('2026-11-07T10:38').getTime() + 10_000), true).toISOString(),
+    new Date(at('2026-11-07T10:38').getTime() + 10_000).toISOString(),
+    'a round whose only chosen day is today comes back to today, not to that weekday next week',
+  );
+  /* '00:00' IS NOT EXOTIC — it is DAY_OPENS, what "no hour limit" stores, and
+     it made the whole pull-back dead code for all but one second of the day. */
+  {
+    const midnight: CampaignSchedule = { ...everyDay, days: [0, 1, 2, 3, 4, 6], start: DAY_OPENS };
+    eq(DAY_OPENS, '00:00', 'DAY_OPENS is still midnight');
+    const noon = new Date(at('2026-11-07T12:00').getTime() + 10_000);
+    eq(roundAnchor(midnight, at('2026-11-08T00:00'), noon, true).toISOString(), noon.toISOString(), 'a window that opened at midnight is open all day, and the round comes back into it');
+  }
+  /* AND THE TWO THINGS THAT STILL MAY NOT HAPPEN. */
   const thu = new Date(at('2026-11-05T14:00').getTime() + 10_000);
   const tenAM: CampaignSchedule = { enabled: true, days: [0, 1, 2, 3, 4, 5, 6], start: '10:00', gapSeconds: 60 };
-  eq(
-    roundAnchor(tenAM, at('2026-11-06T08:00'), thu, true).toISOString(),
-    iso('2026-11-06T10:00'),
-    'a round planned for tomorrow whose HOUR moved stays tomorrow, even with today free',
-  );
-  /* An overdue round is late, not misplaced: it goes as soon as it may, which
-     inside an open window is now — never forward to tonight's opening. */
+  /* An overdue round is late, not misplaced — it goes as soon as it may, and
+     is never sent forward to an opening it has already passed. */
   eq(
     roundAnchor(tenAM, at('2026-11-05T06:00'), thu, true).toISOString(),
     thu.toISOString(),
-    'and a round whose stamp has gone goes out as soon as the window allows, not at the next opening',
+    'a round whose stamp has gone goes out as soon as the window allows',
   );
-  /* A day neither today nor the head's: the pull-back is to the first OPENING
-     in between, not to the head and not to now. */
+  /* And a day this campaign has used is not taken a second time, however open
+     it is — which is the whole weight the caller's read carries. */
   eq(
-    roundAnchor({ ...everyDay, days: [0, 1, 6] }, at('2026-11-09T18:45'), satFloor, true).toISOString(),
-    iso('2026-11-07T18:45'),
-    'with several openings in between, the round comes back to the FIRST of them',
+    roundAnchor(tenAM, at('2026-11-06T10:00'), thu, false).toISOString(),
+    iso('2026-11-06T10:00'),
+    'and a day already spent keeps the round on its own day, open or not',
+  );
+  /*
+   * THE COST THIS BUYS, PINNED SO IT IS A DECISION AND NOT A SURPRISE.
+   *
+   * The assertion that stood here read "a round planned for tomorrow whose
+   * HOUR moved stays tomorrow, even with today free", and the review showed
+   * that it encodes the loss: "today's opening is behind us" is also true of
+   * every day the owner re-chooses after breakfast, so the test and the bug
+   * were the same sentence. A round on a later day IS now pulled to today
+   * when today is chosen, open and unspent — for a one-off round that is a
+   * day earlier than it was placed, which the toast names and un-choosing
+   * today undoes.
+   */
+  eq(
+    roundAnchor(tenAM, at('2026-11-06T10:00'), thu, true).toISOString(),
+    thu.toISOString(),
+    'a round on a later day comes to today when today is chosen, open and unspent — deliberately, and this replaces the assertion that encoded the loss',
   );
 
-  /* ── nextOpeningAt itself ─────────────────────────────────────────────── */
-  eq(nextOpeningAt({ ...everyDay, enabled: false }, satFloor), null, 'a switched-off window has no opening');
-  eq(nextOpeningAt({ ...everyDay, days: [] }, satFloor), null, 'and neither has one with no day chosen');
+  /*
+   * ── AND THE TWO LIMITS, WHICH MUTATION TESTING CAUGHT UNPINNED ─────────
+   *
+   * Dropping either condition left the whole suite green, which means neither
+   * was tested at all. The first is the one that matters: without the day
+   * check, "the first instant the window permits from now" is an INTERMEDIATE
+   * day whenever today is not a publishing day, and the round would be pulled
+   * onto a day the owner never chose to move it to.
+   */
   eq(
-    nextOpeningAt(everyDay, at('2026-11-07T18:45'))?.toISOString(),
+    roundAnchor({ ...everyDay, days: [0, 1, 2, 3, 4] }, at('2026-11-09T18:45'), satFloor, true).toISOString(),
+    iso('2026-11-09T18:45'),
+    'today is not a publishing day, so the round keeps its own day — it is NOT pulled onto the Sunday in between',
+  );
+  eq(
+    roundAnchor({ ...everyDay, enabled: false }, at('2026-11-09T18:45'), satFloor, true).toISOString(),
+    iso('2026-11-09T18:45'),
+    'and a window switched off moves nothing at all',
+  );
+  /* NEVER LATER, AND NEVER OFF TODAY: with the round already on today, the
+     pull-back has nothing earlier to offer and must return the day's own
+     answer rather than recomputing one. */
+  eq(
+    roundAnchor(everyDay, at('2026-11-07T18:45'), satFloor, true).toISOString(),
     iso('2026-11-07T18:45'),
-    'the opening itself counts as at-or-after it',
+    'a round already on today is left exactly where it is',
   );
   eq(
-    nextOpeningAt(everyDay, at('2026-11-07T18:46'))?.toISOString(),
-    iso('2026-11-08T18:45'),
-    'a minute past it is tomorrow\u2019s — this answers OPENINGS, never "now"',
-  );
-  /* EIGHT DAYS, NOT SEVEN: Saturday is the only chosen day and its opening has
-     gone, so the answer is the same weekday next week. */
-  eq(
-    nextOpeningAt({ ...everyDay, days: [6] }, at('2026-11-07T20:00'))?.toISOString(),
-    iso('2026-11-14T18:45'),
-    'and the only chosen day whose window has closed is that day next week',
+    roundAnchor(everyDay, at('2026-11-07T23:00'), satFloor, true).toISOString(),
+    iso('2026-11-07T18:45'),
+    'and one later in today is pulled to today\u2019s opening, not past it',
   );
 
   /* ── THE CALLER'S SIDE: the one fact roundAnchor cannot work out alone ── */
@@ -1036,9 +1092,35 @@ const row = (id: string, scheduledAt: string, extra: Partial<ProjectableRow> = {
   is(/\} catch \{\s*return false;\s*\}/.test(unspent), 'and so does a thrown one');
   is(/return \(count \?\? 1\) === 0;/.test(unspent), 'and a count that cannot be read counts as "something", never as an empty day');
 
+  /*
+   * ── AND THE OTHER RE-STAMP PATH NEEDS NONE OF THIS, WHICH IS WHY ──────
+   *
+   * A review of this change reported respaceQueue() as 'the second re-stamp
+   * path, left behind — no roundAnchor, no todayIsFree'. It was not left
+   * behind: it never had the bug. It lays its bases out from NOW
+   * (`Date.now() + WRITE_SETTLE_MS`) and rolls them through the same
+   * windowedCascade, so its head already lands on the first instant the
+   * window permits from now — it cannot strand a round on a later day, and
+   * there is nothing for a pull-back to pull.
+   *
+   * Giving it `todayIsFree` would not be a fix either: it would be a NEW
+   * restriction on behaviour the gap tuner has always had and that the owner
+   * reaches deliberately. Pinned here so the next reader does not 'repair'
+   * the asymmetry in the wrong direction.
+   */
+  is(/const start = Number\.isFinite\(startMs\) \? startMs : Date\.now\(\) \+ WRITE_SETTLE_MS;/.test(client), 'respaceQueue sequences from NOW, so it can never leave a round on a day it has passed');
+  is(!/roundAnchor/.test(client.slice(client.indexOf('export async function respaceQueue'))), 'and it needs no anchor of its own');
+
   /* ── AND THE DAY IS SAID OUT LOUD, which is the other half of the bug ── */
   is(/dayChanged: zonedDateISO\(anchor, TIMEZONE\) !== zonedDateISO\(head, TIMEZONE\),/.test(client), 'the activity entry records whether the round changed DAY');
-  is(/const roundMovedTo = `\$\{dayRelativeHe\(anchor, floor, TIMEZONE\)\} בשעה \$\{schedule\.start\}`;/.test(client), 'and names where it went in words, not only an hour');
+  /* THE ANCHOR'S OWN HOUR, not schedule.start — they differ in exactly the
+     case the pull-back exists for: a day whose opening has gone by starts the
+     round NOW, and announcing the start hour over rows stamped later is the
+     same class of lie one field along. And the day is named against the
+     reader's clock, because `floor` is a settle in the future and belongs to
+     tomorrow for the last minute of every day. */
+  is(/const roundMovedTo = `\$\{dayRelativeHe\(anchor, new Date\(\), TIMEZONE\)\} בשעה \$\{zonedHM\(anchor, TIMEZONE\)\}`;/.test(client), 'and names the day AND the instant actually written, not the hour on the panel');
+  is(!/dayRelativeHe\(anchor, floor/.test(client), 'the day is not named against the write cushion, which is tomorrow for the last minute of every day');
   is(!/לשעות החדשות`/.test(client), 'the old hour-only sentence is gone from the log line — it is what he had to diagnose from');
   for (const [what, file] of [['the dashboard', 'src/app/social/page.tsx'], ['the campaigns list', 'src/app/social/campaigns/page.tsx']] as const) {
     const src = strip(readFileSync(file, 'utf8'));

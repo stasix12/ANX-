@@ -3,7 +3,7 @@
 import { supabase } from '@/lib/supabase';
 import { campaignState, type CampaignQueueRow, type CampaignState } from './campaign';
 import { detectCity } from './cities';
-import { addDaysISO, counted, startOfZonedDay, zonedDateISO, zonedToUtc } from './time';
+import { addDaysISO, counted, startOfZonedDay, zonedDateISO, zonedHM, zonedToUtc } from './time';
 import { DEFAULT_CAMPAIGN_REPEAT, MIN_GAP_SECONDS, MIN_REPEAT_HOURS, dayRelativeHe, repeatWindowSentence, gapChoiceLabel, readRounds, readSchedule, readRepeat, repeatColumns, roundsColumn, roundsWindowFix, weeklyPlanFor, type RoundsVerdict, type CampaignRepeat, type CampaignRound, type CampaignSchedule, type RoundFields, type ScheduleFields } from './campaign-schedule';
 import { projectQueue, roundAnchor, spacingFrom, windowedCascade, type AccountSpacing, type CampaignGate } from './projection';
 import { JOINED_QUERY, normalizeQuery } from './discovery';
@@ -4453,8 +4453,21 @@ export async function rescheduleCampaignQueue(
    * (משעה 11:00) — 231 פרסומים הוזזו לשעות החדשות" — and the round had
    * just left Saturday for Sunday. An hour with no day beside it cannot say
    * the one thing that mattered.
+   *
+   * THE ANCHOR'S OWN HOUR, NOT schedule.start — and this read `schedule.start`
+   * first, which an adversarial review caught as the same class of lie one
+   * field along. The two differ precisely in the case the pull-back exists
+   * for: a day whose opening has already gone by starts the round NOW, so a
+   * round re-timed at 19:00 under an 18:45 window would have announced
+   * "בשעה 18:45" over rows stamped 19:00. zonedHM() reads the instant that
+   * was actually written.
+   *
+   * AND THE DAY IS NAMED AGAINST THE READER'S CLOCK, not against `floor`.
+   * `floor` is a settle's worth in the future, so between 23:59:00 and
+   * midnight it belongs to tomorrow — and "היום" would then mean the day
+   * after the one on his screen.
    */
-  const roundMovedTo = `${dayRelativeHe(anchor, floor, TIMEZONE)} בשעה ${schedule.start}`;
+  const roundMovedTo = `${dayRelativeHe(anchor, new Date(), TIMEZONE)} בשעה ${zonedHM(anchor, TIMEZONE)}`;
   await logClientActivity(
     failed ? 'warn' : 'info',
     'queue_rescheduled',

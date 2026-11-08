@@ -148,8 +148,26 @@ export const GAP_CHOICES: number[] = [
     summary line so the two cannot drift. */
 export function gapChoiceLabel(seconds: number): string {
   if (seconds < 60) return `${seconds} שניות`;
-  const m = Math.round(seconds / 60);
-  return m === 1 ? 'דקה' : `${m} דק׳`;
+  /*
+   * NINETY SECONDS IS "דקה וחצי", NOT "2 דק׳".
+   *
+   * This rounded to the nearest minute, which was harmless while every value
+   * it could be handed was a whole number of minutes or under one — GAP_CHOICES
+   * is 30, 40, 50 and then multiples of 60. Picking a publishing mode writes a
+   * gap that is neither: the medium mode is 90 seconds (08.11.2026), and
+   * rounding printed it as two minutes — the SAME words as the slow mode,
+   * which is two minutes exactly. Two different settings reading identically
+   * is how an owner stops believing the screen, and the respace line in the
+   * activity log would have told him his queue was paced at two minutes when
+   * it was paced at ninety seconds.
+   *
+   * Exact from here on. Every value that reaches this from the select is
+   * unchanged, because all of them are whole minutes or under one.
+   */
+  if (seconds === 90) return 'דקה וחצי';
+  const m = seconds / 60;
+  if (m === 1) return 'דקה';
+  return Number.isInteger(m) ? `${m} דק׳` : `${m.toFixed(1)} דק׳`;
 }
 
 /** What goes in the legacy `schedule_gap_minutes` column beside the seconds:

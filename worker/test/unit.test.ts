@@ -2136,7 +2136,9 @@ console.log('unit tests OK');
   );
 
   /* (b) — the three modes, every one of them reachable in one tap. */
-  const paceRows = [...rules.matchAll(/\{ id: '(\w+)', label: '([^']+)', tone: '\w+', gapSeconds: (\d+), burst: (\d+), restMinutes: (\d+) \}/g)];
+  /* A mode is a GAP and nothing else since 08.11.2026 — the rest after ten
+     publications was removed, so this pattern no longer looks for one. */
+  const paceRows = [...rules.matchAll(/\{ id: '(\w+)', label: '([^']+)', tone: '\w+', gapSeconds: (\d+) \}/g)];
   assert.equal(paceRows.length, 3, 'three modes, which is the whole of the choice now — fast, medium, slow');
   assert.ok(/PACE_PROFILES\.map\(/.test(paceCard), 'the picker draws them off the engine\u2019s own table — a hand-written row is how a mode becomes unreachable');
   assert.ok(/role="radio"/.test(paceCard) && /onClick=\{\(\) => onChange\(p\.id\)\}/.test(paceCard), 'and each one is a single tap that names its own id');

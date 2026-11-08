@@ -31,7 +31,6 @@ import {
   getBrowserSettings,
   getLimits,
   applyPace,
-  readPaceRest,
   lastPublishedAt,
   matchAccountGapTo,
   saveCampaign,
@@ -124,7 +123,6 @@ export default function CampaignsPage() {
    * honest "no mode picked yet" state rather than guessing at one.
    */
   const [pace, setPace] = useState<PaceId | undefined>(undefined);
-  const [paceRestUntil, setPaceRestUntil] = useState<string | null>(null);
   const [workerOnline, setWorkerOnline] = useState<boolean | undefined>(seed?.workerOnline);
   /*
    * WHICH ROUND THE COMMENT SHEET IS ABOUT — and null when it is closed, so
@@ -174,9 +172,6 @@ export default function CampaignsPage() {
       ]);
       setFloorHours(repeatFloorFrom(lim));
       setPace(lim.pace);
-      /* Derived from the queue's own published rows — see readPaceRest. It
-         returns without a query at all while no mode is picked. */
-      setPaceRestUntil((await readPaceRest(lim)).until);
       setSpacing({
         minGapMinutes: lim.minGapMinutes,
         groupMinGapMinutes: brw.groupMinGapMinutes,
@@ -607,7 +602,7 @@ export default function CampaignsPage() {
         await changeSchedule(campaign, { ...readSchedule(campaign), gapSeconds: picked.gapSeconds });
         await load();
         toast(
-          `מצב "${picked.label}" הופעל — פרסום כל ${accountGapLabel(gap.minGapSeconds + gap.groupMinGapSeconds)}, והפסקה של ${picked.restMinutes} דקות אחרי ${picked.burst} פרסומים ברצף. חל על כל החשבון.`,
+          `מצב "${picked.label}" הופעל — פרסום כל ${accountGapLabel(gap.minGapSeconds + gap.groupMinGapSeconds)}. חל על כל החשבון.`,
           'info',
         );
       } catch (err) {
@@ -1051,7 +1046,6 @@ export default function CampaignsPage() {
                 /* מצב פרסום חכם — the mode is the ACCOUNT's, see changePace. */
                 pace={pace}
                 onPaceChange={(id) => void changePace(c, id)}
-                paceRestUntil={paceRestUntil}
                 repeat={readRepeat(c, floorHours)}
                 onRepeatChange={(next) => void changeRepeat(c, next)}
                 /* The account's own protection from Settings, so this list

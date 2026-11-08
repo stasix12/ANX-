@@ -88,7 +88,6 @@ function Harness() {
         }}
         pace={pace}
         onPaceChange={setPace}
-        restUntil={null}
         /* Exactly as both callers pass them: switched off while it saves,
            and saying why. */
         disabled={busy}

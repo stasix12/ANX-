@@ -240,8 +240,19 @@ const ref: CampaignSchedule = { enabled: true, days: [0, 1, 2, 3, 4], start: '08
   );
   eq(
     PACE_PROFILES.map((p) => gapChoiceLabel(p.gapSeconds)),
-    ['45 שניות', '2 דק׳', '5 דק׳'],
+    ['40 שניות', 'דקה וחצי', '2 דק׳'],
     'and each one is spelled by the product\u2019s one spelling of a gap, so the card and the engine cannot name it differently',
+  );
+  /*
+   * AND NO TWO MODES READ THE SAME. gapChoiceLabel() rounded to the nearest
+   * minute, which printed the 90-second medium mode and the 120-second slow
+   * mode as the same two words. Two settings that read identically is how an
+   * owner stops believing the screen.
+   */
+  eq(
+    new Set(PACE_PROFILES.map((p) => gapChoiceLabel(p.gapSeconds))).size,
+    PACE_PROFILES.length,
+    'three modes, three different spellings — no two of them print the same gap',
   );
 
   eq(TIME_CHOICES[0], '00:00', 'the clock starts at midnight');
@@ -431,21 +442,22 @@ const ref: CampaignSchedule = { enabled: true, days: [0, 1, 2, 3, 4], start: '08
   /*
    * RE-POINTED, NOT WEAKENED (07.11.2026). The account-wide read stopped being
    * a single `.maybeSingle()` row when the smart pacing mode arrived: it now
-   * reads the newest `burst` instants with `.limit(...)` and parses them into
-   * `stamps`, newest first, because the REST gate needs a run and the gap gate
-   * needs only the head of it. So `last.published_at` is spelled `lastAt` —
-   * `stamps[0]` — and the claim is the same claim: the account-wide gate
-   * RAISES the shared instant instead of returning its own.
+   * reads the newest instant with `.limit(1)` and parses it into `stamps`. The
+   * read briefly returned a run of them, while a mode carried a rest; the rest
+   * was removed on 08.11.2026 and it is back to one row. `last.published_at`
+   * is still spelled `lastAt` — `stamps[0]` — and the claim is the same claim:
+   * the account-wide gate RAISES the shared instant instead of returning its
+   * own.
    */
   is(/const lastAt = stamps\[0\]/.test(rules), 'the account-wide gate measures from the newest of the instants it read');
   is(/holdFor\(new Date\(lastAt \+ gapMs\)\)/.test(rules), 'the account-wide one raises it too, instead of returning on its own');
   /*
-   * AND THE THIRD GATE THAT ARRIVED WITH IT COMPOSES THE SAME WAY. The rest
-   * after a run of ten is a fourth way this engine can say "prepare now, click
-   * later", and it was written with the same shape for the same reason: a gate
-   * that returned on its own would throw the campaign's interval away.
+   * AND THERE IS NO THIRD GATE ANY MORE. A rest after a run of ten was one for
+   * a day, composed the same way; it was removed on 08.11.2026 and this pins
+   * that it left nothing behind in the engine. A rest the gate still raised
+   * would hold rows no screen explains.
    */
-  is(/holdFor\(new Date\(now\.getTime\(\) \+ restMs\)\)/.test(rules), 'and so does the rest after a run — three gates, one instant');
+  is(!/restMs/.test(rules), 'and no rest raises the instant any more — the gap and the campaign interval are the only two gates left');
   is(/return holdUntil \? \{ action: 'publish', notBefore: \(holdUntil as Date\)\.toISOString\(\) \}/.test(rules), 'and the single return hands over the later of the two');
 
   /*
@@ -633,33 +645,22 @@ const ref: CampaignSchedule = { enabled: true, days: [0, 1, 2, 3, 4], start: '08
    * would draw a timer that jumps, which is worse than no timer.
    */
   /*
-   * RE-POINTED AGAIN (07.11.2026), and for the third time the rule itself is
-   * untouched: the slow tick is for a card that is NOT MOVING. What arrived is
-   * a second kind of card that is moving while its own slot is hours away —
-   * the automatic rest of the chosen publishing mode ("מצב פרסום חכם"),
-   * counting its seven, fifteen or thirty minutes down in seconds beside a
-   * slot the rest has already pushed past the hour. A fifteen-second tick
-   * there draws a timer that jumps, which is the same fault the freeze clause
-   * was added to avoid, so `restUntil` joins it in exactly the same place.
+   * RE-POINTED AGAIN (08.11.2026), and for the fourth time the rule itself is
+   * untouched: the slow tick is for a card that is NOT MOVING. The automatic
+   * rest of a publishing mode briefly made a second kind of moving card and
+   * joined this clause; the rest was removed, so the clause is back to the
+   * freeze alone.
    */
-  is(/coarse && !frozenUntil && !restUntil \? 15_000 : 1_000/.test(nextPubSrc), 'and a card counting down in hours ticks at a fifteenth of the rate');
+  is(/coarse && !frozenUntil \? 15_000 : 1_000/.test(nextPubSrc), 'and a card counting down in hours ticks at a fifteenth of the rate');
   is(
     /Boolean\(frozenUntil\)/.test(nextPubSrc),
     'unless a freeze is counting down on it, which is seconds on screen and has to move like it',
   );
-  is(
-    /Boolean\(restUntil\)/.test(nextPubSrc),
-    'or a rest is, which is also seconds on screen — and which also has to ARM the timer on a card with nothing scheduled at all',
-  );
-  /*
-   * AND THE REST RANKS BELOW THE FREEZE, which is a claim about meaning and
-   * not about layout: a freeze is Facebook refusing, a rest is the mode the
-   * owner chose doing what he asked. A card that printed "בהפסקה" over a
-   * standing rate-limit freeze would tell him to wait seven minutes for a
-   * three-hour wall.
-   */
-  is(/const resting = !frozen && /.test(nextPubSrc), 'and a rest never speaks over a Meta freeze — the freeze is the harder fact');
-  is(/'בהפסקה · חוזר לפרסם בעוד '/.test(nextPubSrc), 'the resting line says so in the owner\u2019s own words');
+  /* AND NOTHING ELSE ARMS IT. The rest was removed on 08.11.2026 and must not
+     have left a prop, a countdown or a sentence behind — a card counting down
+     a hold the engine is not applying is the worse half of a half-removal. */
+  is(!/restUntil/.test(nextPubSrc), 'and no rest arms it any more — there is none to count down');
+  is(!/בהפסקה/.test(nextPubSrc), 'and the card never says "בהפסקה" about a rest that cannot happen');
   is(/if \(!active\) return;/.test(nextPubSrc), 'and armed only when there is an instant to count down to — a list of finished rounds runs no timers');
 
   /* The migration, and the one file the owner is ever told to run. */

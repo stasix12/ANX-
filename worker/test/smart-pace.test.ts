@@ -1,29 +1,35 @@
 /*
  * ─────────────────────────────────────────────────────────────────────────────
- * מצב פרסום חכם — THE THREE MODES, THE REST, AND THE FIELD THAT IS GONE
+ * מצב פרסום חכם — THREE GAPS, AND THE REST THAT NO LONGER EXISTS
  *
- * "בוא נגדיר לו 3 דפוסי התנהגות אחד מהיר השני בינוני השלישי, ושיהיה הפסקות
- *  אחרי נגיד 10 פוסטים רצופים הפסקה" — 07.11.2026, followed by a binding
- *  reference image and an eleven-section specification.
+ * "סבב מהיר יוצא כל 40 שניות לקבוצה, בינוני כל דקה וחצי, ואיטי כל 2 דקות.
+ *  תבטל את הדקות המתנה בין 10 פוסטים זה לא רלוונטי" — 08.11.2026.
  *
- * WHAT THIS FILE PROVES, and in which section of the brief it is asked for:
+ * A mode used to carry a gap AND a rest after ten publications. The rest is
+ * gone, and this file's job changed with it: it now proves the three gaps are
+ * what was asked for, and — the harder half — that the rest was removed from
+ * EVERY place it reached rather than switched off in one of them. A feature
+ * half-removed is worse than one left in: the engine would hold rows the
+ * screens no longer explain.
  *
- *   §2  the old field "הפרש בין פרסומים" is gone from EVERY screen, with no
- *       second place to set the same number;
- *   §3  the three modes carry exactly the numbers specified, and nothing on
- *       the card promises anything about Facebook;
- *   §6  the rest runs after ten SUCCESSFUL publications, holds the queue,
- *       is displayed with the time left, and survives a refresh and a
- *       restart because it is derived rather than stored;
- *   §7  both publishing gates and the screen ask the SAME function, so two
- *       agents cannot pace differently;
- *   §9  the engine's behaviour is unchanged for an account that has not
- *       picked a mode — which is every account that exists today.
+ * WHAT THIS FILE PROVES:
  *
- * THE ARITHMETIC IS RUN, NOT READ. paceRestRemainingMs() and
- * evaluateQueueItem() are imported from the shipped modules and executed
- * against an in-memory PostgREST; the source pins at the end are for the
- * wiring that cannot be executed from here.
+ *   §1  the three modes carry exactly 40s / 90s / 120s, ordered, and the rate
+ *       on the card is the gap turned round rather than an invented average;
+ *   §2  the old field "הפרש בין פרסומים" is still gone from EVERY screen,
+ *       with no second place to set the same number;
+ *   §3  the rest is gone from the engine, both gates, the client and all four
+ *       screens — no helper, no read, no countdown, no leftover prop;
+ *   §4  ten publications a minute ago hold NOTHING back any more, which is
+ *       the behaviour change, run against an in-memory PostgREST;
+ *   §5  the ordinary gap still holds, because that is the one brake left and
+ *       removing a rest must not have loosened it;
+ *   §6  nothing on the card promises anything about Facebook;
+ *   §7  the days, the start time and the daily repeat are untouched.
+ *
+ * THE ARITHMETIC IS RUN, NOT READ. evaluateQueueItem() is imported from the
+ * shipped module and executed; the source pins are for the wiring that cannot
+ * be executed from here.
  *
  *   npx tsx worker/test/smart-pace.test.ts
  * ─────────────────────────────────────────────────────────────────────────────
@@ -34,15 +40,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
-import {
-  PACE_PROFILES,
-  evaluateQueueItem,
-  paceProfile,
-  paceRatePerHour,
-  paceRestLabel,
-  paceRestRemainingMs,
-  PREP_LEAD_MS,
-} from '../../src/lib/social/rules';
+import { PACE_PROFILES, evaluateQueueItem, paceProfile, paceRatePerHour } from '../../src/lib/social/rules';
 import { DEFAULT_BROWSER, DEFAULT_LIMITS, type LimitsSettings, type PaceId } from '../../src/lib/social/types';
 
 let checks = 0;
@@ -74,17 +72,15 @@ function stripComments(code: string): string {
 eq(PACE_PROFILES.map((p) => p.id), ['fast', 'medium', 'slow'], 'three modes, fast → slow, which is the order an RTL row draws as איטי · בינוני · מהיר');
 eq(PACE_PROFILES.map((p) => p.label), ['מהיר', 'בינוני', 'איטי'], 'and the words the brief uses for them');
 
-for (const [id, gap, rest, tone] of [
-  ['fast', 45, 7, 'warning'],
-  ['medium', 120, 15, 'brand'],
-  ['slow', 300, 30, 'success'],
+for (const [id, gap, tone] of [
+  ['fast', 40, 'warning'],
+  ['medium', 90, 'brand'],
+  ['slow', 120, 'success'],
 ] as const) {
   const p = paceProfile(id)!;
   is(p, `${id} exists`);
-  eq(p.gapSeconds, gap, `${id}: ${gap}s between publications — the specification's own number`);
-  eq(p.restMinutes, rest, `${id}: a ${rest}-minute rest`);
-  eq(p.burst, 10, `${id}: ten in a run — "אחרי 10 פוסטים מוצלחים"`);
-  eq(p.tone, tone, `${id}: the colour the specification assigns it (orange / blue / green as a TOKEN, never a hex)`);
+  eq(p.gapSeconds, gap, `${id}: ${gap}s between publications — the owner's own number, 08.11.2026`);
+  eq(p.tone, tone, `${id}: the colour the brief assigns it (orange / blue / green as a TOKEN, never a hex)`);
 }
 
 eq(paceProfile(undefined), null, 'no mode stored is not a mode');
@@ -98,104 +94,110 @@ for (let i = 1; i < PACE_PROFILES.length; i += 1) {
   const slower = PACE_PROFILES[i];
   const faster = PACE_PROFILES[i - 1];
   is(slower.gapSeconds > faster.gapSeconds, `${slower.id} waits longer between publications than ${faster.id}`);
-  is(slower.restMinutes > faster.restMinutes, `${slower.id} rests longer than ${faster.id}`);
-  is(paceRatePerHour(slower) < paceRatePerHour(faster), `${slower.id} SUSTAINS fewer publications an hour than ${faster.id}`);
+  is(paceRatePerHour(slower) < paceRatePerHour(faster), `${slower.id} publishes fewer an hour than ${faster.id}`);
 }
 
-/* ══════════════ 2. THE RATE ON THE CARD IS THE SUSTAINED ONE ═════════════ */
+/* ══════════════ 1b. THE GAPS THE OWNER SET, AND THE RATE THEY WORK OUT TO ═ */
+
+eq(paceProfile('fast')!.gapSeconds, 40, 'מהיר is 40 seconds — "סבב מהיר יוצא כל 40 שניות לקבוצה"');
+eq(paceProfile('medium')!.gapSeconds, 90, 'בינוני is a minute and a half');
+eq(paceProfile('slow')!.gapSeconds, 120, 'איטי is two minutes');
 
 /*
- * A run's first publication comes straight after the rest, so the cycle is
- * (burst − 1) gaps plus the rest. Quoting 3600/gap instead would describe the
- * fast mode as 80 an hour — a seven-minute burst presented as if it lasted all
- * day, which is the misreading the modes exist to correct.
+ * The rate is now 3600/gap and nothing else. It used to average a
+ * burst-and-rest cycle, which was the right arithmetic while a rest existed
+ * and would be a lie about the engine now that none does.
  */
-const expectRate = (p: { burst: number; gapSeconds: number; restMinutes: number }) =>
-  (p.burst * 3600) / ((p.burst - 1) * p.gapSeconds + p.restMinutes * 60);
-
 for (const p of PACE_PROFILES) {
-  eq(Math.round(paceRatePerHour(p) * 100), Math.round(expectRate(p) * 100), `${p.id}: the rate is the cycle's, rest included`);
+  eq(Math.round(paceRatePerHour(p) * 100), Math.round((3600 / p.gapSeconds) * 100), `${p.id}: the rate is the gap turned round, with nothing averaged into it`);
 }
-/* The three figures printed on the cards, so a change to any number here is
-   visible as a change to the sentence the owner reads. */
-eq(Math.round(paceRatePerHour(paceProfile('fast')!)), 44, 'מהיר sustains about 44 an hour — not the 80 its gap alone suggests');
-eq(Math.round(paceRatePerHour(paceProfile('medium')!)), 18, 'בינוני about 18');
-eq(Math.round(paceRatePerHour(paceProfile('slow')!)), 8, 'איטי about 8');
+eq(Math.round(paceRatePerHour(paceProfile('fast')!)), 90, 'מהיר ≈ 90 an hour');
+eq(Math.round(paceRatePerHour(paceProfile('medium')!)), 40, 'בינוני ≈ 40 an hour');
+eq(Math.round(paceRatePerHour(paceProfile('slow')!)), 30, 'איטי ≈ 30 an hour');
 
 /*
- * AND ALL THREE ARE SLOWER THAN THE RATE THAT PRECEDED THIS ACCOUNT'S ONLY
- * RESTRICTION. 07.11.2026 21:40:13, after 158 publications at a sustained 69
- * an hour. That is not a claim that 69 caused it — the 02.11 night ran 152 an
- * hour and was not restricted — it is the one measured number this product
- * has, and a "mode" that published faster than it would be a brake in name.
+ * AND NO MODE IS SOLD AS A DEFENCE. Measured on 08.11.2026 against this
+ * installation's own history: the account ran 94–100 actions an hour on eight
+ * separate days with no rate limit, and a customer's account runs a 15-second
+ * gap at up to 138 an hour and has never been rate limited at all. So the
+ * gaps here are a choice about throughput, not a shield, and §6 below pins
+ * that no string on the card claims otherwise.
  */
+
+/* ══════════════ 2. THE PaceProfile TABLE CARRIES ONLY A GAP ══════════════ */
+
 for (const p of PACE_PROFILES) {
-  is(paceRatePerHour(p) < 69, `${p.id} sustains less than the 69/hour that preceded the account's only restriction`);
+  /* Cast because the TYPE no longer declares these — which is half the point.
+     The other half is that no row still CARRIES them, so a mode cannot have a
+     rest the type has forgotten how to describe. */
+  const row = p as unknown as Record<string, unknown>;
+  is(!('burst' in row), `${p.id} has no run length — the rest was removed, not defaulted to something harmless`);
+  is(!('restMinutes' in row), `${p.id} has no rest length either`);
+  eq(Object.keys(row).sort(), ['gapSeconds', 'id', 'label', 'tone'], `${p.id} carries a gap, a name and a colour, and nothing else`);
 }
 
 /* ══════════════ 3. AN ACCOUNT THAT HAS PICKED NOTHING IS UNCHANGED ═══════ */
 
-is(!('pace' in DEFAULT_LIMITS), 'DEFAULT_LIMITS carries NO pace key — every one of the eight live settings rows loads with no mode, rests after nothing, and paces exactly as it did before this feature existed');
-eq(paceRestRemainingMs(null, [Date.now(), Date.now() - 1000], Date.now()), 0, 'and with no mode, nothing is ever owed');
+is(!('pace' in DEFAULT_LIMITS), 'DEFAULT_LIMITS carries NO pace key — every live settings row loads with no mode and paces exactly as it did before this feature existed');
 
-/* ══════════════ 4. paceRestRemainingMs — THE WHOLE TRUTH TABLE ═══════════ */
+/* ══════════════ 4. THE REST IS GONE FROM EVERY PLACE IT REACHED ══════════ */
 
-const MODE = paceProfile('fast')!; /* 45s gap, 10 in a run, 7-minute rest */
-const REST_MS = MODE.restMinutes * 60_000;
+/*
+ * The whole point of this section. A rest removed from the table but left in
+ * a gate would hold rows no screen explains; left in a screen but not the
+ * gate would count down a hold that is not happening. Both have happened in
+ * this product with other settings, which is why this is checked by name in
+ * all seven files rather than trusted to one.
+ */
+{
+  const rules = stripComments(src('src/lib/social/rules.ts'));
+  const worker = stripComments(src('worker/social-worker.ts'));
+  const client = stripComments(src('src/lib/social/client.ts'));
+  const card = stripComments(src('src/components/social/SmartPaceCard.tsx'));
+  const next = stripComments(src('src/components/social/NextPublication.tsx'));
+  const panel = stripComments(src('src/components/social/CampaignSchedulePanel.tsx'));
+  const board = stripComments(src('src/components/social/CampaignScheduleBoard.tsx'));
+  const dash = stripComments(src('src/app/social/page.tsx'));
+  const camps = stripComments(src('src/app/social/campaigns/page.tsx'));
+
+  is(!/paceRestRemainingMs/.test(rules), 'the rest rule is gone from rules.ts — there is no implementation left to drift from');
+  is(!/paceRestLabel/.test(rules), 'and so is its label');
+  is(!/paceRestRemainingMs|paceRestLabel|restMs/.test(worker), "the worker's pre-claim gate no longer knows about a rest");
+  is(!/readPaceRest|PaceRestState/.test(client), 'the client no longer reads one');
+  is(!/restUntil|data-pace-resting|בהפסקה/.test(card), 'the mode card draws no countdown');
+  is(!/restUntil|data-resting|בהפסקה/.test(next), 'and neither does the next-publication block');
+  is(!/restUntil/.test(panel), 'the panel takes no such prop');
+  is(!/restUntil/.test(board), 'nor the board');
+  is(!/paceRest/.test(dash), 'the dashboard no longer polls for one');
+  is(!/paceRest/.test(camps), 'nor does the campaigns screen');
+
+  /* And no screen still writes the sentence. */
+  for (const [name, code] of [['card', card], ['panel', panel], ['dashboard', dash], ['campaigns', camps]] as const) {
+    is(!/הפסקה אוטומטית/.test(code), `${name} no longer promises an automatic rest`);
+    is(!/פרסומים רצופים/.test(code), `${name} no longer counts publications in a row`);
+  }
+
+  /* ONE READ, ONE ROW — in both gates, which is what it was before modes. */
+  const gate = rules.slice(rules.indexOf('export async function evaluateQueueItem'));
+  is(/\.limit\(1\)/.test(gate), 'the per-row spacing read asks for the single most recent publication');
+  is(!/pace\.burst/.test(gate), 'and not for a run length that no longer exists');
+  is(/\.limit\(1\)/.test(worker), "the worker's gate asks for exactly the same one row");
+  is(/gate\.gapMs \/ 2/.test(worker), 'and the waiting line is throttled on the gap alone, which is the only wait left');
+
+  /* The one write a mode still makes. */
+  const apply = client.slice(client.indexOf('export async function applyPace'), client.indexOf('export async function liveQueuePlan'));
+  is(apply.length > 200, 'applyPace was located');
+  is(apply.indexOf('applyGapFloor(') < apply.indexOf("saveSetting('limits'"), 'applyGapFloor runs FIRST and the pace is written onto the row it leaves');
+  is(/\.\.\.limits, pace: id/.test(apply), 'and the pace is written onto a FRESH read, never onto a copy a screen loaded at mount');
+}
+
+/* ══════════════ 5. THE ENGINE, RUN AGAINST A FAKE DATABASE ═══════════════ */
+
+const MODE = paceProfile('fast')!; /* 40s gap, no rest */
 const T = 1_762_500_000_000; /* a fixed instant; nothing here reads the clock */
 
 /** `n` publications ending at `endAt`, each `gapMs` apart, newest first. */
 const run = (n: number, endAt: number, gapMs: number) => Array.from({ length: n }, (_, i) => endAt - i * gapMs);
-
-eq(paceRestRemainingMs(MODE, run(9, T, 45_000), T), 0, 'nine in a row is not a run of ten — nothing is owed');
-eq(paceRestRemainingMs(MODE, [], T), 0, 'an account that has never published owes nothing');
-eq(
-  paceRestRemainingMs(MODE, run(10, T, 45_000), T),
-  REST_MS,
-  'ten in a row, the newest this instant: the whole rest is owed, measured from that newest publication',
-);
-eq(
-  paceRestRemainingMs(MODE, run(10, T - 60_000, 45_000), T),
-  REST_MS - 60_000,
-  'a minute into the rest, six minutes are left',
-);
-eq(paceRestRemainingMs(MODE, run(10, T - REST_MS, 45_000), T), 0, 'the instant the rest is up it is no longer owed');
-eq(paceRestRemainingMs(MODE, run(10, T - REST_MS - 60_000, 45_000), T), 0, 'and a minute past it, still nothing');
-
-/*
- * THE RUN RESETS ITSELF, WHICH IS WHY THERE IS NO COUNTER COLUMN AND NO
- * MIGRATION. A stretch as long as the rest, between two publications, IS a
- * rest — so the publication after one starts a new run.
- */
-{
-  const afterRest = [T, T - REST_MS - 1000, ...run(9, T - REST_MS - 1000 - 45_000, 45_000)];
-  eq(paceRestRemainingMs(MODE, afterRest, T), 0, 'one publication after a completed rest is a run of ONE, not of eleven — the count restarts with nothing stored');
-}
-{
-  /* A quiet night counts as a rest too, which is right: an account that
-     published nothing for seven minutes has had its break. */
-  const quiet = [T, ...run(9, T - 8 * 60_000, 45_000)];
-  eq(paceRestRemainingMs(MODE, quiet, T), 0, 'a gap longer than the rest, from ANY cause, breaks the run');
-}
-{
-  /* …and a gap one millisecond SHORT of the rest does not. */
-  const nearly = [T, ...run(9, T - (REST_MS - 1), 45_000)];
-  eq(paceRestRemainingMs(MODE, nearly, T), REST_MS, 'a gap one millisecond short of a rest is not a rest');
-}
-
-/* A run LONGER than the burst still rests, and rests from its newest row. */
-eq(paceRestRemainingMs(MODE, run(10, T, 20_000), T), REST_MS, 'ten publications 20s apart — denser than the mode asks for — still trigger the rest');
-
-/* Degenerate tables can never produce a hold. */
-eq(paceRestRemainingMs({ ...MODE, burst: 0 }, run(10, T, 45_000), T), 0, 'a run length of zero rests after nothing');
-eq(paceRestRemainingMs({ ...MODE, restMinutes: 0 }, run(10, T, 45_000), T), 0, 'and a rest of zero minutes is no rest');
-
-/* The label never promises an instant that has not arrived. */
-eq(paceRestLabel(REST_MS), '7 דק׳', 'a full rest reads as its own length');
-eq(paceRestLabel(61_000), '2 דק׳', 'and a minute and a second rounds UP, never down');
-eq(paceRestLabel(1), '1 דק׳', 'the last seconds are still "a minute", never "0 דק׳"');
-
-/* ══════════════ 5. THE ENGINE ITSELF, RUN AGAINST A FAKE DATABASE ════════ */
 
 /*
  * An in-memory PostgREST with just enough of the builder for the four reads
@@ -291,62 +293,87 @@ async function engineChecks(): Promise<void> {
   /* No mode: the spacing read asks for ONE row, exactly as it always has. */
   {
     const now = new Date(T);
-    const { db, asked } = fakeDb(run(10, T - 10 * 60_000, 45_000));
+    const { db, asked } = fakeDb(run(10, T - 10 * 60_000, 40_000));
     const limits: LimitsSettings = { ...DEFAULT_LIMITS, maxPerDay: 9999, maxPerTargetPerDay: 9999, dedupeDays: 0, minGapSeconds: 10, minGapMinutes: 1 };
     const decision = await evaluateQueueItem(db, ctxFor(limits, now));
-    eq(decision.action, 'publish', 'with no mode picked, ten recent publications hold nothing back — the engine is exactly what it was');
-    eq(asked.at(-1)?.limit, 1, 'and the spacing read asks for the single most recent row, byte for byte the query it was');
+    eq(decision.action, 'publish', 'with no mode picked, ten recent publications hold nothing back');
+    eq(asked.at(-1)?.limit, 1, 'and the spacing read asks for the single most recent row');
   }
 
-  /* The mode, mid-run: the rest holds the row and says so. */
+  /*
+   * ─── THE BEHAVIOUR CHANGE, STATED AS A TEST ─────────────────────────────
+   *
+   * This exact case used to return `defer` with "הפסקה אחרי 10 פרסומים
+   * רצופים". Ten publications forty seconds apart, the newest a minute ago,
+   * a mode in force — and the row now goes out, because the gap is satisfied
+   * and there is no rest left to owe. If this ever returns `defer` again, a
+   * rest has come back from somewhere.
+   */
   {
     const now = new Date(T);
-    const { db, asked } = fakeDb(run(10, T - 60_000, 45_000));
-    const limits: LimitsSettings = { ...DEFAULT_LIMITS, maxPerDay: 9999, maxPerTargetPerDay: 9999, dedupeDays: 0, minGapSeconds: 45, minGapMinutes: 1, pace: 'fast' };
+    const { db, asked } = fakeDb(run(10, T - 60_000, 40_000));
+    const limits: LimitsSettings = { ...DEFAULT_LIMITS, maxPerDay: 9999, maxPerTargetPerDay: 9999, dedupeDays: 0, minGapSeconds: 40, minGapMinutes: 1, pace: 'fast' };
     const decision = await evaluateQueueItem(db, ctxFor(limits, now));
-    eq(asked.at(-1)?.limit, MODE.burst, 'with a mode the read asks for the run length, because a run cannot be told from a broken stretch with one row');
-    eq(decision.action, 'defer', 'ten publications a minute ago means the row waits');
+    eq(asked.at(-1)?.limit, 1, 'with a mode the read STILL asks for one row — the run length is gone');
+    eq(decision.action, 'publish', 'ten publications a minute ago no longer rest the queue: the row goes out');
+  }
+
+  /* A hundred in a row changes nothing either. */
+  {
+    const now = new Date(T);
+    const { db } = fakeDb(run(100, T - 60_000, 40_000));
+    const limits: LimitsSettings = { ...DEFAULT_LIMITS, maxPerDay: 9999, maxPerTargetPerDay: 9999, dedupeDays: 0, minGapSeconds: 40, minGapMinutes: 1, pace: 'fast' };
+    const decision = await evaluateQueueItem(db, ctxFor(limits, now));
+    eq(decision.action, 'publish', 'and neither does a hundred — there is no run length at any size');
+  }
+
+  /*
+   * ─── BUT THE GAP STILL HOLDS, WHICH IS THE ONE BRAKE LEFT ───────────────
+   *
+   * Removing the rest must not have loosened the gap. The last publication
+   * was ten seconds ago under a mode asking for forty, so the row waits —
+   * and the reason says מרווח, which is now the only reason this gate gives.
+   */
+  {
+    /* The SLOW mode, so the wait left (110s) is longer than PREP_LEAD_MS and
+       the gate has to defer rather than hold the row inside the lead. */
+    const slow = paceProfile('slow')!;
+    const now = new Date(T);
+    const { db } = fakeDb([T - 10_000]);
+    const limits: LimitsSettings = { ...DEFAULT_LIMITS, maxPerDay: 9999, maxPerTargetPerDay: 9999, dedupeDays: 0, minGapSeconds: slow.gapSeconds, minGapMinutes: 1, pace: 'slow' };
+    const decision = await evaluateQueueItem(db, ctxFor(limits, now));
+    eq(decision.action, 'defer', 'a publication ten seconds ago under a two-minute mode does NOT go out — the gap survived the removal');
     is(
-      decision.action === 'defer' && decision.reason.includes('הפסקה אחרי 10 פרסומים רצופים'),
-      'and the reason says REST, naming the run length — not "מרווח", which would tell the owner his gap is seven minutes',
+      decision.action === 'defer' && !/הפסקה|רצופים/.test(decision.reason),
+      'and the reason it gives is the gap, never a rest',
     );
     is(
-      decision.action === 'defer' && Date.parse(decision.until) >= T + REST_MS - 60_000,
-      'and it comes back no earlier than the rest allows',
+      decision.action === 'defer' && Date.parse(decision.until) >= T + slow.gapSeconds * 1000 - 10_000,
+      'and it comes back no earlier than the gap allows',
     );
   }
 
-  /* The rest is over: the row goes. */
+  /* A gap with less than PREP_LEAD_MS left is a HOLD, not a deferral — the
+     shape that saves a round trip, and the only remaining user of it. */
   {
     const now = new Date(T);
-    const { db } = fakeDb(run(10, T - REST_MS - 1000, 45_000));
-    const limits: LimitsSettings = { ...DEFAULT_LIMITS, maxPerDay: 9999, maxPerTargetPerDay: 9999, dedupeDays: 0, minGapSeconds: 45, minGapMinutes: 1, pace: 'fast' };
+    const { db } = fakeDb([T - 10_000]);
+    const limits: LimitsSettings = { ...DEFAULT_LIMITS, maxPerDay: 9999, maxPerTargetPerDay: 9999, dedupeDays: 0, minGapSeconds: MODE.gapSeconds, minGapMinutes: 1, pace: 'fast' };
     const decision = await evaluateQueueItem(db, ctxFor(limits, now));
-    eq(decision.action, 'publish', 'once the rest has run, publishing resumes on its own — nothing has to be pressed');
-  }
-
-  /* Close enough to prepare inside: a hold, not a deferral — the same shape the
-     gap uses, so a rest ending in under PREP_LEAD_MS does not cost a round trip. */
-  {
-    const now = new Date(T);
-    const { db } = fakeDb(run(10, T - REST_MS + 30_000, 45_000));
-    const limits: LimitsSettings = { ...DEFAULT_LIMITS, maxPerDay: 9999, maxPerTargetPerDay: 9999, dedupeDays: 0, minGapSeconds: 45, minGapMinutes: 1, pace: 'fast' };
-    const decision = await evaluateQueueItem(db, ctxFor(limits, now));
-    eq(decision.action, 'publish', 'a rest with 30s left lets the row through…');
+    eq(decision.action, 'publish', 'under the 40-second mode, 30 seconds left is inside the preparation lead…');
     is(
       decision.action === 'publish' && decision.notBefore && Date.parse(decision.notBefore) > T,
-      '…with the instant attached, so the composer holds the final click (PREP_LEAD_MS)',
+      '…so the row is prepared with the instant attached and the composer holds the final click',
     );
-    is(30_000 <= PREP_LEAD_MS, 'sanity: 30s is inside the preparation lead this test is relying on');
   }
 
-  /* A run of nine under a mode: ordinary spacing, no rest. */
+  /* Once the gap has run, it goes. */
   {
     const now = new Date(T);
-    const { db } = fakeDb(run(9, T - 120_000, 45_000));
-    const limits: LimitsSettings = { ...DEFAULT_LIMITS, maxPerDay: 9999, maxPerTargetPerDay: 9999, dedupeDays: 0, minGapSeconds: 45, minGapMinutes: 1, pace: 'fast' };
+    const { db } = fakeDb([T - (MODE.gapSeconds * 1000 + 1000)]);
+    const limits: LimitsSettings = { ...DEFAULT_LIMITS, maxPerDay: 9999, maxPerTargetPerDay: 9999, dedupeDays: 0, minGapSeconds: MODE.gapSeconds, minGapMinutes: 1, pace: 'fast' };
     const decision = await evaluateQueueItem(db, ctxFor(limits, now));
-    eq(decision.action, 'publish', 'nine in a run and the gap satisfied: the tenth goes out, and only then does the rest begin');
+    eq(decision.action, 'publish', 'and a second past the gap it publishes');
   }
 }
 
@@ -402,59 +429,6 @@ eq(offenders, [], 'no screen labels a control "הפרש בין פרסומים" o
   is(!/minGapMinutes:/.test(settings), 'and Settings no longer WRITES the gap — the box is gone, and so is the field in its save, which is what stops a screen open for ten minutes reverting a mode picked in between');
 }
 
-/* ══════════════ 7. §7 — ONE RULE, ASKED BY EVERY AGENT ═══════════════════ */
-
-{
-  const rules = stripComments(src('src/lib/social/rules.ts'));
-  const worker = stripComments(src('worker/social-worker.ts'));
-  const client = stripComments(src('src/lib/social/client.ts'));
-
-  is(/export function paceRestRemainingMs\(/.test(rules), 'the rest rule has exactly one implementation, and it is in rules.ts');
-  is(/paceRestRemainingMs\(/.test(worker), "the worker's own pre-claim gate ASKS that function rather than repeating it — the gap drifted between these two gates once already");
-  is(/paceRestRemainingMs\(/.test(client), 'and so does the screen, so what is displayed and what is enforced cannot disagree');
-
-  /* The rest is decided BEFORE the gap. Both can be owed at once, the rest is
-     always the later instant, and the gap's branch returns on its own — so the
-     other order would defer for the gap, come back, and defer again for the
-     rest, telling the owner his gap is seven minutes on the way. */
-  const gate = rules.slice(rules.indexOf('export async function evaluateQueueItem'));
-  is(gate.indexOf('paceRestRemainingMs(pace, stamps') < gate.indexOf('accountGapSeconds(limits, ctx.browser'), 'the rest is checked before the gap, or the owner reads the wrong reason');
-
-  /* One read serves both gates, and the mode is the only thing that changes
-     about it. */
-  is(/\.limit\(pace \? Math\.max\(1, pace\.burst\) : 1\)/.test(gate), 'the spacing read asks for the run length with a mode and for one row without one');
-  is(/\.limit\(pace \? Math\.max\(1, pace\.burst\) : 1\)/.test(worker), "and the worker's gate asks for exactly the same thing");
-
-  /* Only successful publications count. */
-  is(/\.eq\('status', 'published'\)/.test(client), 'readPaceRest counts published rows only — "פרסום שנכשל אינו נחשב לפרסום מוצלח", structurally');
-
-  /* The notice cannot spam the activity log for the length of a rest. */
-  is(/Math\.max\(gate\.gapMs, gate\.restMs\) \/ 2/.test(worker), 'the waiting line is said once per WAIT, not once per gap — a 45s gap beside a 7-minute rest would otherwise write the same line every 22 seconds for seven minutes');
-
-  /* The two writes a mode makes, in the order that does not lose one. */
-  const apply = client.slice(client.indexOf('export async function applyPace'), client.indexOf('export async function liveQueuePlan'));
-  is(apply.length > 200, 'applyPace was located');
-  is(apply.indexOf('applyGapFloor(') < apply.indexOf("saveSetting('limits'"), 'applyGapFloor runs FIRST and the pace is written onto the row it leaves — the other order has applyGapFloor re-read the row before the pace lands and write it back without it');
-  is(/\.\.\.limits, pace: id/.test(apply), 'and the pace is written onto a FRESH read, never onto a copy a screen loaded at mount');
-}
-
-/* ══════════════ 8. §6 — "בהפסקה" IS ON SCREEN, WITH THE TIME LEFT ════════ */
-
-{
-  const next = stripComments(src('src/components/social/NextPublication.tsx'));
-  is(/data-resting/.test(next), 'the next-publication block has a resting state');
-  is(/בהפסקה · חוזר לפרסם בעוד/.test(next), 'and it says so, with the time left, the way it already says it for a Meta freeze');
-  is(/data-resting-why/.test(next), 'with the reason under it — a timer with no reason beside it is a machine that stopped for no stated cause');
-  is(/countdownTo\(restUntil, now\)/.test(next), 'counted by the same helper the freeze uses, so two clocks on one card cannot format differently');
-  is(/Boolean\(restUntil\)/.test(next), 'and the tick is armed for it, or the countdown renders once and freezes there');
-  /* A freeze outranks a rest: one is Facebook holding the account and the
-     other is the account's own chosen mode. */
-  is(/const resting = !frozen &&/.test(next), 'a Meta freeze outranks a rest — two countdowns on one line is how a card stops being readable');
-
-  const card = stripComments(src('src/components/social/SmartPaceCard.tsx'));
-  is(/data-pace-resting/.test(card), 'and the mode card shows the rest too, where the mode that caused it is');
-}
-
 /* ══════════════ 9. §3 — THE CARD, AND WHAT IT MAY NOT SAY ════════════════ */
 
 {
@@ -468,9 +442,9 @@ eq(offenders, [], 'no screen labels a control "הפרש בין פרסומים" o
   is(/border-brand-500/.test(code), 'the chosen one takes a blue border — "יודגש באמצעות מסגרת כחולה"');
   is(/bg-brand-300\/15/.test(code), 'with a soft fill behind it — "רקע עדין"');
   is(/CheckIcon/.test(code), 'and a check mark, which is the second channel a border colour alone cannot give a colour-blind reader');
-  is(/data-pace-summary/.test(code), 'there is a dynamic summary line under the row — "שורת סיכום דינמית המציגה את הקצב ואת משך ההפסקה"');
-  is(/paceRatePerHour\(selected\)/.test(code), 'and it quotes the SUSTAINED rate, not the gap pretending to be a rate');
-  is(/PACE_PROFILES\[0\]\.burst/.test(code), 'the "אחרי כל 10 פרסומים" pill reads its number off the table rather than spelling it out');
+  is(/data-pace-summary/.test(code), 'there is a dynamic summary line under the row — "שורת סיכום דינמית"');
+  is(/paceRatePerHour\(selected\)/.test(code), 'and it quotes the rate, computed rather than typed');
+  is(/paceGapWords\(p\.gapSeconds\)/.test(code), 'each card prints its own gap off the table, so a card and a gate cannot disagree about a mode');
 
   /* EVERY multi-column grid in this product carries the min-w-0 guard, or a
      long word inside one blows the card's width out on a phone. */

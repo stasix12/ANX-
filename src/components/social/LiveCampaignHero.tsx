@@ -271,7 +271,6 @@ export function LiveCampaignHero({
   spacing,
   pace,
   onPaceChange,
-  paceRestUntil,
   floorHours,
   frozenUntil = null,
   scheduleBusy = false,
@@ -355,8 +354,6 @@ export function LiveCampaignHero({
    */
   pace?: PaceId | null;
   onPaceChange?: (id: PaceId) => void;
-  /** When the current automatic rest ends, if one is running. */
-  paceRestUntil?: string | null;
   /** How close two publications of one post to one group may be, in hours —
       the account's setting, defaulted by the panel when absent. */
   floorHours?: number;
@@ -871,10 +868,8 @@ export function LiveCampaignHero({
              the instant it contradicts — see NextPublication's own note. */
           frozenUntil={frozenUntil}
           /* מצב פרסום חכם — the readout box that used to print the gap prints
-             the mode instead, and the next-publication block under it counts
-             down an automatic rest the way it counts down a Meta freeze. */
+             the mode instead. */
           pace={paceProfile(pace)}
-          restUntil={paceRestUntil}
           /* So the block under it can withdraw its own promise when the PC
              that does the publishing is not connected: "אם המחשב מנותק, יש
              להציג אזהרת חיבור, בלי להבטיח שהפרסום יצא במועד." */
@@ -927,7 +922,6 @@ export function LiveCampaignHero({
                    that writes it, and the rest it is currently serving. */
                 pace={pace}
                 onPaceChange={onPaceChange}
-                restUntil={paceRestUntil}
                 /* The account's own repeat floor, so the card judges the rounds
                    against the number in Settings rather than a constant. */
                 floorHours={floorHours}

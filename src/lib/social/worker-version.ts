@@ -643,7 +643,7 @@
  *
  * התזמון, סדר התור, מנגנון הפרסום וחישוב זמני הפרסום לא נגעו.
  */
-export const WORKER_VERSION = '4.54.0';
+export const WORKER_VERSION = '4.55.0';
 
 /**
  * A FINGERPRINT OF EVERYTHING THE INSTALLER CARRIES.
@@ -1256,4 +1256,30 @@ export const WORKER_VERSION = '4.54.0';
  * button that has always been on this screen still emits that sentence.
  * Reverting it would have put the broken form back.
  */
-export const WORKER_FINGERPRINT = 'a6c640a9186b58a8';
+/*
+ * ─── 08.11.2026 — 4.54.0 → 4.55.0. THE THREE MODES CHANGED AND THE REST WENT ─
+ *
+ * "סבב מהיר יוצא כל 40 שניות לקבוצה, בינוני כל דקה וחצי, ואיטי כל 2 דקות.
+ *  תבטל את הדקות המתנה בין 10 פוסטים זה לא רלוונטי"
+ *
+ * DOES THIS HAVE TO REACH THE PC? YES, twice over, and both halves are in
+ * code the PC runs before every click:
+ *
+ *   · rules.ts no longer has a rest gate at all. Until an installed copy
+ *     downloads this, it keeps deferring rows with "הפסקה אחרי 10 פרסומים
+ *     רצופים" — a hold the dashboard no longer explains, because every screen
+ *     that drew the countdown is gone. A half-updated estate is the worst of
+ *     the three states: the engine holding and the UI silent.
+ *   · worker/social-worker.ts's own pre-claim gate dropped `restMs` and reads
+ *     one row again instead of ten.
+ *
+ * The gaps themselves (40 / 90 / 120) are DATA the PC reads from
+ * social_settings through applyGapFloor(), so those reach an old copy on
+ * their own — but an old copy would then run the new gap AND the old rest.
+ *
+ * AND THE NUMBER WAS CHECKED AGAINST THE RELEASE LIST, not against this file.
+ * GitHub's newest published tag on 08.11.2026 was v4.54.0 (published 07.11 at
+ * 22:17), so 4.55.0 is free. This file cannot answer that question and must
+ * not be trusted to.
+ */
+export const WORKER_FINGERPRINT = '0ba18c239914aaf4';

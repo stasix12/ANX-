@@ -301,14 +301,13 @@ async function main(): Promise<void> {
     eq(await mode('איטי').first().getAttribute('aria-checked'), 'true', 'tapping a mode selects it');
     const paceLine = () => page.locator('[data-schedule] [data-pace-summary]').innerText();
     is((await paceLine()).includes('איטי'), 'and the summary line under the row names the mode that was chosen');
-    is((await paceLine()).includes('5 דקות'), 'with its interval');
-    /* "30 דק׳" — the summary abbreviates where the cards above it spell the
-       word out, because it has four facts to fit on one line and they have
-       two each. Both spellings come from the same seconds; see paceGapWords
-       and accountGapLabel in rules.ts. */
-    is(/30 דק/.test(await paceLine()), 'and the length of its rest');
+    is((await paceLine()).includes('2 דקות'), 'with its interval — the slow mode is two minutes since 08.11.2026');
+    is(/30 פרסומים בשעה/.test(await paceLine()), 'and the rate that gap works out to, computed rather than typed');
     is((await paceLine()).includes('על כל החשבון'), 'and that the mode is account-wide, which is the one consequence that reaches outside this campaign');
-    is((await paceLine()).includes('10 פרסומים'), 'and how many publications in a row trigger it');
+    /* AND NOT A WORD ABOUT A REST, which was removed on 08.11.2026: a line
+       that still promised one would describe a hold the engine is not
+       applying. */
+    is(!/הפסקה|רצופים/.test(await paceLine()), 'and nothing about an automatic rest, because there is none');
     /*
      * THE SCHEDULE SUMMARY NO LONGER CARRIES THE INTERVAL, deliberately: two
      * places stating one number is the "הגדרה כפולה" the brief forbids, and
@@ -347,16 +346,25 @@ async function main(): Promise<void> {
     is(labels[0].startsWith('מהיר'), 'מהיר first — fastest at the start of the row, which in RTL draws it rightmost as the reference does');
     is(labels[1].startsWith('בינוני'), 'בינוני second');
     is(labels[2].startsWith('איטי'), 'איטי third');
-    /* And each card carries BOTH of its numbers, which is the whole reason a
-       mode replaced a bare interval: a gap alone cannot express a rest. */
-    is(labels[0].includes('45 שניות') && labels[0].includes('7 דקות'), 'מהיר: every 45 seconds, a 7-minute rest');
-    is(labels[1].includes('2 דקות') && labels[1].includes('15 דקות'), 'בינוני: every 2 minutes, a 15-minute rest');
-    is(labels[2].includes('5 דקות') && labels[2].includes('30 דקות'), 'איטי: every 5 minutes, a 30-minute rest');
-    /* The run length is stated once, under the row, because all three share it. */
-    is(
-      (await page.locator('[data-schedule] [data-smart-pace]').innerText()).includes('10 פרסומים'),
-      'and the row says a rest follows every ten publications',
-    );
+    /* Each card carries its gap and the rate that gap works out to — the two
+       facts the reference's two-line card wants, and the two a reader actually
+       ranks the three modes by. The rest that used to be the second fact was
+       removed on 08.11.2026. */
+    is(labels[0].includes('40 שניות') && labels[0].includes('90 בשעה'), 'מהיר: every 40 seconds, about 90 an hour');
+    is(labels[1].includes('דקה וחצי') && labels[1].includes('40 בשעה'), 'בינוני: every minute and a half, about 40 an hour');
+    is(labels[2].includes('2 דקות') && labels[2].includes('30 בשעה'), 'איטי: every 2 minutes, about 30 an hour');
+    /*
+     * AND NO TWO CARDS READ THE SAME. The medium mode is 90 seconds and the
+     * slow one 120; a label that rounded to the nearest minute printed both as
+     * two minutes, which is how an owner stops believing the screen.
+     */
+    eq(new Set(labels).size, 3, 'three cards, three different readings');
+    /* AND NOT A WORD ABOUT A REST, anywhere on the card. */
+    {
+      const whole = (await page.locator('[data-schedule] [data-smart-pace]').innerText()).replace(/\s+/g, ' ');
+      is(!/הפסקה/.test(whole), 'the card promises no automatic rest — "תבטל את הדקות המתנה בין 10 פוסטים זה לא רלוונטי"');
+      is(!/10 פרסומים/.test(whole), 'and no longer counts ten publications in a row');
+    }
 
     /* ---------------------------------------------------------------- *
      * 3. THERE IS NO SWITCH ANY MORE — THE DAYS DECIDE.

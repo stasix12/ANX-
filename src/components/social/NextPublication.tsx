@@ -47,7 +47,6 @@ export function NextPublication({
   targetName = null,
   targetImage = null,
   frozenUntil = null,
-  restUntil = null,
   className = '',
 }: {
   readout: ScheduleReadout;
@@ -68,25 +67,6 @@ export function NextPublication({
    * caller that never heard of this renders exactly what it rendered before.
    */
   frozenUntil?: string | null;
-  /**
-   * ─── THE AUTOMATIC REST מצב פרסום חכם IS SERVING, if it is serving one ──
-   *
-   * "יש להציג מצב 'בהפסקה'. יש להציג זמן שנותר להפסקה." — 07.11.2026.
-   *
-   * A SECOND REASON THE QUEUE IS NOT MOVING, and it is drawn exactly like the
-   * first. The Meta freeze beside it taught this card the lesson: an instant
-   * on the line above with nothing explaining why it has not happened is a
-   * panel promising something nothing is doing. A rest is the same shape of
-   * fact — the row is still stamped for its slot, it simply cannot leave yet.
-   *
-   * IT RANKS BELOW THE FREEZE. A frozen account is held by Facebook and a
-   * resting one by its own chosen mode; when both are true the freeze is the
-   * longer and the more serious, and two countdowns on one line is how a card
-   * stops being readable.
-   *
-   * Derived, never stored: see readPaceRest() in client.ts.
-   */
-  restUntil?: string | null;
   /**
    * Whether the campaign's own window is switched on.
    *
@@ -184,12 +164,9 @@ export function NextPublication({
   /* AND WHILE A FREEZE IS STANDING, whatever the queue looks like: the
      countdown below is the only moving thing on the card then, and a card
      with nothing scheduled would otherwise render it once and leave it. */
-  /* …AND WHILE A REST IS RUNNING, for the same reason as the freeze: it may
-     be the only moving thing on the card, and a card with nothing scheduled
-     would otherwise render the countdown once and leave it frozen there. */
   const now = useTick(
-    at !== null || Boolean(armedAt) || Boolean(frozenUntil) || Boolean(restUntil),
-    coarse && !frozenUntil && !restUntil ? 15_000 : 1_000,
+    at !== null || Boolean(armedAt) || Boolean(frozenUntil),
+    coarse && !frozenUntil ? 15_000 : 1_000,
   );
 
   const left = at ? countdownTo(at, now) : null;
@@ -201,10 +178,6 @@ export function NextPublication({
    */
   const thaw = frozenUntil ? countdownTo(frozenUntil, now) : null;
   const frozen = Boolean(thaw && !thaw.due);
-  /* The rest's own countdown, from the same helper, for the same reason: two
-     clocks on one card that format differently is two clocks nobody trusts. */
-  const back = restUntil ? countdownTo(restUntil, now) : null;
-  const resting = !frozen && Boolean(back && !back.due);
   const offline = workerOnline === false;
 
   return (
@@ -285,7 +258,7 @@ export function NextPublication({
           <p
             data-next-wait
             className={`mt-0.5 flex items-center gap-1.5 text-[11.5px] font-bold leading-4 ${
-              frozen ? 'text-warning-400' : resting ? 'text-brand-400' : left?.overdue ? 'text-warning-400' : 'text-mist-300'
+              frozen ? 'text-warning-400' : left?.overdue ? 'text-warning-400' : 'text-mist-300'
             }`}
           >
             <ClockIcon aria-hidden className="h-3 w-3 shrink-0" />
@@ -293,14 +266,6 @@ export function NextPublication({
               <span data-frozen>
                 {'מוקפא · חוזר לפרסם בעוד '}
                 <span dir="ltr" className="inline-block tabular-nums">{thaw!.label}</span>
-              </span>
-            ) : resting ? (
-              /* brand rather than amber: a rest is the system doing what it
-                 was told, not a warning. The amber on this card is reserved
-                 for a hold the owner did not choose. */
-              <span data-resting>
-                {'בהפסקה · חוזר לפרסם בעוד '}
-                <span dir="ltr" className="inline-block tabular-nums">{back!.label}</span>
               </span>
             ) : !left ? null : left.overdue ? (
               <span>באיחור · {relativeHe(at)}</span>
@@ -318,11 +283,6 @@ export function NextPublication({
           {frozen && (
             <p data-frozen-why className="mt-0.5 text-[11px] font-bold leading-4 text-mist-300">
               פייסבוק הגבילה את קצב הפרסום. אין מה לעשות — הפרסום יחזור לבד.
-            </p>
-          )}
-          {resting && (
-            <p data-resting-why className="mt-0.5 text-[11px] font-bold leading-4 text-mist-300">
-              ההפסקה האוטומטית של מצב הפרסום שנבחר. הפרסום ימשיך מעצמו בסוף ההפסקה.
             </p>
           )}
 

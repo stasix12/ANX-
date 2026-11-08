@@ -25,8 +25,6 @@ import {
   getControl,
   getLimits,
   applyPace,
-  readPaceRest,
-  type PaceRestState,
   listActivity,
   listCampaigns,
   commentTotals,
@@ -185,13 +183,6 @@ interface DashboardData {
      listCommentsNeedingHuman. */
   commentsAttention: QueueRow[];
   limits: LimitsSettings;
-  /**
-   * מצב פרסום חכם's current rest, if it is serving one — derived on every poll
-   * from the queue's own published rows by readPaceRest(), which asks the same
-   * paceRestRemainingMs() both publishing gates ask. Nothing about it is
-   * stored, so a refresh or a restart cannot lose it.
-   */
-  paceRest: PaceRestState;
   /** For the account-wide spacing rule the cards must respect — see scheduleReadout. */
   browser: BrowserSettings;
   lastPublished: string | null;
@@ -507,14 +498,7 @@ export default function SocialDashboard() {
         countWaitingWithin(zonedToUtc(addDaysISO(zonedDateISO(now), 1), '00:00').toISOString())
       ]);
       if (queue.summary.total > 0) setupDone.current = true;
-      /*
-       * AFTER the batch and not inside it, because it needs `limits` to know
-       * how long a run is — and it returns without touching the database at
-       * all when no mode is picked, which is every account that has not been
-       * near the new card. One indexed read on the polls where it does run.
-       */
-      const paceRest = await readPaceRest(limits);
-      const next: DashboardData = {
+            const next: DashboardData = {
         counts: queue.counts,
         summary: queue.summary,
         today,
@@ -533,7 +517,6 @@ export default function SocialDashboard() {
         commentsDone,
         commentsAttention,
         limits,
-        paceRest,
         browser,
         lastPublished,
         /* Done plus still to come. Never smaller than what has gone out,
@@ -1467,7 +1450,7 @@ export default function SocialDashboard() {
            mode nominally asked for. They differ whenever the surcharge had to
            absorb part of it. */
         toast(
-          `מצב "${pace.label}" הופעל — פרסום כל ${accountGapLabel(gap.minGapSeconds + gap.groupMinGapSeconds)}, והפסקה של ${pace.restMinutes} דקות אחרי ${pace.burst} פרסומים ברצף. חל על כל החשבון.`,
+          `מצב "${pace.label}" הופעל — פרסום כל ${accountGapLabel(gap.minGapSeconds + gap.groupMinGapSeconds)}. חל על כל החשבון.`,
           'info',
         );
       } catch (err) {
@@ -2099,10 +2082,6 @@ export default function SocialDashboard() {
                      travel through onScheduleChange — see changePace. */
                   pace={data.limits.pace}
                   onPaceChange={(id) => void changePace(run.campaign, id)}
-                  /* `?.` because a dashboard restored from an older snapshot
-                     has no such key: no rest is the safe reading, and the
-                     next poll fills it in. */
-                  paceRestUntil={data.paceRest?.until ?? null}
                   spacing={{
                     minGapMinutes: data.limits.minGapMinutes,
                     groupMinGapMinutes: data.browser.groupMinGapMinutes,

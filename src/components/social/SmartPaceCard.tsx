@@ -1,10 +1,8 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-
 import { PACE_PROFILES, accountGapLabel, paceGapWords, paceProfile, paceRatePerHour, type PaceProfile } from '@/lib/social/rules';
 import type { PaceId } from '@/lib/social/types';
-import { BoltIcon, CheckIcon, ClockIcon, CoffeeIcon, GaugeIcon, LayersIcon, RocketIcon, ShieldIcon } from '@/components/icons';
+import { BoltIcon, CheckIcon, ClockIcon, GaugeIcon, RocketIcon, ShieldIcon } from '@/components/icons';
 
 /**
  * ─────────────────────────────────────────────────────────────────────────────
@@ -76,23 +74,11 @@ const TONE_TEXT: Record<PaceProfile['tone'], string> = {
   success: 'text-success-400',
 };
 
-/** "0:07:12" — a rest counted down the way the run card counts down a Meta
-    hold, so two waits on one screen are read the same way. */
-function countdown(ms: number): string {
-  const total = Math.max(0, Math.round(ms / 1000));
-  const h = Math.floor(total / 3600);
-  const m = Math.floor((total % 3600) / 60);
-  const s = total % 60;
-  const pad = (n: number) => String(n).padStart(2, '0');
-  return h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${m}:${pad(s)}`;
-}
-
 export function SmartPaceCard({
   pace,
   onChange,
   disabled,
   currentGapSeconds,
-  restUntil,
   className = '',
 }: {
   /** The stored mode, or null/undefined when the account has never picked one. */
@@ -103,37 +89,10 @@ export function SmartPaceCard({
   /** What the engine enforces between two publications right now, in seconds.
       Printed only while no mode is picked, where it is the whole truth. */
   currentGapSeconds?: number;
-  /**
-   * When the current rest ends, if one is running — an ISO instant computed by
-   * the caller out of paceRestRemainingMs(), which is the same function both
-   * publishing gates use. Null when nothing is resting.
-   */
-  restUntil?: string | null;
   className?: string;
 }) {
   const selected = paceProfile(pace);
 
-  /*
-   * ─── THE COUNTDOWN TICKS HERE, AND NOWHERE ELSE DECIDES ANYTHING ─────────
-   *
-   * "יש להציג מצב 'בהפסקה'. יש להציג זמן שנותר להפסקה."
-   *
-   * The INSTANT comes from the server, derived from published rows; this
-   * second-by-second render is presentation only. So a refresh, a reconnect or
-   * a restart cannot lose it — there is no state here to lose, which is what
-   * "יש לשמור את זמן סיום ההפסקה גם לאחר רענון העמוד" actually requires.
-   *
-   * The interval is torn down when nothing is resting, so an idle card runs no
-   * timer at all.
-   */
-  const [now, setNow] = useState(() => Date.now());
-  const restEndsAt = restUntil ? Date.parse(restUntil) : NaN;
-  const resting = Number.isFinite(restEndsAt) && restEndsAt > now;
-  useEffect(() => {
-    if (!restUntil) return;
-    const id = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(id);
-  }, [restUntil]);
 
   return (
     <section
@@ -149,7 +108,7 @@ export function SmartPaceCard({
         <span className="min-w-0 grow">
           <span className="block text-[12.5px] font-extrabold leading-4 text-mist-100">מצב פרסום חכם</span>
           <span className="mt-px block text-[10px] font-bold leading-[13px] text-mist-300">
-            בחר קצב פרסום כולל הפסקות אוטומטיות
+            בחר את המרווח בין פרסום לפרסום
           </span>
         </span>
       </div>
@@ -175,7 +134,7 @@ export function SmartPaceCard({
               aria-checked={on}
               disabled={disabled}
               onClick={() => onChange(p.id)}
-              aria-label={`${p.label} — פרסום כל ${paceGapWords(p.gapSeconds)}, הפסקה של ${p.restMinutes} דקות אחרי ${p.burst} פרסומים`}
+              aria-label={`${p.label} — פרסום כל ${paceGapWords(p.gapSeconds)}, כ-${Math.round(paceRatePerHour(p))} פרסומים בשעה`}
               /*
                 THE SELECTED CARD IS BLUE-BORDERED WITH A SOFT FILL, which is
                 what the specification asks for by name, and it is the SAME
@@ -230,42 +189,24 @@ export function SmartPaceCard({
               {/* the reference's own hairline between the two facts */}
               <span aria-hidden className="my-0.5 block h-px w-full bg-ink-700" />
 
-              {/* the rest */}
+              {/* the rate the gap works out to — the second fact the
+                  reference's two-line card wants, and the one a reader
+                  actually ranks the three modes by. It replaced the rest when
+                  the rest was removed on 08.11.2026. */}
               <span className="flex min-w-0 items-center gap-1 text-[10.5px] font-bold leading-[13px] text-mist-300">
-                <CoffeeIcon aria-hidden className="h-3 w-3 shrink-0 text-mist-500" />
-                <span className="min-w-0 truncate">הפסקה {p.restMinutes} דקות</span>
+                <GaugeIcon aria-hidden className="h-3 w-3 shrink-0 text-mist-500" />
+                <span className="min-w-0 truncate">כ-{Math.round(paceRatePerHour(p))} בשעה</span>
               </span>
             </button>
           );
         })}
       </div>
 
-      {/* ─── 3. the run length, as the reference's own pill row ───────────── */}
-      {/*
-        "אחרי כל 10 פרסומים תופעל הפסקה אוטומטית לפי המצב הנבחר" — the number
-        is read off the table rather than typed, so the sentence and the gate
-        cannot drift. All three modes share a run of ten, which is why this is
-        one line under the row instead of a third fact inside each card.
-      */}
-      <div className="mt-1 flex min-w-0 items-center gap-1.5 rounded-2xl bg-brand-300/10 px-2 py-1 text-[10.5px] font-bold leading-4 text-mist-300">
-        <LayersIcon aria-hidden className="h-3 w-3 shrink-0 text-brand-400" />
-        {/* Two lines at 360px in the first draft, which cost 23px on a card
-            the brief wants shorter. Same fact, fewer words: the "אוטומטית"
-            and the "לפי המצב הנבחר" are both already said by the card around
-            it. */}
-        <span className="min-w-0">
-          הפסקה אוטומטית אחרי כל{' '}
-          <span className="inline-block rounded-full bg-brand-500 px-1.5 py-px align-middle text-[10px] font-extrabold text-on-brand">
-            {PACE_PROFILES[0].burst} פרסומים
-          </span>
-        </span>
-      </div>
-
       {/* ─── 4. the dynamic summary line the specification asks for ───────── */}
       {selected ? (
         <p data-pace-summary className="mt-1 text-[10.5px] font-bold leading-4 text-brand-400">
-          נבחר <span className="font-extrabold">{selected.label}</span>: כל {paceGapWords(selected.gapSeconds)}, הפסקה {selected.restMinutes} דק׳
-          אחרי {selected.burst} פרסומים מוצלחים ברצף, כ-{Math.round(paceRatePerHour(selected))} בשעה. המצב חל על כל החשבון ועל כל הסבבים.
+          נבחר <span className="font-extrabold">{selected.label}</span>: כל {paceGapWords(selected.gapSeconds)},
+          כ-{Math.round(paceRatePerHour(selected))} פרסומים בשעה. המצב חל על כל החשבון ועל כל הסבבים.
         </p>
       ) : (
         /*
@@ -279,29 +220,14 @@ export function SmartPaceCard({
         <p data-pace-summary className="mt-1 text-[10.5px] font-bold leading-4 text-mist-300">
           עדיין לא נבחר מצב
           {typeof currentGapSeconds === 'number' && Number.isFinite(currentGapSeconds) ? (
-            <> — הפרסום יוצא כרגע כל {accountGapLabel(currentGapSeconds)}, בלי הפסקות אוטומטיות</>
+            <> — הפרסום יוצא כרגע כל {accountGapLabel(currentGapSeconds)}</>
           ) : (
-            <> — הפרסום יוצא לפי המרווח הקיים, בלי הפסקות אוטומטיות</>
+            <> — הפרסום יוצא לפי המרווח הקיים</>
           )}
-          . בחירת מצב מפעילה את ההפסקות.
+          . בחירת מצב קובעת את המרווח.
         </p>
       )}
 
-      {/* ─── 5. "בהפסקה", with the time left ──────────────────────────────── */}
-      {resting && selected && (
-        <p
-          data-pace-resting
-          className="mt-1.5 flex min-w-0 items-center gap-1.5 rounded-2xl bg-brand-300/15 px-2 py-1.5 text-[11px] font-extrabold leading-4 text-brand-400"
-        >
-          <CoffeeIcon aria-hidden className="h-3.5 w-3.5 shrink-0" />
-          <span className="min-w-0">
-            בהפסקה — חוזר לפרסם בעוד{' '}
-            <span dir="ltr" className="inline-block tabular-nums">
-              {countdown(restEndsAt - now)}
-            </span>
-          </span>
-        </p>
-      )}
     </section>
   );
 }

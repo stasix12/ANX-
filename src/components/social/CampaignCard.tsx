@@ -103,7 +103,6 @@ export function CampaignCard({
   spacing,
   pace,
   onPaceChange,
-  paceRestUntil,
   floorHours,
   scheduleBusy = false,
 }: {
@@ -211,8 +210,6 @@ export function CampaignCard({
    */
   pace?: PaceId | null;
   onPaceChange?: (id: PaceId) => void;
-  /** When the current automatic rest ends, if one is running. */
-  paceRestUntil?: string | null;
   /** How close two publications of one post to one group may be, in hours —
       the account's setting, defaulted by the panel when absent. */
   floorHours?: number;
@@ -699,7 +696,6 @@ export function CampaignCard({
             accountFloorSeconds={spacing ? accountGapSeconds(spacing, spacing, true) : undefined}
             pace={pace}
             onPaceChange={onPaceChange}
-            restUntil={paceRestUntil}
             /* The account's own repeat floor, so the card judges the rounds
                against the number in Settings rather than a constant. */
             floorHours={floorHours}

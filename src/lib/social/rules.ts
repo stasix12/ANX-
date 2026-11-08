@@ -184,30 +184,49 @@ export function accountGapLabel(seconds: number): string {
  *  binding reference image and an eleven-section specification.
  *
  * WHAT THIS IS NOT. It is not a way around anything Facebook does: there is
- * no detection to dodge here and nothing is disguised. Every mode publishes
- * LESS than the account publishes today and adds stretches of doing nothing
- * at all. It is a brake, and it is the owner braking his own account. The
- * specification is explicit that the modes must not be presented as a promise
- * that an account will not be restricted — "אין להציג את המצבים כהבטחה
- * למניעת חסימות בפייסבוק" — and no string in this product does.
+ * no detection to dodge here and nothing is disguised. A mode is a BRAKE on
+ * the gap, and it is the owner braking his own account. The modes must not be
+ * presented as a promise that an account will not be restricted — "אין להציג
+ * את המצבים כהבטחה למניעת חסימות בפייסבוק" — and no string in this product
+ * does. The measurements below are the reason that warning is not boilerplate.
  *
- *   מהיר    45 שניות  ·  10 ברצף  ·  הפסקה 7 דק׳    ≈ 44 פרסומים בשעה
- *   בינוני   2 דקות    ·  10 ברצף  ·  הפסקה 15 דק׳   ≈ 18 פרסומים בשעה
- *   איטי     5 דקות    ·  10 ברצף  ·  הפסקה 30 דק׳   ≈  8 פרסומים בשעה
+ *   מהיר    40 שניות   ≈ 90 פרסומים בשעה
+ *   בינוני   דקה וחצי   ≈ 40 פרסומים בשעה
+ *   איטי     2 דקות     ≈ 30 פרסומים בשעה
  *
- * THE NUMBERS ARE THE SPECIFICATION'S, VERBATIM. They are not derived from
- * any published Meta figure, because there is none: this account has been
- * restricted exactly ONCE, on 07.11.2026 at 21:40:13 after 158 publications
- * at a sustained 69 an hour; the night of 02.11 ran 442 publications at 152
- * an hour and was not restricted. Rate alone does not explain it and nothing
- * here claims it does. What the three modes are is three CHOICES with their
- * consequences printed on them.
+ * THE NUMBERS ARE THE OWNER'S, set on 08.11.2026: "סבב מהיר יוצא כל 40 שניות
+ * לקבוצה, בינוני כל דקה וחצי, ואיטי כל 2 דקות". They are not derived from any
+ * published Meta figure, because there is none.
  *
- * THE RUN LENGTH IS TEN IN ALL THREE, which is what was asked for and is also
- * what keeps the three comparable: one row of the gap and the rest, and the
- * reader can rank them at a glance.
+ * ─── WHAT THE LIVE DATA SAYS ABOUT RATE, SO NOBODY RE-DERIVES IT ─────────
  *
- * ─── WHERE EACH HALF OF A MODE IS KEPT ───────────────────────────────────
+ * Measured against this installation's own history on 08.11.2026, over 6,728
+ * Facebook-touching actions on the owner's account and 5,652 on a customer's:
+ *
+ *   · The owner's account carries SEVEN confirmed Facebook rate limits, all
+ *     between 06.11 11:48 and 08.11 10:27. Three of them arrived with 0, 0
+ *     and 2 actions in the preceding hour.
+ *   · It ran at 94–100 actions an hour on eight separate days from 15.10 to
+ *     04.11 with no rate limit at all.
+ *   · The customer's account runs a 15-second gap with three parallel lanes,
+ *     peaked at 362 actions in 24 hours and 138 in one hour, and has NEVER
+ *     been rate limited. It is the same engine and more aggressive settings.
+ *
+ * So the gap does not decide whether an account gets restricted, and this
+ * table cannot be sold as if it did. What a mode buys is a slower, more
+ * predictable account and a smaller blast radius when something does go
+ * wrong. That is worth having and it is all it is.
+ *
+ * ─── THERE USED TO BE A REST, AND IT IS GONE ─────────────────────────────
+ *
+ * Each mode once carried "ten in a row, then rest N minutes". Removed on
+ * 08.11.2026 — "תבטל את הדקות המתנה בין 10 פוסטים זה לא רלוונטי" — and the
+ * data agrees it was not earning its place: three of the seven confirmed rate
+ * limits landed 0, 6 and 0 publications after a pause, so resting did not
+ * stand between this account and a refusal. A mode is a GAP now, nothing
+ * else, which also means there is no second gate to drift out of step.
+ *
+ * ─── WHERE A MODE IS KEPT ────────────────────────────────────────────────
  *
  * THE GAP IS NOT READ FROM HERE AT PUBLISH TIME. Picking a mode WRITES
  * `gapSeconds` into the pair the engine has always read — limits.minGapSeconds
@@ -216,8 +235,9 @@ export function accountGapLabel(seconds: number): string {
  * reading it from the one place they read it from now. Nothing had to learn
  * about modes, and no screen can disagree with the engine about the gap.
  *
- * THE REST IS THE GENUINELY NEW RULE and lives in `limits.pace` plus this
- * table. paceRestRemainingMs() below is the whole of it.
+ * `limits.pace` therefore stores only WHICH mode is lit on the card. With the
+ * rest gone it governs no behaviour of its own, and an account that has never
+ * picked one is paced exactly as it is today.
  * ─────────────────────────────────────────────────────────────────────────────
  */
 export interface PaceProfile {
@@ -236,16 +256,12 @@ export interface PaceProfile {
    * note above: picking the mode writes it into the stored pair.
    */
   gapSeconds: number;
-  /** How many SUCCESSFUL publications in a row before the engine rests. */
-  burst: number;
-  /** How long the rest lasts, measured from the last publication of the run. */
-  restMinutes: number;
 }
 
 export const PACE_PROFILES: PaceProfile[] = [
-  { id: 'fast', label: 'מהיר', tone: 'warning', gapSeconds: 45, burst: 10, restMinutes: 7 },
-  { id: 'medium', label: 'בינוני', tone: 'brand', gapSeconds: 120, burst: 10, restMinutes: 15 },
-  { id: 'slow', label: 'איטי', tone: 'success', gapSeconds: 300, burst: 10, restMinutes: 30 },
+  { id: 'fast', label: 'מהיר', tone: 'warning', gapSeconds: 40 },
+  { id: 'medium', label: 'בינוני', tone: 'brand', gapSeconds: 90 },
+  { id: 'slow', label: 'איטי', tone: 'success', gapSeconds: 120 },
 ];
 
 /** The mode a stored id names, or null — which is "no mode", the state every
@@ -255,78 +271,18 @@ export function paceProfile(id: PaceId | null | undefined): PaceProfile | null {
 }
 
 /**
- * Publications per hour a mode SUSTAINS, rest included — which is the only
- * number worth putting on a card.
+ * Publications per hour a mode runs at — the only number worth putting on a
+ * card, and now simply the gap turned round.
  *
- * A run's first publication comes straight after the rest, so the run itself
- * spans (burst − 1) gaps and the cycle is that plus the rest. Quoting
- * 3600/gap instead — 80 an hour for the fast mode — would describe a burst
- * that lasts seven minutes as if it lasted all day, which is exactly the
- * misreading these modes exist to correct.
+ * It used to average a burst-and-rest cycle, because a mode carried a rest.
+ * The rest is gone — "תבטל את הדקות המתנה בין 10 פוסטים זה לא רלוונטי",
+ * 08.11.2026 — and the reason it is gone is not tidiness: it was measured
+ * against the account's own live history and it does not prevent a Facebook
+ * rate limit. Three of the refusals arrived 0, 6 and 0 publications after a
+ * pause. A mode is a GAP now, nothing else, and this is that gap.
  */
 export function paceRatePerHour(p: PaceProfile): number {
-  const cycleSeconds = (p.burst - 1) * p.gapSeconds + p.restMinutes * 60;
-  return cycleSeconds > 0 ? (p.burst * 3600) / cycleSeconds : 0;
-}
-
-/**
- * ─── HOW LONG A REST IS STILL OWED, in milliseconds. 0 means none is. ──────
- *
- * ONE FUNCTION, ASKED BY EVERYBODY — the per-row rule below, the worker's own
- * pre-claim gate (worker/social-worker.ts) and the screen that has to show
- * "בהפסקה" with a countdown. Those gates have drifted before over the GAP,
- * which is why accountGapSeconds() exists; this is the same lesson applied
- * the first time rather than the second.
- *
- * `stampsDesc` is the published_at instants of the most recent SUCCESSFUL
- * publications, NEWEST FIRST, at least `burst` of them. Every caller reads
- * them with `status = 'published'`, so a failed or skipped attempt is not in
- * the list at all — "פרסום שנכשל אינו נחשב לפרסום מוצלח", structurally rather
- * than by a filter somebody has to remember to write.
- *
- * ─── WHY THERE IS NO COUNTER COLUMN, AND NO MIGRATION ─────────────────────
- *
- * "how many in a row" looks like state that has to be stored and reset, and
- * storing it would mean a schema change, a reset nobody can see, and a number
- * that goes wrong the first time a row is published from somewhere this code
- * does not run. It does not have to be stored, because THE REST ITSELF BREAKS
- * THE RUN: a stretch as long as the rest, between two publications, IS a
- * rest, whatever caused it. So the run is simply "how many of the newest
- * publications are each less than one rest apart", and after a real rest the
- * newest publication is more than one rest from the one before it, the count
- * falls back to 1, and the next run starts.
- *
- * THIS IS ALSO WHAT MAKES THE REST SURVIVE A REFRESH AND A RESTART, which the
- * specification requires by name: "יש לשמור את זמן סיום ההפסקה גם לאחר רענון
- * העמוד או הפעלה מחדש". There is nothing to persist — the rest is DERIVED, on
- * every call, from rows that were already in the database. A browser refresh,
- * a worker restart, a second agent on another machine and the server all
- * compute the same instant from the same rows.
- *
- * It also means a quiet night counts as a rest, which is right: an account
- * that published nothing for two hours has had its break.
- */
-export function paceRestRemainingMs(
-  pace: PaceProfile | null,
-  stampsDesc: number[],
-  nowMs: number,
-): number {
-  if (!pace || pace.burst <= 0 || pace.restMinutes <= 0) return 0;
-  if (stampsDesc.length < pace.burst) return 0;
-  const restMs = pace.restMinutes * 60_000;
-  let run = 1;
-  for (let i = 1; i < stampsDesc.length; i += 1) {
-    if (stampsDesc[i - 1] - stampsDesc[i] >= restMs) break;
-    run += 1;
-  }
-  if (run < pace.burst) return 0;
-  return Math.max(0, stampsDesc[0] + restMs - nowMs);
-}
-
-/** "18 דק׳" — the wait a resting row reports, rounded UP so the sentence never
-    promises an instant that has not arrived. */
-export function paceRestLabel(ms: number): string {
-  return `${Math.max(1, Math.ceil(ms / 60_000))} דק׳`;
+  return p.gapSeconds > 0 ? 3600 / p.gapSeconds : 0;
 }
 
 /**
@@ -342,7 +298,13 @@ export function paceRestLabel(ms: number): string {
  */
 export function paceGapWords(seconds: number): string {
   if (seconds < 60) return `${seconds} שניות`;
+  /* The owner's own words for the medium mode — "בינוני כל דקה וחצי". The
+     abbreviating label underneath would spell it "1.5 דק׳", which is precise
+     and is not what a card the size of a thumbnail should make a reader
+     parse. */
+  if (seconds === 90) return 'דקה וחצי';
   const m = seconds / 60;
+  if (m === 1) return 'דקה';
   return Number.isInteger(m) ? `${m} דקות` : accountGapLabel(seconds);
 }
 
@@ -859,23 +821,22 @@ export async function evaluateQueueItem(db: SupabaseClient, ctx: RuleContext): P
   }
 
   /*
-   * Minimum spacing between any two publications (groups get extra spacing),
-   * and — when a pacing pattern is in force — the rest after a run of them.
+   * Minimum spacing between any two publications; groups get extra spacing.
    *
-   * ONE READ SERVES BOTH, and the limit is the only thing the pattern changes
-   * about it. The rest needs the newest `burst` instants to tell a run from a
-   * stretch that has already been broken; the gap needs the newest of them,
-   * which is the same row this read has always returned. With no pattern the
-   * limit is 1 and this is byte-for-byte the query it was.
+   * ONE ROW IS ALL THIS NEEDS, and it is all it used to read. A pacing
+   * pattern briefly widened it to `burst` rows so a rest could tell a run
+   * from a stretch already broken by one; the rest is gone — see
+   * paceRatePerHour() for why, and for the live numbers that decided it — so
+   * this is byte-for-byte the query it was before patterns existed. A mode
+   * now changes the stored GAP and nothing about this read.
    */
-  const pace = paceProfile(limits.pace);
   const recent = await db
     .from('social_queue')
     .select('published_at')
     .eq('status', 'published')
     .not('published_at', 'is', null)
     .order('published_at', { ascending: false })
-    .limit(pace ? Math.max(1, pace.burst) : 1);
+    .limit(1);
   /*
    * AND THE LAST OF THE FOUR. A failed read leaves `stamps` empty, both
    * blocks below are skipped, and the minimum gap between any two
@@ -897,38 +858,6 @@ export async function evaluateQueueItem(db: SupabaseClient, ctx: RuleContext): P
   const stamps = (recent.data ?? [])
     .map((r) => Date.parse(String((r as { published_at?: string | null }).published_at ?? '')))
     .filter((t) => Number.isFinite(t));
-
-  /*
-   * ─── THE REST AFTER A RUN ────────────────────────────────────────────────
-   *
-   * Checked BEFORE the gap, and that ordering is the only reason the owner
-   * ever sees the right sentence. A rest is longer than the gap in all three
-   * patterns, so when both are owed the rest is the later instant and the one
-   * that decides; the gap's branch below `return`s on its own, so leaving this
-   * second would have deferred the row for the gap, let it come back, and
-   * defer it again for the rest — two round trips and a reason about spacing
-   * for a row that is resting.
-   *
-   * paceRestRemainingMs() is the whole rule and it is pure; everything here is
-   * the same shape the gap uses underneath — hold if it is close enough to
-   * prepare inside, defer if it is not.
-   */
-  const restMs = paceRestRemainingMs(pace, stamps, now.getTime());
-  if (pace && restMs > 0) {
-    if (item.attempts > MAX_DEFERRALS) return { action: 'skip', reason: 'הפרסום נכשל שוב ושוב ולכן הופסק.' };
-    if (restMs <= PREP_LEAD_MS) {
-      /* Raised, not returned — the gap below and the campaign's own interval
-         may each want a later instant, and the single return hands over the
-         latest of the three. */
-      holdFor(new Date(now.getTime() + restMs));
-    } else {
-      return {
-        action: 'defer',
-        until: insideWindow(gate, new Date(now.getTime() + restMs + DEFER_CUSHION_MS)).toISOString(),
-        reason: `הפסקה אחרי ${pace.burst} פרסומים רצופים — ממשיכים בעוד ${paceRestLabel(restMs)}.`,
-      };
-    }
-  }
 
   if (stamps.length) {
     const lastAt = stamps[0];

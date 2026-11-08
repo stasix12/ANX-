@@ -153,7 +153,6 @@ export function CampaignSchedulePanel({
   accountFloorSeconds,
   pace,
   onPaceChange,
-  restUntil,
   floorHours = MIN_REPEAT_HOURS,
   neverLaunched = false,
   showHeader = true,
@@ -271,13 +270,6 @@ export function CampaignSchedulePanel({
    */
   pace?: PaceId | null;
   onPaceChange?: (id: PaceId) => void;
-  /**
-   * WHEN THE CURRENT REST ENDS, if one is running — an ISO instant the caller
-   * derived through paceRestRemainingMs(), the same function both publishing
-   * gates use. Null while nothing is resting. Optional: a caller that cannot
-   * read the queue shows no rest rather than guessing at one.
-   */
-  restUntil?: string | null;
   /**
    * HOW CLOSE TWO PUBLICATIONS OF ONE POST TO ONE GROUP MAY BE, in hours.
    *
@@ -727,7 +719,6 @@ export function CampaignSchedulePanel({
           onChange={onPaceChange}
           disabled={disabled || busy}
           currentGapSeconds={effectiveGapSeconds}
-          restUntil={restUntil}
         />
       )}
 
@@ -882,10 +873,6 @@ export function CampaignSchedulePanel({
           neverLaunched={neverLaunched}
           targetName={nextTargetName}
           targetImage={nextTargetImage}
-          /* The same rest the mode card above counts down, so this block does
-             not promise an instant the engine is holding. The dashboard's own
-             copy of this component is handed it through the board. */
-          restUntil={restUntil}
           className="mt-1.5"
         />
       )}

@@ -61,7 +61,6 @@ export function CampaignScheduleBoard({
   readout,
   campaignName,
   pace = null,
-  restUntil = null,
   workerOnline,
   frozenUntil = null,
   neverLaunched = false,
@@ -113,7 +112,6 @@ export function CampaignScheduleBoard({
   frozenUntil?: string | null;
   /** Straight through to NextPublication: the automatic rest מצב פרסום חכם is
       serving, if it is serving one. */
-  restUntil?: string | null;
   /** The round has never gone out — passed through to <NextPublication>. */
   neverLaunched?: boolean;
   /**
@@ -407,7 +405,6 @@ export function CampaignScheduleBoard({
         /* Straight through to the line that answers "when does the next one
            go out" — see the prop's own note. */
         frozenUntil={frozenUntil}
-        restUntil={restUntil}
         className="mt-1"
       />
     </div>

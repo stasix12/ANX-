@@ -13,11 +13,13 @@
  *
  *   1. each leftover row reaches its slot and is skipped — "הסבב נעצר." —
  *      under a card that says the round is active;
- *   2. worker/revive.ts hands the failures back for another attempt on every
+ *   2. worker/revive.ts handed the failures back for another attempt on every
  *      idle pass, because its note deferred the decision to rules.ts: "rules.ts
  *      still holds each row to its campaign's days and hours". It does — by
  *      skipping it. So each revival spent a write and one of three attempts to
- *      manufacture another skipped row;
+ *      manufacture another skipped row. THAT MECHANISM NO LONGER EXISTS: the
+ *      owner withdrew the second pass on 08.11.2026 ("פרסום שנכשל לדלג ולא
+ *      להחזיר לתור"), so this step cannot recur at all;
  *   3. plan.ts:812 swept the same rows in bulk every sixty seconds on top.
  *
  * Nobody pressed anything, and nothing on screen named the round that had been
@@ -26,15 +28,14 @@
  *   · client.ts ensureRunForPost brings a stopped run's WAITING rows across on
  *     relaunch — they have no history to protect and cannot publish where they
  *     are;
- *   · worker/revive.ts refuses a failure whose run is archived;
+ *   · worker/revive.ts refused a failure whose run is archived — now moot,
+ *     and asserted as moot below;
  *   · rules.ts says so when the row and the post disagree.
  *
- * The revive rule is tested BEHAVIOURALLY against the real function. The other
- * two are source-level, because reproducing them needs Supabase.
+ * All three are source-level, because reproducing them needs Supabase.
  */
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { REVIVE_ATTEMPT_CEILING, pickRevivable, type FailedRow, type OpenRow } from '../revive';
 
 let checks = 0;
 const ok = (cond: unknown, what: string) => {
@@ -46,93 +47,21 @@ const eq = <T>(got: T, want: T, what: string) => {
   assert.deepEqual(got, want, `${what} — got ${JSON.stringify(got)}`);
 };
 
-const NOW = Date.parse('2026-11-02T23:40:00.000Z');
-const LIVE = 'c0000000-0000-4000-8000-000000000001';
-const DEAD = 'c0000000-0000-4000-8000-000000000002';
+/* ───────── one: THE SECOND PASS IS GONE, so step 2 cannot happen ───────── */
 
-const failed = (id: string, campaign: string | null, target: string): FailedRow => ({
-  id,
-  campaign_id: campaign,
-  target_id: target,
-  attempts: 0,
-});
+/*
+ * This file used to prove that worker/revive.ts refused a failure belonging to
+ * an archived run. On 08.11.2026 the owner withdrew the second pass entirely —
+ * "פרסום שנכשל לדלג ולא להחזיר לתור" — so step 2 of the loop above is not
+ * fixed any more, it is IMPOSSIBLE: nothing hands a failure back, whatever run
+ * it belongs to. worker/test/revive.test.ts is the guard over the removal; the
+ * one line here is what keeps THIS file honest about which of its three fixes
+ * still has a mechanism behind it.
+ */
+const workerSrc = readFileSync(new URL('../social-worker.ts', import.meta.url), 'utf8');
+ok(!/pickRevivable|reviveFailedRows/.test(workerSrc), 'no second pass exists to revive a stopped run\'s failure in the first place');
 
-/* No open rows at all: the round has finished every group it had, which is the
-   only moment the second pass runs. */
-const NO_OPEN: OpenRow[] = [];
-
-/* ─────────────── one: a failure of a STOPPED run does not come back ─────── */
-
-const both = pickRevivable({
-  open: NO_OPEN,
-  failed: [failed('r-live', LIVE, 't1'), failed('r-dead', DEAD, 't2')],
-  nowMs: NOW,
-  gapMs: 30_000,
-  stopped: new Set([DEAD]),
-});
-eq(
-  both.map((r) => r.id),
-  ['r-live'],
-  'the live round\'s failure is revived and the stopped round\'s is not — reviving it writes a skip, never a publication',
-);
-
-/* AND WITHOUT THE SET IT BEHAVES AS BEFORE. A caller that could not read the
-   list must not silently stop reviving everything. */
-const noSet = pickRevivable({ open: NO_OPEN, failed: [failed('r-dead', DEAD, 't2')], nowMs: NOW, gapMs: 30_000 });
-eq(noSet.map((r) => r.id), ['r-dead'], 'absent `stopped` means "nothing is stopped", not "revive nothing"');
-
-/* A ROW WITH NO RUN IS NOT A STOPPED ROW. Quick publishes queue rows with a
-   null campaign_id; `r.campaign_id &&` is what keeps their second pass, and
-   dropping it would silence the one path that has no card to look at. */
-const orphan = pickRevivable({
-  open: NO_OPEN,
-  failed: [failed('r-orphan', null, 't3')],
-  nowMs: NOW,
-  gapMs: 30_000,
-  stopped: new Set([DEAD, '']),
-});
-eq(orphan.map((r) => r.id), ['r-orphan'], 'a failure with no run at all is still revived, even when the stopped set contains an empty string');
-
-/* The other four rules still hold with the new filter in place — a guard that
-   lets an older rule through is not a guard. */
-const ceiling = pickRevivable({
-  open: NO_OPEN,
-  failed: [{ ...failed('r-spent', LIVE, 't4'), attempts: REVIVE_ATTEMPT_CEILING }],
-  nowMs: NOW,
-  gapMs: 30_000,
-  stopped: new Set([DEAD]),
-});
-eq(ceiling.length, 0, 'the attempt ceiling is still enforced beside the stopped-run filter');
-
-const busy = pickRevivable({
-  open: [{ status: 'scheduled', campaign_id: LIVE, target_id: 't9', scheduled_at: new Date(NOW + 60_000).toISOString() }],
-  failed: [failed('r-busy-round', LIVE, 't5')],
-  nowMs: NOW,
-  gapMs: 30_000,
-  stopped: new Set([DEAD]),
-});
-eq(busy.length, 0, 'a round still working keeps its failures until it has finished');
-
-/* ─────────── two: the caller supplies the set, and fails closed ─────────── */
-
-const worker = readFileSync(new URL('../social-worker.ts', import.meta.url), 'utf8');
-const code = worker
-  .replace(/\/\*[\s\S]*?\*\//g, '')
-  .split('\n')
-  .map((l) => l.replace(/^\s*\/\/.*$/, ''))
-  .join('\n');
-
-ok(/\.from\('social_campaigns'\)\s*\.select\('id'\)\s*\.eq\('status', 'archived'\)/.test(code), 'the worker reads which runs are stopped');
-ok(/if \(deadErr\) throw new Error\(deadErr\.message\);/.test(code), 'and FAILS CLOSED: a pass that cannot find out does not run, because the cost of guessing wrong is the treadmill being fixed');
-/* `\s*` AND NEVER A BARE `\n`: the installer is built on a Windows runner, so
-   the file arrives with CRLF and a regex anchored on `\n` alone matches
-   nothing there — a guard that silently stops guarding on the one machine that
-   matters. package.test.ts enforces this, and it has now caught me twice. */
-ok(/stopped,\s*\}\);/.test(code), 'and hands the set to pickRevivable');
-/* Ordering: the read must come BEFORE the call that consumes it. */
-ok(code.indexOf("eq('status', 'archived')") < code.indexOf('stopped,'), 'the set is read before it is used');
-
-/* ───────── three: the relaunch brings the stranded waiting rows across ──── */
+/* ───────── two: the relaunch brings the stranded waiting rows across ──── */
 
 const client = readFileSync(new URL('../../src/lib/social/client.ts', import.meta.url), 'utf8');
 const ensure = client.slice(client.indexOf('export async function ensureRunForPost'), client.indexOf('export async function', client.indexOf('export async function ensureRunForPost') + 10));

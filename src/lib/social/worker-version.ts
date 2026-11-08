@@ -643,7 +643,7 @@
  *
  * התזמון, סדר התור, מנגנון הפרסום וחישוב זמני הפרסום לא נגעו.
  */
-export const WORKER_VERSION = '4.55.0';
+export const WORKER_VERSION = '4.56.0';
 
 /**
  * A FINGERPRINT OF EVERYTHING THE INSTALLER CARRIES.
@@ -1282,4 +1282,30 @@ export const WORKER_VERSION = '4.55.0';
  * 22:17), so 4.55.0 is free. This file cannot answer that question and must
  * not be trusted to.
  */
-export const WORKER_FINGERPRINT = '0ba18c239914aaf4';
+/*
+ * ─── 08.11.2026 — 4.55.0 → 4.56.0. THE SECOND PASS IS GONE ───────────────
+ *
+ * "פרסום שנכשל לדלג ולא להחזיר לתור"
+ *
+ * worker/revive.ts is DELETED and reviveFailedRows() with it. A publication
+ * that fails is finished: the row stays `failed`, the group is free the same
+ * second, and nothing hands it back to the end of the queue for a second
+ * attempt. The owner can still retry one by hand from the activity sheet.
+ *
+ * DOES THIS HAVE TO REACH THE PC? YES, and it is the clearest kind of yes: the
+ * loop being removed RUNS ON THE PC. Until an installed copy downloads this it
+ * keeps doing the thing he asked to stop, every two minutes, and the dashboard
+ * keeps writing "N פרסומים שנכשלו הוחזרו לסוף התור" — the line he pointed at.
+ *
+ * WHAT IT COST, measured before removing it rather than assumed: 711 rows were
+ * tried a second time; 381 published and 330 did not, a 53.6% success rate.
+ * This was not dead weight, and he is giving up roughly 7 publications a day
+ * for it. Of the 330 that still failed, 239 were "לא מצאתי את תיבת כתבו משהו"
+ * — groups the account cannot post in, where a second attempt never could have
+ * helped. The arithmetic is in worker/test/revive.test.ts so the next reader
+ * does not have to take it on trust.
+ *
+ * AND THE NUMBER WAS CHECKED AGAINST THE RELEASE LIST, not against this file:
+ * v4.55.0 was published on 08.11, so 4.56.0 is free.
+ */
+export const WORKER_FINGERPRINT = 'e28ec25dfb19e755';

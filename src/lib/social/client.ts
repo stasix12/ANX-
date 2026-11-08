@@ -151,6 +151,33 @@ export async function setPaused(paused: boolean): Promise<void> {
   await saveSetting('control', { ...control, paused });
 }
 
+/**
+ * ─── END THE META HOLD NOW, BY HAND ───────────────────────────────────────
+ *
+ * "תן לי אופציה לעצור את ההשהיה בתוכנה איפה שהחלון הכתום, התחברתי דרך משתמש
+ *  אחר" — 08.11.2026.
+ *
+ * WHY A HOLD THE SYSTEM SET NEEDS A HUMAN WAY OUT. `rateLimitedUntil` is
+ * written when Facebook's own rate-limit notice has been read twice on the
+ * page, and it expires on its own three hours later. That is right when the
+ * limit belongs to the account the worker is signed into — and wrong the
+ * moment the owner signs in as somebody else, which is exactly what he did:
+ * the hold describes a restriction on an account the browser is no longer
+ * using, and nothing in the product could say so.
+ *
+ * It re-reads the row and MERGES rather than writing a whole object, for the
+ * same reason setPaused() above does: `paused` may have been written by the
+ * header a second ago, and a stale copy of this row would undo it.
+ *
+ * THE SAME WRITE THE SETTINGS SCREEN HAS MADE SINCE 4.38 — one function now,
+ * called from both, so the dashboard's button and the settings link cannot
+ * drift into two different ideas of what clearing a hold means.
+ */
+export async function clearMetaHold(): Promise<void> {
+  const control = await getControl();
+  await saveSetting('control', { ...control, rateLimitedUntil: null });
+}
+
 /* -------------------------------------------------------------- targets */
 
 /**

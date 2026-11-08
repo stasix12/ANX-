@@ -1256,4 +1256,4 @@ export const WORKER_VERSION = '4.54.0';
  * button that has always been on this screen still emits that sentence.
  * Reverting it would have put the broken form back.
  */
-export const WORKER_FINGERPRINT = 'd27d9707d944932f';
+export const WORKER_FINGERPRINT = 'a6c640a9186b58a8';

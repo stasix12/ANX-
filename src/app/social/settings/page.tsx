@@ -5,7 +5,7 @@ import { Stamp } from '@/components/social/DateTime';
 import { ScreenProbe } from '@/components/social/ScreenProbe';
 import { SocialShell } from '@/components/social/SocialShell';
 import { Button, Card, Field, Loading, Notice, SegmentedControl, inputClass, useToast } from '@/components/social/ui';
-import { getBrowserSettings, getControl, getLimits, loadAdminPresence, saveSetting } from '@/lib/social/client';
+import { clearMetaHold, getBrowserSettings, getControl, getLimits, loadAdminPresence, saveSetting } from '@/lib/social/client';
 import { DEFAULT_BROWSER, DEFAULT_LIMITS, type AdminPresence, type BrowserSettings, type ControlSettings, type LimitsSettings } from '@/lib/social/types';
 import { accountGapLabel, accountGapSeconds } from '@/lib/social/rules';
 import { friendlyMessage } from '@/lib/social/errors';
@@ -226,8 +226,12 @@ export default function SettingsPage() {
     const previous = control.rateLimitedUntil;
     setControl((c) => ({ ...c, rateLimitedUntil: null }));
     try {
-      const current = await getControl();
-      await saveSetting('control', { ...current, rateLimitedUntil: null });
+      /* THROUGH THE SHARED WRITER (08.11.2026). The dashboard grew the same
+         button on its orange card — "תן לי אופציה לעצור את ההשהיה בתוכנה איפה
+         שהחלון הכתום" — and two screens typing out the same read-merge-write
+         is how they come to mean two different things. clearMetaHold() in
+         client.ts re-reads the row and merges, exactly as this did. */
+      await clearMetaHold();
       toast('ההמתנה בוטלה. הפרסום יימשך בתור הרגיל.');
     } catch (err) {
       setControl((c) => ({ ...c, rateLimitedUntil: previous }));

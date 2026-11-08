@@ -55,6 +55,7 @@ import {
   syncWeeklyHours,
   sendWorkerCommand,
   setPaused,
+  clearMetaHold,
   stopCampaign,
   waitForWorkerCommand,
   type CommentTotals,
@@ -627,6 +628,41 @@ export default function SocialDashboard() {
    * inside the handler, which is the only thing that can stop the second tap.
    */
   const writing = useRef(false);
+
+  /**
+   * ─── END THE META HOLD NOW ───────────────────────────────────────────────
+   *
+   * "תן לי אופציה לעצור את ההשהיה בתוכנה איפה שהחלון הכתום, התחברתי דרך משתמש
+   *  אחר" — 08.11.2026, and the second half of that sentence is the whole
+   * reason this button exists.
+   *
+   * The hold is a fact about ONE Facebook account: the worker read Facebook's
+   * own rate-limit notice twice on the page and froze publishing for three
+   * hours. Sign in as a different user and the hold is about somebody else —
+   * but it goes on stopping the queue, and until now the only way out was a
+   * link on the settings screen, which is not where the owner is looking when
+   * the orange card is in front of him.
+   *
+   * IT ASKS FIRST, AND THE QUESTION CARRIES THE EVIDENCE. On 08.11.2026 at
+   * 05:06 this account's three-hour hold expired on its own, the queue tried
+   * ONE publication at 05:08, and Facebook refused it and restarted the hold —
+   * with zero successful publications in between. So "the hold has passed" and
+   * "Facebook will accept a post" are not the same thing, and clearing the
+   * hold by hand on the same account is how an owner walks straight back into
+   * it. The dialog says that, with the number, and then lets him decide: it is
+   * his account.
+   */
+  async function endMetaHold() {
+    const ok = await confirm.ask({
+      title: 'לבטל את ההמתנה של Meta?',
+      body:
+        'ההמתנה הזו נרשמה אחרי שפייסבוק סירבה לפרסום פעמיים ברציפות. אם התחברתם בינתיים למשתמש אחר — היא כבר לא רלוונטית, ואפשר לבטל.\n\n' +
+        'אם זה אותו משתמש: ב-08.11 ההמתנה נגמרה מעצמה ב-05:06, הפרסום ניסה פעם אחת ב-05:08, פייסבוק סירבה מיד וההמתנה התחילה מחדש — בלי פרסום מוצלח אחד. ביטול ידני עלול להחזיר אתכם בדיוק לשם.',
+      confirmLabel: 'בטל והמשך',
+    });
+    if (!ok) return;
+    await act('meta-hold', clearMetaHold, 'ההמתנה בוטלה. הפרסום ימשיך בתור הרגיל.');
+  }
 
   async function act(key: string, fn: () => Promise<unknown>, done: string) {
     if (writing.current) return;
@@ -1775,7 +1811,16 @@ export default function SocialDashboard() {
             clears itself.
           */}
           {data.control.rateLimitedUntil && new Date(data.control.rateLimitedUntil) > new Date() && (
-            <AlertBar tone="warn" title="Meta ביקשה להאט" body={`הפרסום יתחדש אוטומטית ב-${stampText(data.control.rateLimitedUntil)}.`} />
+            <AlertBar
+              tone="warn"
+              title="Meta ביקשה להאט"
+              body={`הפרסום יתחדש אוטומטית ב-${stampText(data.control.rateLimitedUntil)}.`}
+              /* The way out, where the owner is actually looking. It was only
+                 ever on the settings screen — see endMetaHold(). */
+              actionLabel="בטל את ההמתנה"
+              onAction={() => void endMetaHold()}
+              busy={busy === 'meta-hold'}
+            />
           )}
 
           {/* 0 — only on a brand-new install, and only until the first

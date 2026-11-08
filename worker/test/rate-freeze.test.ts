@@ -334,9 +334,58 @@ async function cardPass(): Promise<void> {
   }
 }
 
+/*
+ * ─── AND A WAY OUT OF IT, WHERE THE OWNER IS LOOKING ──────────────────────
+ *
+ * "תן לי אופציה לעצור את ההשהיה בתוכנה איפה שהחלון הכתום, התחברתי דרך משתמש
+ *  אחר" — 08.11.2026.
+ *
+ * The freeze is a fact about ONE Facebook account. Sign in as somebody else
+ * and it describes a restriction nobody is under, while the queue stays shut.
+ * The only exit was a link on the settings screen, two taps from the orange
+ * card that announces it.
+ *
+ * THREE THINGS ARE PINNED, and the third is the one that matters most:
+ *   1. the orange card carries the action;
+ *   2. both screens clear the hold through ONE writer, so they cannot drift
+ *      into two meanings of "cleared";
+ *   3. that writer MERGES onto a fresh read. Writing a whole `control` object
+ *      would carry a stale `paused` with it — the same defect setPaused() and
+ *      the settings save are both shaped to avoid, on the one row that can
+ *      stop this product dead.
+ */
+function manualExitPass(): void {
+  const src = (rel: string) => readFileSync(new URL(rel, import.meta.url), 'utf8');
+  const dash = src('../../src/app/social/page.tsx');
+  const settings = src('../../src/app/social/settings/page.tsx');
+  const client = src('../../src/lib/social/client.ts');
+
+  const bar = dash.slice(dash.indexOf('<AlertBar'), dash.indexOf('<SetupChecklist'));
+  is(bar.length > 200, 'the Meta alert bar was located');
+  is(/title="Meta ביקשה להאט"/.test(bar), 'the orange card still names the hold');
+  is(/actionLabel="בטל את ההמתנה"/.test(bar), 'and now carries the way out, on the card itself');
+  is(/onAction=\{\(\) => void endMetaHold\(\)\}/.test(bar), 'wired to a handler of its own');
+  is(/busy=\{busy === 'meta-hold'\}/.test(bar), 'which reports itself while the write is in flight');
+
+  const fn = dash.slice(dash.indexOf('async function endMetaHold'), dash.indexOf('async function act('));
+  is(fn.length > 200, 'endMetaHold was located');
+  is(/confirm\.ask\(/.test(fn), 'it ASKS first — clearing a hold by hand is how an owner walks back into it');
+  is(/05:06/.test(fn) && /05:08/.test(fn), 'and the question carries the measured evidence, not a vague caution');
+  is(/await act\('meta-hold', clearMetaHold/.test(fn), 'and the write goes through the shared writer');
+
+  /* ONE WRITER, TWO SCREENS. */
+  is(/export async function clearMetaHold\(\)/.test(client), 'the writer lives in client.ts');
+  is(/const control = await getControl\(\);[\s\S]{0,120}\.\.\.control, rateLimitedUntil: null/.test(client),
+    'and it re-reads the row and MERGES — a whole-object write would carry a stale `paused` onto the row that stops the product');
+  is(/await clearMetaHold\(\)/.test(settings), 'the settings screen clears it through the same writer');
+  is(!/saveSetting\('control', \{ \.\.\.current, rateLimitedUntil: null \}\)/.test(settings),
+    'and no longer types out its own copy of that read-merge-write');
+}
+
 async function main(): Promise<void> {
   await browserPass();
   await cardPass();
+  manualExitPass();
   console.log(`rate-limit freeze OK — ${checks} assertions`);
 }
 

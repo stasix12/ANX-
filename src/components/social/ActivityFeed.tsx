@@ -5,6 +5,7 @@ import {
   AlertTriangleIcon,
   CalendarIcon,
   CheckCircleIcon,
+  CheckIcon,
   ClockIcon,
   DotIcon,
   PauseIcon,
@@ -21,10 +22,25 @@ import { activityText, hasTechnicalDetail } from '@/lib/social/activity-text';
 import { retryQueueItem } from '@/lib/social/client';
 import { friendlyMessage } from '@/lib/social/errors';
 import { relativeHe } from '@/lib/social/time';
+
+/**
+ * THE AGE AS THE PILL SAYS IT.
+ *
+ * relativeHe() is the product's own clock vocabulary and this does not fork
+ * it — it changes exactly one answer, the one the reference disagrees with.
+ * Under a minute relativeHe says "לפני פחות מדקה": fourteen characters in a
+ * pill the reference fills with "עכשיו", and on the busiest row in the list,
+ * the one that just happened. Everything from a minute up is relativeHe
+ * verbatim, and the exact stamp is on `title` either way.
+ */
+function agePill(at: string): string {
+  const ms = Date.now() - new Date(at).getTime();
+  return ms >= 0 && ms < 60_000 ? 'עכשיו' : relativeHe(at);
+}
 import { ChevronDownIcon } from '@/components/icons';
 import { stampText } from './DateTime';
 import type { ActivityEntry } from '@/lib/social/types';
-import { Empty, TONE_TEXT, useToast, type Tone } from './ui';
+import { Empty, TONE_FILL, TONE_TEXT, useToast, type Tone } from './ui';
 
 /**
  * The activity log rendered as a feed a person can skim: one mark per event
@@ -147,6 +163,40 @@ const LEVEL_MARK: Record<string, { icon: React.ComponentType<{ className?: strin
  * browser on the owner's own PC. A message with no Hebrew in it is not
  * rewritten into a guess; it is replaced by what is actually known.
  */
+/**
+ * ─── THE CARD A LOG LINE SITS ON ─────────────────────────────────────────
+ *
+ *   "תשנה את העיצוב שיראה כמו כאן בדיוק" — 09.11.2026, with the reference.
+ *
+ * The reference draws two states and this map has to answer for nine, so the
+ * rule is taken from the two it shows rather than invented for each: a line
+ * that WANTS A PERSON is tinted in its own tone, and a line that is merely
+ * news sits on the product's pale surface. The reference's failure card is
+ * pink; its four successes are the pale one. `warn` joins `bad` because
+ * "נדרשת התערבות" is the other half of the same question, and a warning that
+ * looked exactly like a success would be the screen hiding it.
+ */
+const TONE_SURFACE: Record<Tone, string> = {
+  bad: 'bg-error-300/[0.07]',
+  warn: 'bg-warning-400/[0.07]',
+  good: 'bg-ink-900',
+  brand: 'bg-ink-900',
+  neutral: 'bg-ink-900',
+};
+
+/**
+ * The pill behind the age. Only its GROUND takes the state — the ink stays the
+ * same near-navy on all five, which is the one thing easiest to get wrong here:
+ * colouring the text too turns a timestamp into a second alarm.
+ */
+const TONE_PILL: Record<Tone, string> = {
+  bad: 'bg-error-300/15',
+  warn: 'bg-warning-400/15',
+  good: 'bg-ink-600',
+  brand: 'bg-ink-600',
+  neutral: 'bg-ink-600',
+};
+
 const HEBREW = /[֐-׿]/;
 const TECHNICAL = 'תקלה טכנית. הפרטים המלאים נשמרו ביומן במערכת.';
 
@@ -212,7 +262,7 @@ export function ActivityFeed({
   }
 
   return (
-    <ul className="space-y-2.5">
+    <ul className="space-y-3">
       {entries.slice(0, limit).map((e) => {
         const mark = EVENT_MARK[e.event] ?? LEVEL_MARK[e.level] ?? LEVEL_MARK.info;
         const Icon = mark.icon;
@@ -251,7 +301,30 @@ export function ActivityFeed({
             <p dir="auto" className={`text-sm font-bold leading-snug ${e.level === 'error' ? 'text-error-400' : 'text-mist-100'}`}>
               {t.title}
             </p>
-            {body && <p dir="auto" className="mt-0.5 text-[12.5px] leading-snug text-mist-300">{body}</p>}
+            {/*
+              TWO LINES AT MOST, where it used to wrap without limit.
+              
+              The reference draws every sentence on ONE line, and one line is
+              what this clamp gives a short one. It is two and not one because
+              of a difference between the reference and the real product: the
+              reference's ages are "לפני 2 דק'" and this product's are
+              "לפני שתי דקות" — a pill half as wide again, taking its width
+              off the only part of the row that says what happened. Measured
+              at 390px: 166px of sentence against the reference's ~200. One
+              line at that width cut "בעלי עסקים מתב והסביבה" after four
+              characters, which is a card that has given up its own content to
+              keep its shape.
+
+              Beyond two lines it still clips, and the full text is a tap away
+              on any row that has a publication behind it; on the activity
+              screen "פרטים מלאים" prints it verbatim. `title` carries it to a
+              mouse.
+            */}
+            {body && (
+              <p dir="auto" title={body} className="mt-0.5 line-clamp-2 text-[12.5px] leading-snug text-mist-300">
+                {body}
+              </p>
+            )}
             {/* The group, on its own line and isolated: these names are
                 Russian and Hebrew in the same list. */}
             {/*
@@ -275,42 +348,92 @@ export function ActivityFeed({
           </>
         );
         return (
-          <li key={e.id} className="log-in flex items-start gap-2.5">
-            <span aria-hidden className={`mt-0.5 shrink-0 ${TONE_TEXT[mark.tone]}`}>
-              <Icon className="h-4 w-4" />
-            </span>
+          /*
+           * ─── ONE EVENT, ONE CARD ───────────────────────────────────────
+           *
+           * The reference replaces a flat list with five cards: a tinted
+           * surface, a coloured bar down the leading edge, the mark on a white
+           * tile, and the age as a pill at the far end. The bar is `start-0`
+           * and not `left`: this surface is RTL, the reference's bar hugs the
+           * RIGHT edge, and `start` is the only spelling that stays correct if
+           * a screen in this product is ever mirrored.
+           */
+          <li key={e.id} className={`log-in relative overflow-hidden rounded-[18px] border border-ink-700 py-3 pe-3 ps-4 shadow-[0_2px_6px_-3px_rgba(13,38,76,0.18)] ${TONE_SURFACE[mark.tone]}`}>
             {/*
-              THE SENTENCE GETS THE WHOLE WIDTH.
-
-              The retry button sits on the line BELOW, beside the timestamp,
-              rather than beside the text. Measured at 375px: as a shrink-0
-              sibling of the message it left the sentence 187px of the 283 it
-              otherwise has — a third of the row gone from the only part of it
-              that says what happened, on rows that are failures and therefore
-              the ones worth reading. The same trade is recorded on the run
-              card, where a countdown sharing a line with a group name left the
-              name 18% of the row: one box each, not a tighter squeeze.
-
-              The sentence wraps rather than truncates. It is the point of the
-              row, and a group name inside it is already isolated by whoever
-              wrote the line.
+              THE BAR IS CLIPPED BY THE CARD, NOT ROUNDED BY ITSELF.
+              In the reference it is the card's own leading edge: it follows
+              the 18px corner radius and tapers to a point top and bottom, a
+              crescent rather than a capsule. `inset-y-0` with no rounding of
+              its own, inside the card's `overflow-hidden`, is exactly that
+              shape — an inset, rounded bar would read as a sticker laid on
+              top, which is the thing it is not.
             */}
-            <div className="min-w-0 grow">
-              {openable ? (
-                <button
-                  type="button"
-                  onClick={() => onOpen?.(queueId as string, e)}
-                  className="block min-h-11 w-full min-w-0 py-1 text-start"
-                >
-                  {line}
-                </button>
-              ) : (
-                line
-              )}
-              <div className="flex min-w-0 flex-wrap items-center gap-x-3">
-                <p className="text-[11px] text-mist-500" title={stampText(e.at)}>
-                  {relativeHe(e.at)}
-                </p>
+            <span aria-hidden className={`absolute inset-y-0 start-0 w-[5px] ${TONE_FILL[mark.tone]}`} />
+            <div className="flex min-w-0 items-start gap-2.5">
+              {/*
+                THE MARK, ON ITS OWN WHITE TILE.
+                `good` is drawn filled and everything else outlined, because
+                that is what the reference draws: a solid green disc with a
+                white check against outlined marks for the rest. A check is
+                the one glyph in this set that has to read at a glance from
+                across a list of twenty, and an outline of it does not.
+              */}
+              <span
+                aria-hidden
+                className="grid h-12 w-12 shrink-0 self-center place-items-center rounded-[14px] bg-ink-850 shadow-[0_1px_4px_-2px_rgba(13,38,76,0.35)]"
+              >
+                {mark.tone === 'good' ? (
+                  <span className={`grid h-8 w-8 place-items-center rounded-[40%] ${TONE_FILL.good}`}>
+                    <CheckIcon strokeWidth={3} className="h-[18px] w-[18px] text-on-state" />
+                  </span>
+                ) : (
+                  <Icon className={`h-6 w-6 ${TONE_TEXT[mark.tone]}`} />
+                )}
+              </span>
+              {/*
+                THE SENTENCE GETS WHAT IS LEFT, and the actions stay off its
+                line. Measured at 375px: as a shrink-0 sibling of the message
+                a retry button left the sentence 187px of the 283 it otherwise
+                has — a third of the row gone from the only part of it that
+                says what happened, on rows that are failures and therefore
+                the ones worth reading. Only the age shares this line, because
+                the reference puts it there and it is six characters wide.
+              */}
+              <div className="min-w-0 grow">
+                {openable ? (
+                  <button
+                    type="button"
+                    onClick={() => onOpen?.(queueId as string, e)}
+                    className="block min-h-11 w-full min-w-0 py-1 text-start"
+                  >
+                    {line}
+                  </button>
+                ) : (
+                  line
+                )}
+              </div>
+              {/*
+                THE AGE, AS A PILL AT THE FAR EDGE — "עכשיו", "לפני 3 דק'".
+                shrink-0 and nowrap: it is the shortest thing in the row and
+                the only one with a fixed shape, so when something has to give
+                on a 320px phone it is the sentence, which truncates, and
+                never this, which would wrap onto two lines and make the card
+                taller than every other card in the list.
+              */}
+              <span
+                title={stampText(e.at)}
+                className={`mt-1 shrink-0 rounded-full px-2 py-1 text-[11px] font-bold whitespace-nowrap text-mist-100 ${TONE_PILL[mark.tone]}`}
+              >
+                {agePill(e.at)}
+              </span>
+            </div>
+            {/*
+              THE ACTIONS, ON THEIR OWN LINE UNDER THE CARD'S TEXT, and drawn
+              only when there is one. An empty flex row still costs its gap,
+              which on four successes in a row is four gaps of nothing.
+            */}
+            {(retryable || groupUrl || (technical && hasTechnicalDetail(e))) && (
+              <div className="flex min-w-0 flex-wrap items-center gap-x-3 ps-[58px]">
                 {retryable && (
                   <button
                     type="button"
@@ -345,31 +468,31 @@ export function ActivityFeed({
                   </button>
                 )}
               </div>
-              {/*
-                * EXACTLY WHAT IS IN THE DATABASE, and nothing rewritten.
-                *
-                * The whole point of moving the technical text off the
-                * dashboard is that it still has somewhere to be. The event
-                * name is here because it is what a bug report needs, and the
-                * message is the stored string, untouched — not the cleaned
-                * one. `dir="ltr"` on the meta because it is JSON.
-                */}
-              {technical && openRow === e.id && (
-                <div className="mt-1.5 grid gap-1.5 rounded-xl bg-ink-800/60 p-2.5">
-                  <p className="text-[11px] font-bold text-mist-500">
-                    <span dir="ltr" className="font-mono">{e.event}</span>
-                    {' · '}
-                    <span>{stampText(e.at)}</span>
-                  </p>
-                  <p dir="auto" className="whitespace-pre-wrap break-words text-[11.5px] leading-relaxed text-mist-300">{e.message}</p>
-                  {Object.keys(e.meta ?? {}).length > 0 && (
-                    <pre dir="ltr" className="min-w-0 overflow-x-auto rounded-lg bg-ink-900 p-2 text-[10.5px] leading-relaxed text-mist-500">
-                      {JSON.stringify(e.meta, null, 2)}
-                    </pre>
-                  )}
-                </div>
-              )}
-            </div>
+            )}
+            {/*
+              EXACTLY WHAT IS IN THE DATABASE, and nothing rewritten.
+
+              The whole point of moving the technical text off the dashboard
+              is that it still has somewhere to be. The event name is here
+              because it is what a bug report needs, and the message is the
+              stored string, untouched — not the cleaned one. `dir="ltr"` on
+              the meta because it is JSON.
+            */}
+            {technical && openRow === e.id && (
+              <div className="mt-1.5 grid gap-1.5 rounded-xl bg-ink-850/70 p-2.5 ms-[58px]">
+                <p className="text-[11px] font-bold text-mist-500">
+                  <span dir="ltr" className="font-mono">{e.event}</span>
+                  {' · '}
+                  <span>{stampText(e.at)}</span>
+                </p>
+                <p dir="auto" className="whitespace-pre-wrap break-words text-[11.5px] leading-relaxed text-mist-300">{e.message}</p>
+                {Object.keys(e.meta ?? {}).length > 0 && (
+                  <pre dir="ltr" className="min-w-0 overflow-x-auto rounded-lg bg-ink-900 p-2 text-[10.5px] leading-relaxed text-mist-500">
+                    {JSON.stringify(e.meta, null, 2)}
+                  </pre>
+                )}
+              </div>
+            )}
           </li>
         );
       })}

@@ -156,6 +156,7 @@ export function CampaignSchedulePanel({
   floorHours = MIN_REPEAT_HOURS,
   neverLaunched = false,
   showHeader = true,
+  compact = false,
   readout,
   workerOnline,
   nextTargetName = null,
@@ -210,6 +211,14 @@ export function CampaignSchedulePanel({
    * them: the default is on, so no existing caller changes.
    */
   showHeader?: boolean;
+  /**
+   * The campaign card's own arrangement — "לצמצם רווחים אנכיים מיותרים".
+   * The reference draws "תזמון פרסום" on the SAME line as the seven day
+   * chips and carries neither the subtitle nor the "ימי פרסום" caption, so
+   * `compact` folds the three into one row. Every control is still here; it
+   * is three lines of explanation and two headings that are not.
+   */
+  compact?: boolean;
   /**
    * WHEN THIS CAMPAIGN PUBLISHES NEXT — already decided, never computed here.
    *
@@ -419,7 +428,7 @@ export function CampaignSchedulePanel({
           </div>
         )}
         {/* ─── 1. the header: calendar, title, subtitle, switch ───────────── */}
-        <div className={`items-start gap-2 ${showHeader ? 'flex' : 'hidden'}`}>
+        <div className={`items-start gap-2 ${showHeader && !compact ? 'flex' : 'hidden'}`}>
           {/* The image's own white icon tile. It is not a control, so it has
               no target floor to meet and keeps the reference's size. */}
           <span aria-hidden className="grid h-7 w-7 shrink-0 place-items-center rounded-xl bg-ink-900">
@@ -483,7 +492,7 @@ export function CampaignSchedulePanel({
              word does not need a 16px line, and this label sits directly on
              the chips it names. 5px off the panel, from the compaction
              brief. */
-          className={`block text-center text-[10px] font-bold leading-[13px] text-mist-300 ${showHeader ? 'mt-1.5' : 'mt-0'}`}
+          className={`block text-center text-[10px] font-bold leading-[13px] text-mist-300 ${compact ? 'hidden' : showHeader ? 'mt-1.5' : 'mt-0'}`}
         >
           ימי פרסום
         </span>
@@ -714,6 +723,7 @@ export function CampaignSchedulePanel({
       */}
       {onPaceChange && (
         <SmartPaceCard
+          compact={compact}
           className="mt-1.5"
           pace={pace}
           onChange={onPaceChange}

@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { CampaignCard } from '@/components/social/CampaignCard';
+import { CampaignCard, campaignOrdinals } from '@/components/social/CampaignCard';
 import { QueueTunerSheet } from '@/components/social/QueueTunerSheet';
 import { CampaignCommentSheet } from '@/components/social/CampaignCommentSheet';
 import { SocialShell } from '@/components/social/SocialShell';
@@ -290,6 +290,16 @@ export default function CampaignsPage() {
     (c: Campaign) => scheduleReadout(scheduleOf(c), stateOf(c), new Date(), readRepeat(c, floorHours), spacing),
     [scheduleOf, stateOf, spacing, floorHours],
   );
+
+  /*
+   * ─── WHICH CAMPAIGN IS #1 ───────────────────────────────────────────────
+   *
+   * Computed over `campaigns`, the whole list, and never over `visible`: the
+   * tabs above this list hide cards, and a number that counted only what is
+   * on screen would make "קמפיין #1" mean a different campaign on every tab.
+   * See campaignOrdinals() for why it is creation order and not list order.
+   */
+  const ordinals = useMemo(() => campaignOrdinals(campaigns ?? []), [campaigns]);
 
   const visible = useMemo(() => {
     const list = campaigns ?? [];
@@ -944,7 +954,7 @@ export default function CampaignsPage() {
         )}
 
         <div className="grid gap-4 lg:grid-cols-2 [&>*]:min-w-0">
-          {visible.map((c) => {
+          {visible.map((c, i) => {
             const state = stateOf(c);
             /* Which kind of "over" this round is, or null when it is not over
                at all — see the note on onReopen below. Narrowed here because
@@ -957,6 +967,13 @@ export default function CampaignsPage() {
                 key={c.id}
                 campaign={c}
                 state={state}
+                ordinal={ordinals[c.id] ?? 1}
+                /* The reference opens the first card and leaves the rest
+                   summarised. `i` is the position in THIS list, so the card
+                   at the top of whatever the owner is looking at is the open
+                   one — which is the run that is actually publishing, since
+                   that is what this list sorts first. */
+                defaultOpen={i === 0}
                 /* The cover of the run's post, and the next group's own
                    picture — both already loaded, neither was being shown. */
                 media={mine.find((p) => p.media?.length)?.media ?? null}

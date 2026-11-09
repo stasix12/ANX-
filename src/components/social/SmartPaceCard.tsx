@@ -84,6 +84,7 @@ export function SmartPaceCard({
   onChange,
   disabled,
   currentGapSeconds,
+  compact = false,
   className = '',
 }: {
   /** The stored mode, or null/undefined when the account has never picked one. */
@@ -103,6 +104,21 @@ export function SmartPaceCard({
    */
   currentGapSeconds?: number;
   className?: string;
+  /**
+   * ─── THE ROW WITHOUT ITS SHELL ──────────────────────────────────────────
+   *
+   *   "להציג את המצבים בשורה אחת, בדיוק לפי הרפרנס." 09.11.2026
+   *
+   * The campaign-card reference draws the three modes as a bare row inside
+   * the card — no white shell, no rocket, no "מצב פרסום חכם" heading. Those
+   * came from THIS component's own earlier reference and are kept for every
+   * other caller; `compact` is the one place the newer image overrules the
+   * older one, and it costs 40px of a card the owner called too tall.
+   *
+   * The heading does not disappear from the accessible tree with it: the
+   * <section> keeps aria-label="מצב פרסום חכם" either way.
+   */
+  compact?: boolean;
 }) {
   const selected = paceProfile(pace);
 
@@ -119,7 +135,7 @@ export function SmartPaceCard({
        * is what "לצמצם את הגובה הכולל" and "להסיר שטחים ריקים מיותרים" come
        * to — the shell is now the header row plus the tiles plus two gaps.
        */
-      className={`rounded-3xl border border-brand-500/25 bg-ink-850 p-2.5 shadow-[0_4px_16px_-10px_rgba(2,124,187,0.45)] ${className}`}
+      className={compact ? className : `rounded-3xl border border-brand-500/25 bg-ink-850 p-2.5 shadow-[0_4px_16px_-10px_rgba(2,124,187,0.45)] ${className}`}
     >
       {/* ─── 1. the heading: rocket badge, then the title ─────────────────── */}
       {/*
@@ -128,12 +144,14 @@ export function SmartPaceCard({
         subtitle the old card carried is not in the reference and is not drawn:
         "אין להוסיף אלמנטים שלא מופיעים ברפרנס."
       */}
-      <div className="flex items-center gap-2.5">
-        <span aria-hidden className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-brand-500 text-on-brand">
-          <RocketIcon className="h-4 w-4" />
-        </span>
-        <span dir="auto" className="min-w-0 truncate text-[15px] font-extrabold leading-5 text-mist-100">מצב פרסום חכם</span>
-      </div>
+      {!compact && (
+        <div className="flex items-center gap-2.5">
+          <span aria-hidden className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-brand-500 text-on-brand">
+            <RocketIcon className="h-4 w-4" />
+          </span>
+          <span dir="auto" className="min-w-0 truncate text-[15px] font-extrabold leading-5 text-mist-100">מצב פרסום חכם</span>
+        </div>
+      )}
 
       {/* ─── 2. the three modes, one row, three equal columns ─────────────── */}
       {/*
@@ -142,7 +160,7 @@ export function SmartPaceCard({
         for every multi-column grid and is what lets the three narrow together
         on a 320px phone instead of overflowing the shell.
       */}
-      <div role="radiogroup" aria-label="קצב הפרסום" className="mt-2 grid grid-cols-3 gap-2 [&>*]:min-w-0">
+      <div role="radiogroup" aria-label="קצב הפרסום" className={`grid grid-cols-3 gap-2 [&>*]:min-w-0 ${compact ? '' : 'mt-2'}`}>
         {PACE_PROFILES.map((p) => {
           const on = selected?.id === p.id;
           const Icon = PACE_ICON[p.id];

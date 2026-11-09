@@ -1276,6 +1276,30 @@
   }
 }
 
+/*
+ * A CAMPAIGN CARD OPENING — "אנימציה חלקה וקצרה, ללא קפיצות בפריסה".
+ *
+ * Opacity and four pixels, and deliberately NOT a height animation: the panel
+ * holds a scheduling block whose height nobody can know in advance, so an
+ * animated max-height either clips it or overshoots and lands with a jolt.
+ * The card simply becomes taller and its new contents fade in over 180ms,
+ * which is the one version of this that cannot jump.
+ */
+@keyframes card-open {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.card-open {
+  animation: card-open 0.18s ease-out both;
+}
+
 .sheet-center-in {
   animation: modal-pop 0.2s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
@@ -1314,6 +1338,7 @@
   .toast-in,
   .sheet-in,
   .sheet-center-in,
+  .card-open,
   .log-in {
     animation: none;
   }

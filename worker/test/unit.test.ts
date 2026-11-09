@@ -1235,13 +1235,30 @@ console.log('unit tests OK');
     /<div className="mt-2\.5 flex items-stretch gap-2">[\s\S]{0,900}<ButtonLink[\s\S]{0,600}onDelete && \(/.test(cardCode),
     'the delete button must share the footer row with the editor rather than taking a row of its own — a card that grows a row here is the row the owner just asked to be rid of',
   );
+  /*
+   * `grow` IS THE RULE; 48px WAS A NUMBER.
+   *
+   * This pinned `h-12 … !min-h-12` literally, and the card's own compaction
+   * brief ("לצמצם רווחים אנכיים מיותרים", 09.11.2026) took the foot to 44.
+   * The thing worth protecting is that the editor STRETCHES — a fixed-width
+   * button beside the trash leaves a gap at the foot — and that it still
+   * clears the product's 40px tap floor. Both are asserted; the exact step on
+   * the scale is not, so the next compaction does not have to come back here.
+   */
   assert.ok(
-    /className="h-12 grow !min-h-12/.test(cardCode),
-    'and the editor must GROW into the space the trash leaves, or the foot of the card is a short button and a gap',
+    /className="h-1[012] grow !min-h-1[012]/.test(cardCode),
+    'and the editor must GROW into the space the trash leaves, at h-10 or taller, or the foot of the card is a short button and a gap',
   );
-  /* 48px square: over the product's 40px floor in both directions, which the
-     measured suite enforces for every control on this card. */
-  assert.ok(/grid h-12 w-12 shrink-0 place-items-center/.test(cardCode), 'the trash must stay a 48px square — the floor for anything a thumb presses here is 40');
+  /* A SQUARE, AND OVER THE FLOOR — the two things that matter, and not the
+     exact step. It was pinned at h-12 w-12 and the compaction brief took the
+     foot to 44; h-11 w-11 is still square and still clears 40 in both
+     directions, which is what the measured suite enforces for every control
+     on this card. The regex keeps "same number twice" so a 44×36 button
+     cannot slip through calling itself square. */
+  assert.ok(
+    /grid h-1([012]) w-1\1 shrink-0 place-items-center/.test(cardCode),
+    'the trash must stay a SQUARE of at least 40px — the floor for anything a thumb presses here',
+  );
   /* It opens the CONFIRMATION, never the delete. The page owns that: the card
      is handed onDelete and calls it, and removeCampaign() is what counts the
      unsent publications and asks. */

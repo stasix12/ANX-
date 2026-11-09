@@ -1,10 +1,11 @@
 'use client';
 
+import { useId, useState } from 'react';
 import Link from 'next/link';
 import { canPauseRun, canResumeRun, groupProgress, neverLaunched, runBadge, runProgress, type CampaignState } from '@/lib/social/campaign';
 import { type CampaignRepeat, type CampaignRound, type CampaignSchedule } from '@/lib/social/campaign-schedule';
 import { scheduleReadout, type AccountSpacing } from '@/lib/social/schedule-readout';
-import { accountGapSeconds } from '@/lib/social/rules';
+import { accountGapSeconds, paceProfile } from '@/lib/social/rules';
 import { counted, formatDayMonthHe } from '@/lib/social/time';
 import { ltr } from './DateTime';
 import type { Campaign, MediaItem, PaceId } from '@/lib/social/types';
@@ -12,16 +13,26 @@ import {
   AlertCircleIcon,
   BoltIcon,
   CheckCircleIcon,
+  CalendarIcon,
+  ChevronDownIcon,
   ClipboardListIcon,
   ClockIcon,
   CopyIcon,
+  FlameIcon,
+  GemIcon,
+  MegaphoneIcon,
   MessageIcon,
   PauseIcon,
   PencilIcon,
   PlayIcon,
   PlusIcon,
   RepeatIcon,
+  RocketIcon,
+  SparklesIcon,
+  StarIcon,
+  TargetIcon,
   TrashIcon,
+  TrophyIcon,
 } from '@/components/icons';
 import { CampaignSchedulePanel } from './CampaignSchedulePanel';
 import { PostCover } from './PostCover';
@@ -76,6 +87,82 @@ import { Badge, Button, ButtonLink, OverflowMenu, TONE_FILL, type MenuAction, ty
  * `on*` prop are the ones this card already had; what moved is where they are
  * drawn. "אסור לפגוע בפונקציות שכבר עובדות."
  */
+/**
+ * ─────────────────────────────────────────────────────────────────────────
+ * A CAMPAIGN'S OWN COLOUR — "לכל קמפיין יהיה צבע זיהוי קבוע משלו."
+ *
+ * Eight hues, every one of them measured over 4.5:1 on this theme's white
+ * card so the chip's label, the edit button's text and the icons are all
+ * readable rather than merely coloured. The first two are the reference's
+ * own: blue for the first campaign, violet for the second.
+ *
+ * ─── WHY THE NUMBER IS THE CREATION ORDER AND NOT THE PLACE IN THE LIST ──
+ *
+ *   "אין לשנות צבע של קמפיין לאחר שנוצר, גם לאחר רענון או כניסה מחדש."
+ *
+ * The campaigns page does NOT list cards in creation order — it sorts by
+ * what is running and then by what publishes soonest (campaigns/page.tsx),
+ * so a card's PLACE changes as the day goes on. Numbering by place would
+ * therefore repaint a campaign while the owner watched it, which is the one
+ * thing this rule forbids. Numbering by `created_at` ascending does not: the
+ * oldest campaign is #1 for as long as it exists, through every refresh,
+ * every re-login and every re-sort.
+ *
+ * THE ONE EVENT THAT CAN MOVE IT, said out loud rather than buried: deleting
+ * a campaign is a hard DELETE (client.ts deleteCampaign), so removing an
+ * OLDER campaign shifts the ones after it up by one. Nothing in the schema
+ * can be read to avoid that without storing a number per campaign, and the
+ * brief forbids changing the database. Creating a campaign — the common
+ * event — never moves anybody, because a new row sorts last.
+ */
+export type CampaignIdentity = {
+  /** The strong colour: chip fill, selected controls, edit label, icons. */
+  ink: string;
+  /** The chip's gradient end, a step deeper than `ink`. */
+  deep: string;
+  /** The hairline round the card — the identity, washed out. */
+  line: string;
+  /** The bloom outside the card, and the wash behind a soft control. */
+  glow: string;
+  /** The mark on the number chip, so two cards differ by shape and not only by hue. */
+  Icon: React.ComponentType<{ className?: string; 'aria-hidden'?: boolean }>;
+};
+
+export const CAMPAIGN_IDENTITIES: CampaignIdentity[] = [
+  { ink: '#0B63CE', deep: '#0A47B8', line: '#7FB6F2', glow: 'rgba(11,99,206,0.20)', Icon: MegaphoneIcon },
+  { ink: '#8B2FC9', deep: '#6D21A6', line: '#C396E8', glow: 'rgba(139,47,201,0.20)', Icon: RocketIcon },
+  { ink: '#0E7490', deep: '#0B5C73', line: '#7CC3D6', glow: 'rgba(14,116,144,0.20)', Icon: SparklesIcon },
+  { ink: '#15803D', deep: '#116532', line: '#86CFA2', glow: 'rgba(21,128,61,0.20)', Icon: TargetIcon },
+  { ink: '#B45309', deep: '#8F4208', line: '#E6B37A', glow: 'rgba(180,83,9,0.20)', Icon: FlameIcon },
+  { ink: '#BE123C', deep: '#9A0F31', line: '#EC9BB0', glow: 'rgba(190,18,60,0.20)', Icon: GemIcon },
+  { ink: '#4338CA', deep: '#362DA3', line: '#A5A0EB', glow: 'rgba(67,56,202,0.20)', Icon: TrophyIcon },
+  { ink: '#A21CAF', deep: '#82168C', line: '#DD93E4', glow: 'rgba(162,28,175,0.20)', Icon: StarIcon },
+];
+
+/** The identity of the campaign numbered `ordinal` (1-based). */
+export function campaignIdentity(ordinal: number): CampaignIdentity {
+  const n = Number.isFinite(ordinal) && ordinal > 0 ? Math.floor(ordinal) : 1;
+  return CAMPAIGN_IDENTITIES[(n - 1) % CAMPAIGN_IDENTITIES.length];
+}
+
+/**
+ * id -> "קמפיין #N", by creation order, oldest first.
+ *
+ * Handed the WHOLE list rather than the filtered view on purpose: a campaign
+ * must keep its number when the owner taps "פעילים" and half the cards leave
+ * the screen. `created_at` ties are broken by id so the map is a function of
+ * the data and not of the order the rows happened to arrive in.
+ */
+export function campaignOrdinals(list: { id: string; created_at: string }[]): Record<string, number> {
+  const out: Record<string, number> = {};
+  [...list]
+    .sort((a, b) => a.created_at.localeCompare(b.created_at) || a.id.localeCompare(b.id))
+    .forEach((c, i) => {
+      out[c.id] = i + 1;
+    });
+  return out;
+}
+
 export function CampaignCard({
   campaign,
   state,
@@ -105,6 +192,8 @@ export function CampaignCard({
   onPaceChange,
   floorHours,
   scheduleBusy = false,
+  ordinal = 1,
+  defaultOpen = true,
 }: {
   campaign: Pick<Campaign, 'id' | 'name' | 'service' | 'city' | 'status' | 'created_at'>;
   state: CampaignState;
@@ -215,6 +304,20 @@ export function CampaignCard({
   floorHours?: number;
   /** The campaign's row is being written; the panel's controls hold still. */
   scheduleBusy?: boolean;
+  /**
+   * WHICH CAMPAIGN THIS IS — "קמפיין #1" — and therefore which colour it
+   * wears. 1-based, by creation order; see campaignOrdinals() above. It is a
+   * prop rather than something the card works out because only the page holds
+   * the whole list, and a card that numbered itself from the rows it happens
+   * to be shown would renumber every time a filter was tapped.
+   */
+  ordinal?: number;
+  /**
+   * Whether the card starts open. The page opens the first card and leaves
+   * the rest shut, which is the reference's own arrangement — one card with
+   * its controls out, the others as summaries.
+   */
+  defaultOpen?: boolean;
 }) {
   const link = href ?? `/social/campaigns/${campaign.id}`;
 
@@ -365,6 +468,19 @@ export function CampaignCard({
   const readout = scheduleReadout(schedule, state, undefined, repeat, spacing);
 
   /*
+   * ─── THE CARD'S OWN COLOUR, AND WHETHER IT IS OPEN ──────────────────────
+   *
+   * Both are display state and nothing else: `open` draws or hides blocks
+   * that are already rendered from the same props, and nothing in this file
+   * reads it before deciding what to fetch, write or publish. "אין לאפס
+   * נתונים או להפעיל פעולות פרסום בעת פתיחה וסגירה" — a toggle here cannot,
+   * because there is no handler behind it.
+   */
+  const id = campaignIdentity(ordinal);
+  const [open, setOpen] = useState(defaultOpen);
+  const panelId = useId();
+
+  /*
    * EVERYTHING ELSE, ONE TAP AWAY.
    *
    * Built from the handlers the page actually passed, so a campaign with no
@@ -400,7 +516,43 @@ export function CampaignCard({
   return (
     /* The radius is the reference's and it is written here rather than pushed
        into --radius-card: that token is every card in the product. */
-    <div className="surface rounded-[26px] border border-ink-700 p-2.5">
+    <div
+      className="relative overflow-hidden rounded-[20px] border bg-ink-850 p-2.5"
+      style={{ borderColor: id.line, boxShadow: `0 10px 26px -14px ${id.glow}` }}
+    >
+      {/*
+        ─── THE CORNER THE CAMPAIGN IS RECOGNISED BY ───────────────────────
+
+        "להשתמש בצבע הזיהוי במסגרת, בפינה העליונה, בתג מספר הקמפיין ובהדגשות."
+
+        A swoosh welded into the card's TOP-END corner — the left one on this
+        RTL page, which is where the reference draws it and where the picture
+        sits, so the colour reads as a ribbon the artwork is pinned to rather
+        than as a sticker in an empty corner. `end-0` and not `left-0`: the
+        corner is the END corner, and an LTR locale would mirror it without
+        this file knowing which side that is.
+
+        It is clipped by the card's own `overflow-hidden`, so it takes the
+        card's 20px radius for free and needs no rounding of its own. Two
+        waves, not one: the second is the same path at a third of the opacity,
+        a little wider, which is the pale trailing band the reference has.
+
+        pointer-events-none and aria-hidden: it is paint. Nothing on this card
+        may become harder to tap because of it.
+      */}
+      <span aria-hidden className="pointer-events-none absolute end-0 top-0 h-[104px] w-[112px] overflow-hidden">
+        <svg viewBox="0 0 112 104" className="h-full w-full" preserveAspectRatio="none">
+          <defs>
+            <linearGradient id={`${panelId}-sweep`} x1="1" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor={id.ink} />
+              <stop offset="100%" stopColor={id.deep} />
+            </linearGradient>
+          </defs>
+          <path d="M0,0 L112,0 C78,14 34,34 18,104 L0,104 Z" fill={`url(#${panelId}-sweep)`} opacity="0.32" />
+          <path d="M0,0 L84,0 C54,12 22,28 10,78 L0,78 Z" fill={`url(#${panelId}-sweep)`} />
+        </svg>
+      </span>
+      <div className="relative">
       {/*
         ─── 1. THE HEAD: ⋯, the name, the connection — and the picture ────
 
@@ -456,6 +608,29 @@ export function CampaignCard({
               over the padding above and the date below, neither of which is a
               control. Measured, not asserted from the class.
             */}
+            {/*
+              ─── OPEN AND SHUT ────────────────────────────────────────────
+
+              "להוסיף אפשרות לפתיחה וסגירה של פרטי הקמפיין."
+
+              Beside the ⋯ rather than across the card, because the two are
+              the same kind of thing — what this card can do to itself — and
+              because a bar spanning the foot is a second full-width control
+              competing with "עריכת קמפיין". It carries aria-expanded and
+              aria-controls, so the state is announced rather than inferred
+              from a rotating glyph.
+            */}
+            <button
+              type="button"
+              data-card-toggle
+              onClick={() => setOpen((v) => !v)}
+              aria-expanded={open}
+              aria-controls={panelId}
+              aria-label={open ? `סגור את פרטי ${campaign.name}` : `פתח את פרטי ${campaign.name}`}
+              className="grid h-11 w-11 shrink-0 -mt-1 -me-1 place-items-center rounded-xl border border-ink-600 bg-ink-900 text-mist-300 transition-colors hover:bg-ink-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-300"
+            >
+              <ChevronDownIcon aria-hidden className={`h-5 w-5 transition-transform duration-200 ${open ? 'rotate-180' : ''}`} />
+            </button>
             <Link
               href={link}
               className="relative mt-0.5 min-w-0 grow rounded-lg after:absolute after:inset-x-0 after:-inset-y-3 after:content-[''] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-300"
@@ -466,8 +641,33 @@ export function CampaignCard({
             </Link>
           </div>
 
-          {/* The date, which is what tells two runs of the same name apart. */}
-          <p className="mt-0.5 text-[11px] font-semibold leading-4 text-mist-500">{ltr(formatDayMonthHe(campaign.created_at))}</p>
+          {/*
+            ─── THE DATE AND "קמפיין #N", ON ONE LINE UNDER THE NAME ───────
+
+            The reference puts the chip beside the title. This card cannot:
+            the title row already carries ⋯ AND the open/shut chevron, and
+            measured at 390px those two plus an 90px chip left the name 58px
+            — "סבב..." for a campaign called "סבב פרסום". The reference's own
+            second card shows the chip on its own line for exactly this
+            reason, so the arrangement is the image's and not an invention.
+            The name gets the full width it is the point of.
+          */}
+          <div className="mt-0.5 flex min-w-0 items-center gap-1.5">
+            {/* The date, which is what tells two runs of the same name apart. */}
+            <p className="shrink-0 text-[11px] font-semibold leading-4 text-mist-500">{ltr(formatDayMonthHe(campaign.created_at))}</p>
+            {/*
+              The mark differs per identity as well as the hue, so two cards
+              are told apart by SHAPE too — which is what makes them work for
+              a reader who cannot separate blue from violet.
+            */}
+            <span
+              className="inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-extrabold whitespace-nowrap text-on-brand"
+              style={{ backgroundImage: `linear-gradient(90deg, ${id.ink}, ${id.deep})` }}
+            >
+              <id.Icon aria-hidden className="h-3.5 w-3.5 shrink-0" />
+              קמפיין #{ordinal}
+            </span>
+          </div>
 
           {/*
             ─── THE CONNECTION, AS ITS OWN PILL ───────────────────────────
@@ -582,12 +782,12 @@ export function CampaignCard({
       {total > 0 ? (
         <>
           <div className="mt-2.5 grid grid-cols-3 gap-1.5 [&>*]:min-w-0">
-            <Stat value={published} label="פורסמו" icon={<CheckCircleIcon aria-hidden className="h-4 w-4 shrink-0 text-success-400" />} />
+            <Stat tone="good" value={published} label="פורסמו" icon={<CheckCircleIcon aria-hidden className="h-4 w-4 shrink-0 text-success-400" />} />
             {/* openRows(): scheduled + running + manual — everything that has
                 not ended yet. It is the number that answers "is this still
                 going to publish?", which is the question the card exists for. */}
-            <Stat value={view.open} label="ממתינים" icon={<ClockIcon aria-hidden className="h-4 w-4 shrink-0 text-brand-400" />} />
-            <Stat value={failed} label="נכשלו" icon={<AlertCircleIcon aria-hidden className="h-4 w-4 shrink-0 text-error-400" />} />
+            <Stat tone="brand" value={view.open} label="ממתינים" icon={<ClockIcon aria-hidden className="h-4 w-4 shrink-0 text-brand-400" />} />
+            <Stat tone="bad" value={failed} label="נכשלו" icon={<AlertCircleIcon aria-hidden className="h-4 w-4 shrink-0 text-error-400" />} />
           </div>
           {/* "פורסם ל-204 מתוך 252 קבוצות" — the denominator a customer
               actually reads the card for. Hidden when there is no group count
@@ -652,6 +852,56 @@ export function CampaignCard({
         card's own button it would be a second press, a second write and a
         second line in the activity log.
       */}
+      {/*
+        ─── THE SHUT CARD'S ONE LINE ──────────────────────────────────────
+
+        The reference's second card: the header, the counters, and a single
+        strip saying when it runs, how fast, and whether it repeats. Three
+        READINGS and no controls — a switch that changes a campaign's repeat
+        while the card claims to be only a summary is the kind of tap nobody
+        means to make. Everything that can act lives behind the chevron.
+
+        "כל היום" is literal rather than decorative: a schedule has no closing
+        hour any more (campaign-schedule.ts), so a day that opens at midnight
+        is open all of it. Any other hour is printed as the hour it is.
+      */}
+      {!open && (schedule || pace || repeat) && (
+        <div
+          className="mt-2.5 flex flex-wrap items-center gap-1.5 rounded-2xl border p-1.5"
+          style={{ borderColor: `${id.line}66` }}
+        >
+          {schedule && (
+            <span className="inline-flex min-h-8 items-center gap-1 rounded-full border border-ink-700 bg-ink-900 px-2 text-[11px] font-bold text-mist-100">
+              <CalendarIcon aria-hidden className="h-3.5 w-3.5 shrink-0" style={{ color: id.ink }} />
+              {schedule.start === '00:00' ? 'כל היום' : ltr(schedule.start)}
+            </span>
+          )}
+          {paceProfile(pace)?.label && (
+            <span
+              className="inline-flex min-h-8 items-center gap-1 rounded-full border bg-ink-900 px-2 text-[11px] font-extrabold"
+              style={{ borderColor: id.line, color: id.ink }}
+            >
+              <BoltIcon aria-hidden className="h-3.5 w-3.5 shrink-0" />
+              {paceProfile(pace)?.label}
+            </span>
+          )}
+          {repeat && (
+            <span className="inline-flex min-h-8 items-center gap-1 rounded-full border border-ink-700 bg-ink-900 px-2 text-[11px] font-bold text-mist-100">
+              <RepeatIcon aria-hidden className="h-3.5 w-3.5 shrink-0" style={{ color: id.ink }} />
+              חזרה יומית
+              <span className={`ms-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-extrabold ${repeat.enabled ? 'bg-success-400/12 text-success-400' : 'bg-ink-800 text-mist-500'}`}>
+                {repeat.enabled ? 'פעילה' : 'כבויה'}
+              </span>
+            </span>
+          )}
+        </div>
+      )}
+
+      {/* Everything that can ACT, behind the chevron. Unmounted rather than
+          hidden: a control nobody can see must also be one nobody can tab
+          into, and `hidden` leaves it in the tab order on every browser this
+          product has been measured in. */}
+      <div id={panelId} className={open ? 'card-open' : 'hidden'}>
       {turnOn && (
         /*
          * THE FILLED ONE, AND IT TAKES THAT FROM "עריכת קמפיין" BELOW.
@@ -686,6 +936,7 @@ export function CampaignCard({
       {schedule && onScheduleChange && (
         <>
           <CampaignSchedulePanel
+            compact
             schedule={schedule}
             onChange={onScheduleChange}
             repeat={repeat}
@@ -779,14 +1030,23 @@ export function CampaignCard({
         survives this button.
       */}
       <div className="mt-2.5 flex items-stretch gap-2">
+        {/*
+          THE SOFT BUTTON THE REFERENCE DRAWS, in the campaign's own colour.
+
+          Not the product's filled primary: the image's edit button is a pale
+          wash with a coloured hairline and coloured bold text, which is what
+          lets the FILLED control on the card stay the one that matters — the
+          pace tile that is selected. `variant="secondary"` keeps ButtonLink's
+          focus ring, its 48px height and its disabled behaviour; only the
+          three colours are the identity's, and they are inline because a
+          campaign's hue is data and Tailwind cannot generate a class per row.
+        */}
         <ButtonLink
           href={editHref ?? link}
           size="md"
-          /* Quiet while a turn-it-back-on button is drawn above — see the note
-             there. Filled on the reference's own running card, which is the one
-             the image draws. */
-          variant={turnOn ? 'secondary' : undefined}
-          className="h-12 grow !min-h-12 !rounded-2xl justify-center gap-2 !text-[14px]"
+          variant="secondary"
+          className="h-11 grow !min-h-11 !rounded-2xl justify-center gap-2 !text-[13px] !font-extrabold"
+          style={{ backgroundColor: `${id.ink}14`, borderColor: `${id.ink}59`, color: id.ink }}
         >
           <PencilIcon aria-hidden className="h-4 w-4" />
           {editHref ? 'עריכת קמפיין' : 'פתח קמפיין'}
@@ -809,11 +1069,13 @@ export function CampaignCard({
             aria-label={`מחק את הקמפיין "${campaign.name}"`}
             disabled={busy}
             onClick={onDelete}
-            className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl border border-ink-600 bg-ink-900 text-error-400 transition-colors hover:bg-error-300/12 disabled:pointer-events-none disabled:text-ink-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-error-400 focus-visible:ring-offset-2 focus-visible:ring-offset-ink-950"
+            className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl border-[1.5px] border-error-400/60 bg-ink-850 text-error-400 transition-colors hover:bg-error-300/12 disabled:pointer-events-none disabled:text-ink-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-error-400 focus-visible:ring-offset-2 focus-visible:ring-offset-ink-950"
           >
             <TrashIcon aria-hidden className="h-4.5 w-4.5" />
           </button>
         )}
+      </div>
+      </div>
       </div>
     </div>
   );
@@ -827,9 +1089,15 @@ export function CampaignCard({
  * boxes tellable apart at a glance, and above the number it would be read as
  * a heading rather than as part of it.
  */
-function Stat({ value, label, icon }: { value: number; label: string; icon: React.ReactNode }) {
+const STAT_SKIN: Record<'good' | 'brand' | 'bad', string> = {
+  good: 'border-success-400/25 bg-gradient-to-b from-ink-850 to-success-400/[0.10]',
+  brand: 'border-brand-500/25 bg-gradient-to-b from-ink-850 to-brand-500/[0.10]',
+  bad: 'border-error-300/25 bg-gradient-to-b from-ink-850 to-error-300/[0.10]',
+};
+
+function Stat({ value, label, icon, tone }: { value: number; label: string; icon: React.ReactNode; tone: 'good' | 'brand' | 'bad' }) {
   return (
-    <div className="rounded-2xl border border-ink-600 bg-ink-900 px-1 py-2 text-center">
+    <div className={`rounded-[14px] border px-1 py-1.5 text-center ${STAT_SKIN[tone]}`}>
       {/* THE ICON FIRST IN SOURCE, so it lands on the RIGHT of this RTL row —
           which is where the reference draws it, with the figure to its left.
           Written as source order rather than as an `order-` class, so an LTR
@@ -846,7 +1114,7 @@ function Stat({ value, label, icon }: { value: number; label: string; icon: Reac
           clamped expression and is right to: it cannot tell this word from a
           group's name. All three are Hebrew constants written in this file, so
           "auto" resolves to the RTL they already had. */}
-      <span data-must-fit dir="auto" className="mt-0.5 block truncate text-[10.5px] font-bold leading-4 text-mist-300">{label}</span>
+      <span data-must-fit dir="auto" className="block truncate text-[10px] font-bold leading-4 text-mist-300">{label}</span>
     </div>
   );
 }

@@ -663,7 +663,37 @@
  * AND THE NUMBER WAS CHECKED AGAINST THE RELEASE LIST, not against this
  * file: v4.56.0 was published today at 05:59, so 4.57.0 is free.
  */
-export const WORKER_VERSION = '4.57.0';
+/*
+ * ─── 4.57.0 → 4.58.0 — DOES THIS HAVE TO REACH THE PC? YES. SAME GATE,
+ *     AND THIS TIME THE RULE INSTEAD OF THE CASE ─────────────────────
+ *
+ * 4.57.0 freed ONE notice: the one the rate-limit branch had raised. The
+ * owner's answer to that fix was that he does not want to turn the program
+ * off and on again — ever, for any of them — and he is right, because there
+ * are six places in worker/social-worker.ts that write `state.attention` and
+ * 4.57.0 cleared exactly one of them. One of the other five, the idle-window
+ * circuit breaker, was literally printing הפעילו מחדש את התוכנה במחשב.
+ *
+ * So the notice now carries a clock, kept at the GATE and not at the six
+ * writers: ten minutes of holding the queue and it is cleared, whoever wrote
+ * it, including code written next month by somebody who never reads this
+ * file. The stamp moves when the TEXT changes, so a loop re-writing the same
+ * sentence every tick cannot renew its own lease.
+ *
+ * NOTHING IS SWEPT UNDER THE CARPET. The three real gates — paused,
+ * rate-limited, disconnected — are separate reads of saved state and still
+ * stand ahead of this; a cause that is still there raises its notice again on
+ * the very next attempt, at a cost of one attempt every ten minutes. What is
+ * gone is the case where the CAUSE ended and the SENTENCE outlived it: that
+ * is what cost five and a half hours on 09.11, and it is in memory, so there
+ * is no server-side half of this fix either.
+ *
+ * AND THE NUMBER WAS CHECKED AGAINST THE RELEASE LIST: v4.57.0 was published
+ * today at 15:45, so 4.58.0 is free.
+ *
+ * התזמון, סדר התור, מנגנון הפרסום, חישוב זמני הפרסום וההגדרות הקיימות לא נגעו.
+ */
+export const WORKER_VERSION = '4.58.0';
 
 /**
  * A FINGERPRINT OF EVERYTHING THE INSTALLER CARRIES.
@@ -1383,4 +1413,4 @@ export const WORKER_VERSION = '4.57.0';
  * is asked to update anything for a window that only draws what is already in
  * social_activity_log.
  */
-export const WORKER_FINGERPRINT = 'e408d33e7756143e';
+export const WORKER_FINGERPRINT = 'd22e1c2b79c8d70f';

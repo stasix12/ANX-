@@ -238,4 +238,60 @@ const forced = readFileSync(new URL('../social-worker.ts', import.meta.url), 'ut
 ok(/debugMode: env\.forceHeaded, testMode: false, requireConfirmation: false/.test(forced),
   'and a row already SAVED as true is overridden too — deleting a switch is not turning it off');
 
+/*
+ * ─── AND NOW: NOTHING HOLDS THE QUEUE FOR EVER ─────────────────────────────
+ *
+ * "אני לא רוצה כל פעם לכבות את התוכנה ולהדליק תעשה את זה לגמרי אוטומטי."
+ * 09.11.2026, after a notice written at 12:34 was still holding his queue at
+ * 18:14 — five and a half hours after the freeze it described had ended, and
+ * an hour after the row that proved it was nulled.
+ *
+ * TWO stops were fixed that day. The first was that ONE notice's own release
+ * (see rate-freeze.test.ts). This is the second and the general one: a string
+ * in a running process may not outlive its cause, whichever of the six places
+ * wrote it, including places written after today.
+ *
+ * The retry is not a loosening. The three real gates — paused, rate-limited,
+ * disconnected — are separate and still stand, and whatever raised the notice
+ * raises it again on the next failure. A cause still there costs one attempt
+ * every ten minutes. A cause that has gone costs nothing.
+ */
+{
+  const w = readFileSync(new URL('../social-worker.ts', import.meta.url), 'utf8');
+
+  ok(/const ATTENTION_MAX_MS = 10 \* 60_000;/.test(w), 'a notice has a maximum life, written as one number');
+
+  /* The stamp must live at the GATE, not at the writers: six sites set
+     `attention` today and the seventh must be covered without knowing. */
+  ok(/if \(state\.attention !== state\.attentionSeen\) \{[\s\S]{0,120}state\.attentionAt = Date\.now\(\);/.test(w),
+    'the age is stamped in one place, when the TEXT changes');
+
+  /* Stamping on CHANGE and not on presence is the whole guard against a loop
+     that re-writes the same sentence every tick refreshing its own lease. */
+  ok(!/if \(state\.attention\) \{\s*state\.attentionAt = Date\.now\(\);/.test(w),
+    'and not on every tick a notice happens to be present — that would renew the lease for ever');
+
+  const expiry = /Date\.now\(\) - state\.attentionAt > ATTENTION_MAX_MS[\s\S]{0,400}state\.attention = '';/;
+  ok(expiry.test(w), 'past that age the notice is cleared and the tick is allowed to try');
+
+  /* Order matters: the release has to stand BEFORE the gate it opens. */
+  const releaseAt = w.search(expiry);
+  const gateAt = w.indexOf('if (state.attention) return idle(state,');
+  ok(releaseAt > -1 && gateAt > -1 && releaseAt < gateAt,
+    'and it stands before the gate — after it, the queue would stay shut one more tick, for ever');
+
+  /* The three real gates are untouched by any of this. */
+  ok(/if \(control\.paused\) return idle\(/.test(w), 'the paused gate still stands on its own');
+  ok(/if \(control\.rateLimitedUntil\) \{/.test(w), 'and the rate-limit gate');
+  ok(/if \(state\.browserState === 'disconnected'\) return idle\(/.test(w), 'and the disconnected gate');
+
+  /* It says so once, so "why did it start again" has an answer on screen. */
+  ok(/logActivity\(\s*'warn',\s*'attention_expired'/.test(w),
+    'the owner is told it was cleared, rather than finding out from a queue that moved');
+
+  /* And no message may send him to the power switch any more. */
+  ok(!/הפעילו מחדש את התוכנה במחשב/.test(w),
+    'nothing tells the owner to restart the app — that instruction is what this change exists to delete');
+}
+
 console.log(`✓ hold-reason: ${checks} בדיקות עברו`);

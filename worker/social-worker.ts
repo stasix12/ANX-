@@ -164,6 +164,20 @@ interface WorkerState {
    */
   freezeHold: boolean;
   /**
+   * ─── THE CLOCK ON A NOTICE ───────────────────────────────────────────────
+   *
+   * `attentionSeen` is the text as it was when it was last stamped, and
+   * `attentionAt` is when that happened. Together they say how long THIS
+   * notice — not a different one that replaced it — has been holding the
+   * queue, which is the one thing nothing in this file could answer before.
+   *
+   * They are maintained in one place (see the stamp above the gate in tick())
+   * rather than at the six sites that write `attention`, so a seventh site
+   * added tomorrow is covered without knowing this exists.
+   */
+  attentionSeen: string;
+  attentionAt: number;
+  /**
    * SOMETHING HE SHOULD KNOW — which is NOT the same as a reason to stop.
    *
    * learnAccountScope() used to write its sentence into `attention`: "N
@@ -446,6 +460,8 @@ async function main(): Promise<void> {
     browserState: session.hasProfile() ? 'unknown' : 'disconnected',
     attention: '',
     freezeHold: false,
+    attentionSeen: '',
+    attentionAt: 0,
     notice: '',
     currentJobs: new Set<string>(),
     lanes: [],
@@ -885,6 +901,14 @@ async function noticeCommentsStarved(db: SupabaseClient, state: WorkerState, roo
  */
 const IDLE_WINDOW_LIMIT = 40;
 
+/*
+ * HOW LONG ONE NOTICE MAY HOLD THE QUEUE. Ten minutes: long enough that a
+ * real problem is not retried so often it becomes the problem, short enough
+ * that nobody watches a stopped queue for an hour. The retry costs ONE
+ * publication attempt, because whatever is wrong re-raises the notice.
+ */
+const ATTENTION_MAX_MS = 10 * 60_000;
+
 /** How long a login answer is trusted before it is asked again. */
 const LOGIN_RECHECK_MS = 10 * 60_000;
 
@@ -1064,6 +1088,52 @@ async function tick(state: WorkerState): Promise<void> {
   /* Each of these three is a sentence that answers "למה לא מפרסם" — see
      idle(). They are the only three ways the gate closes, and every one of
      them now reaches the owner's screen instead of his terminal. */
+  /*
+   * ─────────────────────────────────────────────────────────────────────────
+   * NOTHING HOLDS THE QUEUE FOR EVER — "אני לא רוצה כל פעם לכבות את התוכנה
+   * ולהדליק, תעשה את זה לגמרי אוטומטי." 09.11.2026
+   *
+   * `attention` is a single string that stops everything, written from six
+   * places, and cleared from a different set of them. The freeze's own case
+   * was fixed above, by its own flag — but that is one notice out of six, and
+   * the owner's complaint is not about that one. It is that a string in the
+   * memory of a process can outlive the thing it describes, and then the ONLY
+   * cure is closing the program. Measured once already: a notice set at 12:34
+   * was still holding the queue at 18:14, five and a half hours after the
+   * freeze it spoke about had ended.
+   *
+   * So the notice gets a clock. It may hold the queue for ten minutes; past
+   * that it is cleared and the tick is allowed to try. NOTHING IS SWEPT UNDER
+   * THE CARPET BY THIS: the three real gates — paused, rate-limited,
+   * disconnected — are separate and still stand, and whatever set the notice
+   * sets it again on the very next failure, at a cost of one attempt. A cause
+   * that is still there costs one try every ten minutes; a cause that is gone
+   * costs nothing at all, and the owner does not have to notice.
+   *
+   * THE STAMP IS KEPT HERE AND NOT AT THE WRITERS, so a notice raised by code
+   * written next month is on this clock without its author knowing. It is
+   * stamped when the TEXT changes, so a notice that is re-raised with the same
+   * words keeps its original age — a loop re-writing the same sentence every
+   * tick must not be able to refresh its own lease for ever.
+   */
+  if (state.attention !== state.attentionSeen) {
+    state.attentionSeen = state.attention;
+    state.attentionAt = Date.now();
+  }
+  if (state.attention && state.attentionAt > 0 && Date.now() - state.attentionAt > ATTENTION_MAX_MS) {
+    const held = state.attention;
+    const mins = Math.round((Date.now() - state.attentionAt) / 60_000);
+    state.attention = '';
+    state.attentionSeen = '';
+    state.freezeHold = false;
+    state.attentionAt = 0;
+    await logActivity(
+      'warn',
+      'attention_expired',
+      `ההודעה "${held.slice(0, 90)}" עצרה את הפרסום ${mins} דקות — ניקינו אותה ואנחנו מנסים שוב. אם הסיבה עדיין קיימת היא תחזור מיד, בלי שתצטרכו לעשות דבר.`,
+    );
+    console.log(`[worker] הודעה שעצרה את התור ${mins} דק׳ נוקתה אוטומטית — מנסים שוב.`);
+  }
   if (state.attention) return idle(state, `ממתין לטיפול ידני: ${state.attention}`);
   if (state.browserState === 'disconnected') return idle(state, 'אין חיבור לפייסבוק — לחצו "התחבר לפייסבוק" בלוח הבקרה.');
 
@@ -1202,7 +1272,7 @@ async function tick(state: WorkerState): Promise<void> {
      */
     const burst = recentPageOpens(5 * 60_000);
     if (burst.count > IDLE_WINDOW_LIMIT) {
-      state.attention = `התוכנה פתחה ${burst.count} חלונות דפדפן ב-5 דקות בלי שום פרסום (${burst.why}) — עצרנו את פעולות הרקע כדי לא להעמיס על החשבון. הפעילו מחדש את התוכנה במחשב, ואם זה חוזר — ספרו לנו.`;
+      state.attention = `התוכנה פתחה ${burst.count} חלונות דפדפן ב-5 דקות בלי שום פרסום (${burst.why}) — עצרנו את פעולות הרקע כדי לא להעמיס על החשבון. ננסה שוב בעוד עשר דקות לבד, ואם זה חוזר — ספרו לנו.`;
       console.error(`[worker] ✗ ${burst.count} חלונות ב-5 דקות (${burst.why}) — עוצר את פעולות הרקע.`);
       await logActivity('warn', 'worker_window_storm', state.attention, { opens: burst.count, why: burst.why });
       return;

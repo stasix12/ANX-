@@ -110,6 +110,15 @@ const KIND: Record<string, ActivityKind> = {
    * הוא נעצר ומתי בדיוק חזר.
    */
   rate_limit_cleared: 'system',
+  /*
+   * הודעה שעצרה את התור עשר דקות ונוקתה מעצמה. 'system' ולא 'failure':
+   * הכישלון עצמו כבר נכתב כשההודעה נולדה, ומה שקורה כאן הוא שהמכונה
+   * חזרה לנסות לבד. חייב להיכתב בכל זאת, ומאותה סיבה מדויק כמו rate_limit_cleared:
+   * בלעדיו התור עומד עשר דקות וחוזר לזוז בלי שאף אחד ידע למה הוא נעצר ומתי
+   * בדיוק השתחרר. אם הסיבה עוד קיימת ההודעה תחזור מיד ותירשם שוב ברשימה
+   * כמה שהיא — failure, ולא השורה הזו.
+   */
+  attention_expired: 'system',
   /* The backlog outgrew one pass's window. A warning and not quiet system
      news: while it holds, publications parked today may not be looked at. */
   verify_window_full: 'failure',

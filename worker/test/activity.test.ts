@@ -64,6 +64,18 @@ const SYSTEM_BY_DESIGN = new Set([
    * feed saying when, or why it had stopped.
    */
   'rate_limit_cleared',
+  /*
+   * THE NOTICE THAT HELD THE QUEUE TEN MINUTES AND WAS CLEARED BY THE CLOCK.
+   * Same family as the line above and system news for the same reason:
+   * nothing published and nothing failed to publish here — the machine let
+   * itself try again. The failure that raised the notice was already written
+   * at its own level when it happened, and if its cause is still there it
+   * writes itself again on the very next attempt, as the failure it is. This
+   * line only says the queue is moving again, and it has to be written:
+   * without it a ten-minute stop with no explanation is exactly the silence
+   * this whole fix exists to end.
+   */
+  'attention_expired',
   'metrics_columns_missing',
   /*
    * A read the publish engine needed came back as an error, so it refused to

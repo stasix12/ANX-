@@ -477,7 +477,19 @@ const row = (id: string, scheduledAt: string, extra: Partial<ProjectableRow> = {
   const dash = strip(readFileSync('src/app/social/page.tsx', 'utf8'));
   is(!/progress\.total\)\)/.test(dash.split('const FEATURED_LIMIT')[1].slice(0, 900)), 'the run strip no longer filters campaigns by how many queue rows they have');
   is(/filter\(\(x\): x is \{ campaign: Campaign; state: CampaignState \} => Boolean\(x\.state\)\)/.test(dash), 'it features every live campaign it has a state for');
-  is(/projected=\{projectedSoon\}/.test(dash), 'and the upcoming list is handed the projection rather than left to read the column');
+  /*
+   * RE-POINTED 09.11.2026. The upcoming list this described was "הפרסומים
+   * הקרובים", deleted as a duplicate of "תור פרסומים" above it; the
+   * projection it was handed went with it, because nothing else on the
+   * dashboard consumed it.
+   *
+   * The rule — one clock, never two answers — is asserted as its negative,
+   * which is what it was always really about: no surface on this screen may
+   * re-derive an instant of its own. The queue card draws each row's stored
+   * stamp and nothing computes a second one beside it.
+   */
+  is(!/projectQueue\(/.test(dash), 'the dashboard computes no projection of its own any more — the card that needed one is gone');
+  is(/at: ltr\(formatTimeHe\(r\.scheduled_at\)\)/.test(dash), 'and the queue card draws the row\'s own stored instant, not a second opinion about it');
 
   /*
    * FAULT 2 — the countdown in the list read `row.scheduled_at`. It must read
@@ -576,7 +588,12 @@ const row = (id: string, scheduledAt: string, extra: Partial<ProjectableRow> = {
   is(!/<Clock iso=\{rows\[0\]\.scheduled_at\} \/>/.test(tuner), 'the sheet opened to FIX the times no longer opens on the raw column');
 
   const dash = read('src/app/social/page.tsx');
-  is(/const at = projectedAll\?\.get\(r\.id\);/.test(dash), 'the 24-hour card decides membership on the instant each row prints');
+  /* RE-POINTED 09.11.2026: the 24-hour card is gone (see §11 above), and with
+     it the membership test that had to agree with what each row printed. The
+     queue card that replaced it has no window to be a member of — it draws a
+     fixed five — so the failure mode this guarded against cannot arise. What
+     remains is that nothing on the screen computes a second instant. */
+  is(!/projectedAll/.test(dash), 'the dashboard holds no projection of its own any more');
 
   /* AND THE TWO TIMEZONE RULES time.ts EXISTS TO ENFORCE. */
   const quick = read('src/components/social/QuickCommentsCard.tsx');
@@ -605,8 +622,19 @@ const row = (id: string, scheduledAt: string, extra: Partial<ProjectableRow> = {
   is(/opts\.counts\?\.lastPublishedAt !== undefined/.test(camp), 'the round\u2019s last publication is exact when the caller has it');
   const dash = strip(readFileSync('src/app/social/page.tsx', 'utf8'));
   const run = strip(readFileSync('src/app/social/campaigns/[id]/page.tsx', 'utf8'));
-  is(/lastPublishedAt: data\.states\[c\.id\]\?\.lastPublishedAt \?\? null/.test(dash), 'the dashboard reads it off the state');
-  is(/lastPublishedAt: state\?\.lastPublishedAt \?\? null/.test(run), 'and so does the round page — the same number, from the same place');
+  /*
+   * RE-POINTED 09.11.2026. The dashboard's half of this lived inside the
+   * projection gates, and the projection went with "הפרסומים הקרובים" — the
+   * card it existed for, deleted as a duplicate of "תור פרסומים" above it.
+   * Two screens cannot disagree about an instant only one of them computes,
+   * so the dashboard's claim becomes the stronger negative: it derives no
+   * "next publication" at all. The round page keeps the positive.
+   */
+  is(
+    !/data\.states\[c\.id\]\?\.lastPublishedAt/.test(dash),
+    'the dashboard derives no PER-ROUND next-publication instant any more — it draws each row\'s stored stamp. (The account-wide one still reaches the round card\'s own countdown, which is a different number and asserted with that card.)',
+  );
+  is(/lastPublishedAt: state\?\.lastPublishedAt \?\? null/.test(run), 'and the round page still reads it off the state, from the one place the database computes it');
   for (const [what, src] of [['the dashboard', dash], ['the round page', run]] as const) {
     is(!/done\.find\(\(r\) => r\.published_at\)/.test(src), `${what} no longer digs the instant out of a preview array`);
   }

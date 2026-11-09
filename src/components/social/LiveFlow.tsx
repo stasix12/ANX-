@@ -250,7 +250,13 @@ export type FlowRow = {
    */
   image?: string | null;
   state: 'done' | 'live' | 'next' | 'failed';
-  /** For a finished one: when it finished, already formatted as HH:MM. */
+  /**
+   * WHEN, already formatted as HH:MM.
+   *
+   * For a finished row it is when it finished; for a queued one it is the slot
+   * the engine claims it on. Both are drawn in the same place on the row, and
+   * a row without one still says where it stands in the queue.
+   */
   at?: string | null;
   /** For the live one: the stage, in the worker's words. */
   note?: string | null;
@@ -452,7 +458,18 @@ export function LiveFlow({
                   )}
                 </span>
                 {r.state === 'done' && r.at && <span className="anxf-row-at">{r.at} · בוצע</span>}
-                {r.state === 'next' && <span className="anxf-row-at">{i === firstNext ? 'בתור הבא' : 'בתור'}</span>}
+                {/* THE TIME, THEN THE PLACE IN THE QUEUE. The dashboard's
+                    "הפרסומים הקרובים" card was deleted on 09.11.2026 as a
+                    duplicate of this list, and it was the only place that said
+                    WHEN — so the stamp moved here with it. Without a stamp the
+                    row still says where it stands, which is what it said
+                    before. */}
+                {r.state === 'next' && (
+                  <span className="anxf-row-at">
+                    {r.at ? `${r.at} · ` : ''}
+                    {i === firstNext ? 'בתור הבא' : 'בתור'}
+                  </span>
+                )}
                 <span className="anxf-row-mark" aria-hidden>
                   {r.state === 'done' ? (
                     <svg className="anxf-mark-done" viewBox="0 0 24 24" fill="currentColor">

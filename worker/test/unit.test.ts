@@ -3085,22 +3085,45 @@ const scenario: { step: string; line: string }[] = [];
    * a negative across the whole screen, which is what stops a fourth surface
    * being written the old way.
    */
-  pin('upcoming subtitle', dash, '`${data.waitingToday} ממתינים בתור להיום`');
-  pin('upcoming subtitle window half', dash, '`${data.upcomingSoon} ב-24 השעות הקרובות`');
-  pin('and what falls after midnight is named, never dropped', dash, '`ועוד ${summary.automaticWaiting - data.waitingToday} אחרי חצות`');
-  pin('upcoming window count is exact', dash, 'countWaitingWithin(');
-  pin('upcoming footer total', dash, 'total={data.upcomingSoon}');
-  assert.ok(!dash.includes('data.upcoming.length} ממתינים'), 'a capped array length must not be printed as the queue');
-  assert.ok(!dash.includes('soon.length} ב-24'), 'nor may the window\'s own capped array length be printed as its total');
   /*
-   * AND THE LIST IS THE WINDOW. Filtering in the component rather than the
-   * read is safe only because the read is ordered soonest-first, so everything
-   * inside the window is at the front of it; the guard holds both halves
-   * together, because either one alone is wrong.
+   * ─── RE-POINTED 09.11.2026 — THE CARD IS GONE, THE RULE IS NOT ──────────
+   *
+   *   "תמחק את המלבן של הפרסומים הקרובים, יש לי כבר למעלה מלבן עם שורות
+   *    של תור פרסומים"
+   *
+   * Five pins above held the subtitle and footer of "הפרסומים הקרובים" to
+   * sources that were not capped arrays. That card was deleted as a duplicate
+   * of "תור פרסומים" higher up the same screen, and with it went
+   * data.upcomingSoon, the 24-hour window and the extra countWaitingWithin()
+   * head count that fed it.
+   *
+   * What the pins were really protecting outlives the card and is asserted
+   * here instead: a capped read's LENGTH may never be printed as a total,
+   * anywhere on this screen. `data.upcoming` is still read (capped at
+   * UPCOMING_LIMIT) and still feeds the queue card, so the trap is still
+   * loaded — it just has no card left to spring on. The one surviving count
+   * sentence, "ממתינים בתור להיום", keeps its pin because it is still drawn,
+   * on the tile.
+   */
+  pin('the queue tile still counts TODAY, from the one honest source', dash, 'value: data.waitingToday,');
+  pin('and what falls after midnight is named, never dropped', dash, '`ועוד ${summary.automaticWaiting - data.waitingToday} אחרי חצות`');
+  assert.ok(!dash.includes('data.upcoming.length} ממתינים'), 'a capped array length must not be printed as the queue');
+  assert.ok(!dash.includes('data.upcoming.length}'), 'nor anywhere else: `upcoming` is read with a limit and its length is a ceiling, not a fact');
+  assert.ok(!dash.includes('upcomingSoon'), 'the deleted card\'s head count is gone with it — one query fewer on every poll');
+  assert.ok(!dash.includes('<Timeline'), 'the duplicate upcoming list is gone; "תור פרסומים" above is the only place this screen answers "what is next"');
+  /*
+   * THE READ STAYS ASCENDING, AND THAT SURVIVES THE CARD.
+   *
+   * The 24-hour window and its filter went with "הפרסומים הקרובים" on
+   * 09.11.2026 — the queue card above draws a fixed five and has no window of
+   * its own. What must not change is the ORDER: the limit is applied after the
+   * sort, so a newest-first read would hand those five the FURTHEST-OUT rows
+   * in the queue while calling the first of them the next one. That is the
+   * trap the read's own comment describes, and it is now the only half left.
    */
   pin('upcoming read stays ascending', dash, "order: 'asc' }");
-  pin('upcoming list is the window', dash, 'rows={soon}');
-  pin('the window is a day', dash, 'const UPCOMING_WINDOW_HOURS = 24;');
+  assert.ok(!dash.includes('const UPCOMING_WINDOW_HOURS'), 'the deleted card\'s 24-hour window is gone with it — the name survives only in the note that records its removal');
+  assert.ok(!dash.includes('soonCutoff ='), 'and so is the cutoff it was computed into');
   /*
    * NO DESTRUCTIVE CONTROL IN THIS CARD'S HEADER. "למעלה תמחק אפס והכל."
    * Both doors to discardQueue() that the owner kept are elsewhere on this
@@ -3125,12 +3148,21 @@ const scenario: { step: string; line: string }[] = [];
    * restarted the worker, saw the same six lines, and reported that nothing
    * had changed — correctly, about the screen.
    */
-  /* Re-pointed with the window: the title has to describe what is in the
-     card, and what is in the card is now the next 24 hours. A queue whose
-     soonest row is next Tuesday is NOT "הפרסומים הקרובים" on this screen —
-     the subtitle says so in words and the title steps aside. */
-  pin('upcoming title', dash, "title={soon.length ? 'הפרסומים הקרובים' : 'מה קרה היום'}");
-  pin('upcoming empty window says so', dash, '`אין פרסום ב-24 השעות הקרובות · ${summary.automaticWaiting} ממתינים אחר כך`');
+  /*
+   * ─── RE-POINTED 09.11.2026 — THE CARD WHOSE TITLE THIS WAS IS GONE ──────
+   *
+   * The self-renaming title ("הפרסומים הקרובים" / "מה קרה היום") existed
+   * because one card carried two reads and could not promise the future while
+   * drawing the past. The card was deleted as a duplicate of "תור פרסומים"
+   * above it, so there is no title left to keep honest.
+   *
+   * The DISCIPLINE is what survives, and it is asserted where it can still be
+   * broken: no heading on this screen may promise what is next over rows that
+   * are over. The queue card's own list is explicitly ordered — finished,
+   * in-flight, then the next five — and the rail component may not announce
+   * itself as "what is next" either.
+   */
+  assert.ok(!dash.includes("'הפרסומים הקרובים'"), 'no heading on the dashboard promises the future any more — the duplicate card that did is gone');
   const timeline = readFileSync('src/components/social/Timeline.tsx', 'utf8');
   assert.ok(
     !/aria-label="הפרסומים הקרובים/.test(timeline),
@@ -5576,9 +5608,34 @@ const scenario: { step: string; line: string }[] = [];
    * data.upcomingSoon is a head count; summary.automaticWaiting would now be
    * the wrong set entirely.
    */
-  const timelineTag = dash.slice(dash.indexOf('<Timeline'), dash.indexOf('<Timeline') + 900);
-  for (const prop of ['rows={soon}', 'limit={UPCOMING_LIMIT}', 'scrollable', 'total={data.upcomingSoon}']) {
-    assert.ok(timelineTag.includes(prop), `the dashboard timeline lost ${prop} — it must render the whole read and scroll, not cut off with the rest in a footer`);
+  /*
+   * ─── RE-POINTED 09.11.2026 ──────────────────────────────────────────────
+   *
+   * This held four props together on the dashboard's <Timeline> so the strip
+   * could not quietly go back to drawing six of twenty-six. The dashboard has
+   * no <Timeline> any more — "הפרסומים הקרובים" was deleted as a duplicate of
+   * "תור פרסומים" above it.
+   *
+   * The rule it was standing in for is the one that matters and it moves to
+   * the card that inherited the job: the queue card draws a FIXED five
+   * upcoming rows by design, and the number of rows it is handed may not be
+   * the capped read's length. And the clock came with the deleted card — a
+   * queued row that says only "בתור" cannot answer "when", which was the one
+   * thing the deleted card did that this one did not.
+   */
+  assert.ok(!dash.includes('<Timeline'), 'the dashboard no longer draws a second upcoming list');
+  assert.ok(dash.includes('data.upcoming.slice(0, 5)'), 'the queue card draws the next five');
+  assert.ok(dash.includes('at: ltr(formatTimeHe(r.scheduled_at)),'), 'and each of them carries its instant');
+  {
+    const flow = readFileSync(new URL('../../src/components/social/LiveFlow.tsx', import.meta.url), 'utf8');
+    assert.ok(
+      /r\.at \? `\$\{r\.at\} · ` : ''/.test(flow),
+      'a queued row draws its time before its place in the queue — without it the dashboard cannot say WHEN anything goes out',
+    );
+    assert.ok(
+      /i === firstNext \? 'בתור הבא' : 'בתור'/.test(flow),
+      'and only the first waiting row may claim nothing is in front of it',
+    );
   }
 
   /*
@@ -5607,10 +5664,19 @@ const scenario: { step: string; line: string }[] = [];
    * The claim is the same — the strip must be handed the finished rows —
    * and it is now asked of the mode where that title is true.
    */
+  /*
+   * RE-POINTED 09.11.2026. The strip this described was "הפרסומים הקרובים",
+   * deleted as a duplicate of "תור פרסומים" above it. The finished rows did
+   * not go with it: the queue card draws the last one that FINISHED at the
+   * head of its list, which is the same claim — the one screen that shows the
+   * run in order must show something it has done — asked of the card that
+   * inherited the job. The rest of the day is "פעילות אחרונה" and /social/history.
+   */
   assert.ok(
-    dash.includes('done={soon.length ? [] : data.doneToday}'),
-    'the strip must be handed the finished rows when it is the day, and only then',
+    dash.includes('data.doneToday.slice(0, 1)'),
+    'the queue card must still show the last publication that finished, or the one list showing the run in order shows nothing it has done',
   );
+  assert.ok(!dash.includes('done={soon'), 'and the deleted card\'s second mode is gone, not left dangling');
   /*
    * RE-POINTED. The read moved out of listQueue into listTimelineDone(), and
    * that is the whole fix rather than a refactor: QUEUE_SELECT is `*` plus

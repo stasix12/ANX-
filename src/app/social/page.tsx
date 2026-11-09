@@ -12,8 +12,6 @@ import { QuickCommentsCard } from '@/components/social/QuickCommentsCard';
 import { CommentTimeline } from '@/components/social/CommentTimeline';
 import { CampaignCommentSheet } from '@/components/social/CampaignCommentSheet';
 import { SocialShell } from '@/components/social/SocialShell';
-import { Timeline } from '@/components/social/Timeline';
-import { projectQueue, spacingFrom } from '@/lib/social/projection';
 import { AlertBar, Button, ButtonLink, Card, ErrorState, Skeleton, StatStrip, useConfirm, useToast } from '@/components/social/ui';
 import {
   callSocialApi,
@@ -78,19 +76,6 @@ import { AlertTriangleIcon, MessageIcon, PauseIcon, PlayIcon, PlusIcon, RepeatIc
  * never shown as a total.
  */
 const UPCOMING_LIMIT = 40;
-
-/*
- * HOW FAR AHEAD "הפרסומים הקרובים" LOOKS.
- *
- * "כאן הפרסומים הקרובים להראות רק את מה שעומד להתפרסם בתווך זמן של 24 שעות."
- *
- * The card read the queue's soonest forty rows whatever their date, so a run
- * spread over a fortnight filled it with publications from next Tuesday under
- * a heading that says "the upcoming ones". A day is the horizon the owner
- * actually acts on: everything in it is his morning, and everything past it is
- * the campaign screen's business.
- */
-const UPCOMING_WINDOW_HOURS = 24;
 
 /**
  * The ceiling on TODAY's finished publications, and it is a safety bound
@@ -161,10 +146,6 @@ interface DashboardData {
    * default — the trap its own header describes.
    */
   inFlightRows: QueueRow[];
-  /** Waiting publications due inside UPCOMING_WINDOW_HOURS — an exact count
-      from the database, because `upcoming` is a capped read and its length
-      would print the ceiling as a total. */
-  upcomingSoon: number;
   /** Today's finished publications, newest first. Its own read, counted by
       nothing — the queue's numbers describe the queue, not this window. */
   doneToday: TimelineRow[];
@@ -412,7 +393,7 @@ export default function SocialDashboard() {
        * IS on screen, it still reads every tick.
        */
       const needTargets = !setupDone.current;
-      const [campaigns, states, queue, today, failures, weekPublished, weekComments, limits, control, targets, manual, waitingForYou, log, upcoming, inFlightRows, upcomingSoon, doneToday, workers, comments, commentsWaiting, totals, commentsToday, commentsDone, commentsAttention, browser, lastPublished, waitingToday] = await Promise.all([
+      const [campaigns, states, queue, today, failures, weekPublished, weekComments, limits, control, targets, manual, waitingForYou, log, upcoming, inFlightRows, doneToday, workers, comments, commentsWaiting, totals, commentsToday, commentsDone, commentsAttention, browser, lastPublished, waitingToday] = await Promise.all([
         campaignsPromise,
         statesPromise,
         queueSummary(),
@@ -444,10 +425,6 @@ export default function SocialDashboard() {
         /* What is going out at this very second. The lean select already
            carries `step` and `step_at`; see inFlightRows above. */
         listQueue({ status: IN_FLIGHT_STATUSES, limit: 3, order: 'asc' }),
-        /* How many of those fall inside the day the card shows. A head count:
-           no rows cross the wire, and it is the only honest source for the
-           footer's "ועוד N אחריהם" once the list is a window. */
-        countWaitingWithin(new Date(Date.now() + UPCOMING_WINDOW_HOURS * 3_600_000).toISOString()),
         /*
          * Today's finished rows, newest first — the strip turns them round.
          *
@@ -507,7 +484,6 @@ export default function SocialDashboard() {
         weekComments,
         upcoming,
         inFlightRows,
-        upcomingSoon,
         doneToday,
         comments,
         commentsWaiting,
@@ -670,36 +646,6 @@ export default function SocialDashboard() {
    */
   const summary = data?.summary ?? EMPTY_QUEUE_SUMMARY;
   const pending = summary.cancellable;
-
-  /*
-   * THE DAY AHEAD — the rows "הפרסומים הקרובים" actually draws.
-   *
-   * Filtered here rather than in the read, and that is deliberate: `upcoming`
-   * is already ordered soonest-first and capped, so everything inside the
-   * window is at the front of it and nothing inside the window can be lost by
-   * cutting the tail. The exact count for the window comes from the database
-   * (data.upcomingSoon), because this array's length is a ceiling.
-   *
-   * A row with no instant at all cannot be placed in a window and is not
-   * dropped quietly — it keeps its place, because "soon" is a claim about
-   * when, and a row with no when has not made that claim either way.
-   */
-  const soonCutoff = Date.now() + UPCOMING_WINDOW_HOURS * 3_600_000;
-  /*
-   * MEMBERSHIP IS DECIDED ON THE SAME INSTANT THE ROW PRINTS.
-   *
-   * This filtered on the raw `scheduled_at` while the rows inside printed the
-   * projected one, so a row stamped 06:25 under a window that opens at 08:00
-   * was admitted as "today" and then drawn at its real instant — and a row
-   * whose projection rolls past the cutoff stayed in a card headed "24 השעות
-   * הקרובות" showing tomorrow. projectOne only ever moves an instant LATER, so
-   * the error was one-directional: the card always over-promised.
-   *
-   * The projection is computed below (it needs the campaign gates, which are
-   * assembled with the cards), so this pass is deliberately ordered after it —
-   * see `soon` just under projectedAll.
-   */
-  const upcomingRows = data?.upcoming ?? [];
 
   /*
    * "N פרסומים ממתינים לכם" — AND WHETHER HE HAS ALREADY BEEN SHOWN THEM.
@@ -1312,82 +1258,6 @@ export default function SocialDashboard() {
     readSchedule(schedulePatch[campaign.id] ? { ...campaign, ...schedulePatch[campaign.id] } : campaign);
 
   /*
-   * ───────── WHEN EACH WAITING ROW WILL ACTUALLY GO OUT ─────────
-   *
-   * "מקור אמת אחד לזמני הפרסום — הכרטיס והרשימה חייבים להסכים."
-   *
-   * The run card has named the engine's own instant since 4.0.1
-   * (scheduleReadout → the four gates), and the list below it rendered
-   * `scheduled_at` out of the column. With 217 rows re-spaced at 06:25 under a
-   * window that opens at 08:00 the card said 08:00 and the list said
-   * "באיחור · לפני שעתיים" about every one of them.
-   *
-   * One module answers it now for both, and this is where the dashboard feeds
-   * it: the account's two gap settings and its last publication, plus every
-   * campaign's own window and own last publication, so a row is projected
-   * against the gates that actually govern IT. That per-campaign gate is also
-   * the attribution fix — `projectQueue` keys the cascade by `campaign_id`, so
-   * one campaign's interval can no longer push another campaign's rows
-   * forward, which a single shared clock did.
-   *
-   * SCHEDULE PATCH INCLUDED, VIA scheduleOf. The owner's un-acknowledged
-   * change is laid over the stored row, so the moment he moves a day or an
-   * hour this list moves with the card instead of waiting for the write and
-   * the next poll — "אני רוצה שמתי שאני משנה שם ימים / שעות שזה יתעדכן באותו
-   * הרגע".
-   */
-  const projectedAll = data
-    ? projectQueue(upcomingRows, {
-        now: new Date(),
-        spacing: spacingFrom(data.limits, data.browser, data.lastPublished),
-        gates: Object.fromEntries(
-          data.campaigns.map((c) => [
-            c.id,
-            {
-              schedule: scheduleOf(c),
-              /*
-               * THIS campaign's own last publication — what its own gap is
-               * measured from. The account's is a different number and lives
-               * on `spacing`; swapping the two is how a card ends up waiting
-               * out an interval that belongs to another round.
-               *
-               * FROM THE STATE, NOT FROM `done`. The same expression ran on
-               * this screen and on the round page over two differently-scoped
-               * arrays — here the 500 newest finished rows account-wide, then
-               * filtered to today; there the campaign's own feed. So the two
-               * screens could measure the gap from two different instants and
-               * promise two different next publications for one row.
-               * `state.lastPublishedAt` is the round's real most recent
-               * publication, from the v27 view's own max().
-               */
-              lastPublishedAt: data.states[c.id]?.lastPublishedAt ?? null,
-            },
-          ]),
-        ),
-      })
-    : undefined;
-
-  /*
-   * THE DAY AHEAD — the rows "הפרסומים הקרובים" actually draws, chosen on the
-   * instant each row will really go out.
-   *
-   * `upcoming` is already ordered soonest-first and capped, and the projection
-   * only ever moves an instant LATER, so nothing inside the window can be lost
-   * by cutting the tail.
-   *
-   * A row with no instant at all — held by a schedule with no day chosen —
-   * keeps its place rather than being dropped quietly: "soon" is a claim about
-   * when, and a row with no when has not made that claim either way.
-   */
-  const soon = upcomingRows.filter((r) => {
-    const at = projectedAll?.get(r.id);
-    if (at === null) return true;
-    const iso = at ?? r.scheduled_at;
-    return !iso || Date.parse(iso) <= soonCutoff;
-  });
-  const projectedSoon = projectedAll;
-
-  /*
    * CHZARA — written straight through, with NO debounce, and that difference
    * is deliberate.
    *
@@ -1663,6 +1533,23 @@ export default function SocialDashboard() {
           name: r.target?.name ?? 'קבוצה',
           image: r.target?.image_url ?? null,
           state: 'next' as const,
+          /*
+           * THE CLOCK CAME WITH THEM — 09.11.2026.
+           *
+           * "הפרסומים הקרובים" was deleted as a duplicate of this card, and it
+           * was the only place on the dashboard that said WHEN the next
+           * publications go out: a queued row here wore "בתור הבא" / "בתור"
+           * and no time at all. Deleting the duplicate would then have cost
+           * the answer rather than the repetition.
+           *
+           * `scheduled_at` and not a projection: the projection existed for
+           * the deleted card's 24-hour window and went with it, and the stamp
+           * is what the engine claims the row on. A row held by a gate will
+           * go out later than its stamp, never earlier — the same direction
+           * the old note on projectOne records, and the round card above
+           * carries the gate's own sentence when one is holding.
+           */
+          at: ltr(formatTimeHe(r.scheduled_at)),
         })),
       ]
     : [];
@@ -2181,167 +2068,33 @@ export default function SocialDashboard() {
             Deleted rather than moved: a second door to the same room is not a
             feature of a small screen. */}
 
-          {/* 4 — reference material, below the answers. */}
-          <div className="grid gap-5 lg:grid-cols-2 [&>*]:min-w-0">
-            <Card
-              /*
-               * THE TITLE HAS TO DESCRIBE WHAT IS ACTUALLY IN THE CARD.
-               *
-               * This said "הפרסומים הקרובים" always, and the list underneath
-               * is two reads: the rows still waiting, and today's finished
-               * ones above them. With an empty queue only the second read has
-               * anything — so the card sat there at 17:37 headed "the upcoming
-               * publications" over six rows from 16:26 that had all been
-               * skipped an hour earlier.
-               *
-               * The owner restarted the worker, came back, saw the same six
-               * lines under the same heading, and reported that nothing had
-               * changed. They were right about the screen. The screen was
-               * wrong about itself.
-               */
-              title={soon.length ? 'הפרסומים הקרובים' : 'מה קרה היום'}
-              /* The exact queue count, not this array's length: the array is
-                 capped at UPCOMING_LIMIT and printing its length as a total
-                 was a ceiling presented as a fact. */
-              /*
-               * THE SUBTITLE SAYS WHAT THE LIST COVERS, because the list is now
-               * a window rather than the queue.
-               *
-               * It used to print `summary.queued` on its own — true about the
-               * queue and wrong about the card the moment the card stopped
-               * showing all of it. Both numbers are here: what is due in the
-               * next day, and how many are waiting in total, so the card and
-               * the "בתור" tile above it can never look like they disagree.
-               *
-               * AND THE CASE WITH NOTHING IN THE WINDOW GETS ITS OWN SENTENCE.
-               * A queue of fifty whose soonest row is next Tuesday would
-               * otherwise show an empty card over "50 ממתינים בתור" and read
-               * as a fault.
-               */
-              /*
-               * ─── "ממתינים בתור" IS TODAY'S, EVERYWHERE, FROM NOW ON ─────
-               *
-               * "מהיום כלל ברזל, חישוב של ממתינים בתור זה רק מה שאמור לצאת
-               *  באותו היום."
-               *
-               * This clause printed `summary.queued` — the whole queue, every
-               * day it holds. On his screen that was "560 ממתינים בתור" on a
-               * day that was going to publish 285, over a dashboard whose
-               * every other figure is about today. The tile above it had
-               * already been moved to today by name; this had not, so the two
-               * disagreed by a factor of two on the same screen.
-               *
-               * `data.waitingToday` is countWaitingWithin() at the next LOCAL
-               * midnight — already computed every poll, so this costs no
-               * query, and the boundary is the calendar date in
-               * Asia/Jerusalem rather than now+24h, which matters twice a year
-               * when a day is 23 or 25 hours long.
-               *
-               * THE REST IS NAMED, NEVER DROPPED. A card that quietly stopped
-               * counting 275 rows would be the honest number on a dishonest
-               * screen: he would tap through to a longer list and conclude the
-               * card was broken. Same discipline as the tile's sub-line.
-               *
-               * The 24-hour clause keeps its own window because it says so in
-               * words, and because it is what he asked this card for by name
-               * ("להראות רק את מה שעומד להתפרסם בתווך זמן של 24 שעות").
-               */
-              subtitle={
-                soon.length
-                  ? [
-                      `${data.upcomingSoon} ב-24 השעות הקרובות`,
-                      `${data.waitingToday} ממתינים בתור להיום`,
-                      summary.automaticWaiting > data.waitingToday
-                        ? `ועוד ${summary.automaticWaiting - data.waitingToday} אחרי חצות`
-                        : '',
-                    ]
-                      .filter(Boolean)
-                      .join(' · ')
-                  : summary.automaticWaiting
-                    ? `אין פרסום ב-24 השעות הקרובות · ${summary.automaticWaiting} ממתינים אחר כך`
-                    : data.doneToday.length
-                      ? 'התור ריק — אלה הפרסומים שהסתיימו היום'
-                      : undefined
-              }
-              /*
-               * NO CONTROLS IN THIS HEADER ANY MORE — "למעלה תמחק אפס והכל".
-               *
-               * It carried a red "אפס" (cancel every scheduled publication)
-               * and a "הכל" link, and both are still exactly where they were
-               * before this card borrowed them: the reset is the chip on the
-               * "ממתינים בתור" tile at the top of this same screen and the
-               * "עצור ומחק את כל הפרסומים" button at its foot, and "הכל" is
-               * the tile's own href into /social/history. Nothing became
-               * unreachable; a destructive control stopped sitting one
-               * mis-tap from a list the owner reads several times a day.
-               */
-            >
-              {/* `total` counts the SAME SET as the rows: this list is read
-                  with AUTOMATIC_WAITING_STATUSES, so its total is
-                  summary.automaticWaiting. summary.queued adds the in-flight
-                  row on top, and the footer then promised a publication the
-                  list could never show. (The subtitle above stays on
-                  summary.queued — it describes the whole queue, the same
-                  number as the "בתור" tile, not this window onto it.)
-                  The footer must also never print `rows.length - shown`: rows
-                  is the capped read, and with 61 queued that said "ועוד 34"
-                  where the real remainder was 55 — 6 + 34 being exactly
-                  UPCOMING_LIMIT. */}
-              {/* Every row that was read, in a box that scrolls: the card used
-                  to draw six of twenty-six and send the owner to another
-                  screen for the seventh. UPCOMING_LIMIT is the read ceiling,
-                  so the footer below the box still counts anything past it. */}
-              {/* `done` is a SECOND read, above the waiting rows on the same
-                  rail: a row used to leave this list the moment it published,
-                  so the one place that shows the run in order never showed a
-                  single thing it had done. It stays, with its outcome. It is
-                  not merged into `rows` — that array is the queue, and the
-                  subtitle and footer both count it. */}
-              {/* One line, and it stays one line: worker/test/unit.test.ts
-                  matches these three props together to hold "every row that
-                  was read is rendered, in a box that scrolls". */}
-              {/* No "show earlier" control: the whole day is read. It was a
-                  button while every row cost a full QUEUE_SELECT; with the
-                  lean read the day is cheaper than six rows used to be, and a
-                  card headed מה קרה היום that needs a tap to become the day
-                  is not what it says it is. */}
-              <Timeline
-                rows={soon}
-                limit={UPCOMING_LIMIT}
-                scrollable
-                /* The engine's own instants, one per row — see projectedSoon
-                   above. Without this the clock in this list and the clock on
-                   the card 200px up are two different answers. */
-                projected={projectedSoon}
-                /* The window's own total, from the database. summary.automaticWaiting
-                   is the WHOLE queue and would make the footer promise rows this
-                   list is no longer about; `soon.length` is the capped read and
-                   would print the ceiling as a fact. */
-                total={data.upcomingSoon}
-                /*
-                 * ─── ONLY IN THE MODE WHERE THEY BELONG ──────────────────
-                 *
-                 *   "בפרסומים הקרובים להראות רק את הפרסומים שצריכים לצאת"
-                 *
-                 * This card changes its own name two lines up:
-                 * `soon.length ? 'הפרסומים הקרובים' : 'מה קרה היום'`. The
-                 * finished rows are what makes the SECOND title true, and
-                 * they were handed over in both modes — so a card headed
-                 * "the upcoming publications" was mostly rows marked דולג,
-                 * stamped 08:05 at a quarter past three in the afternoon.
-                 * Past events under a heading that promises the future.
-                 *
-                 * Nothing is lost: when there is nothing upcoming the card
-                 * IS the day and still draws every one of them, and the
-                 * history screen holds the rest. What goes is the
-                 * contradiction between a title and its own list.
-                 */
-                done={soon.length ? [] : data.doneToday}
-                onOpen={(row) => setDetail(row.id)}
-              />
-            </Card>
+          {/*
+            ─── "הפרסומים הקרובים" WAS DELETED, NOT HIDDEN — 09.11.2026 ─────
 
-          </div>
+              "תמחק את המלבן של הפרסומים הקרובים, יש לי כבר למעלה מלבן עם
+               שורות של תור פרסומים"
+
+            A card listing the next publications under a card listing the next
+            publications is the same answer twice, and the one further down the
+            scroll is the one nobody reaches. "תור פרסומים" above — one finished
+            row, the one a worker is holding, and the next five — is now the
+            only place this screen answers "what is going out next", and the
+            clock those rows used to need came with them: see the `at` on the
+            upcoming rows in flowRows and anxf-row-at in LiveFlow.
+
+            Everything the card carried alone went with it rather than being
+            left for the next reader to wonder about: the Timeline import, the
+            projection (projectQueue / spacingFrom / projectedAll / soon /
+            projectedSoon), the 24-hour window (UPCOMING_WINDOW_HOURS /
+            soonCutoff) and the extra countWaitingWithin() head count that fed
+            its subtitle — one query fewer on every poll.
+
+            WHAT ALSO WENT, said out loud because it is a real loss: this card's
+            second mode, "מה קרה היום", drew the whole day's finished rows when
+            the queue was empty. The day is still on the screen — "פעילות
+            אחרונה" above it, and /social/history for the rest — but it is no
+            longer a list on this card.
+          */}
 
           {data.manual.length > 0 && (
             <Card

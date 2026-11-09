@@ -98,7 +98,16 @@ const live = code(dash);
   checks += 1;
   assert.ok(/label: 'ממתינים[^']*היום'/.test(live), 'and the label still says WHICH DAY the figure is about');
 
-  pin('the upcoming card counts today', live, '`${data.waitingToday} ממתינים בתור להיום`');
+  /*
+   * RE-POINTED 09.11.2026. This sentence was the subtitle of "הפרסומים
+   * הקרובים", deleted as a duplicate of "תור פרסומים" above it — so the
+   * surface is gone, not the rule. The iron rule ("חישוב של ממתינים בתור זה
+   * רק מה שאמור לצאת באותו היום") is held below as a NEGATIVE across the
+   * whole screen, which is the stronger half and the one that stops a fourth
+   * surface being written the old way.
+   */
+  checks += 1;
+  assert.ok(!live.includes('ממתינים בתור להיום`'), 'the deleted card\'s subtitle is gone, not left dangling');
   pin('the PC-is-off alert counts today', live, "counted(data.waitingToday, 'פרסום אחד ממתין בתור להיום'");
 
   /*
@@ -107,8 +116,15 @@ const live = code(dash);
    * a longer list, and concludes the number is broken. Both surfaces name the
    * remainder in the same words.
    */
+  /*
+   * RE-POINTED 09.11.2026: there were two surfaces naming the remainder — the
+   * tile and the deleted "הפרסומים הקרובים" card. One is left, and it must
+   * still name it. A screen that stopped counting 275 rows would be the honest
+   * number on a dishonest page: he taps through, lands on a longer list, and
+   * concludes the number is broken.
+   */
   const remainder = (live.match(/אחרי חצות/g) ?? []).length;
-  is(remainder >= 2, `the tile and the card both name what falls after midnight — found ${remainder}`);
+  is(remainder >= 1, `the tile still names what falls after midnight — found ${remainder}`);
 
   /*
    * AND THE ALERT STILL SPEAKS WHEN TODAY IS EMPTY. At 23:00, with nothing

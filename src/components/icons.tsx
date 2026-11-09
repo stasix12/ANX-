@@ -851,6 +851,22 @@ export function RocketIcon(props: IconProps) {
 }
 
 /**
+ * A box with an arrow leaving it — "opens somewhere else".
+ *
+ * The "פרטי הפרסום" window's two buttons both leave the app for Facebook, and
+ * the reference draws this mark on each of them. It is the one glyph that says
+ * "this navigates away" without a word.
+ */
+export function ExternalLinkIcon(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M19 13.5v5A1.5 1.5 0 0 1 17.5 20h-11A1.5 1.5 0 0 1 5 18.5v-11A1.5 1.5 0 0 1 6.5 6h5" />
+      <path d="M14.5 4.5H20v5.5M20 4.5l-8 8" />
+    </svg>
+  );
+}
+
+/**
  * A leaf — the "איטי" publishing mode.
  *
  * The reference image for מצב פרסום חכם draws a leaf on the slow card, where

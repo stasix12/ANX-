@@ -1337,4 +1337,30 @@ export const WORKER_VERSION = '4.56.0';
  * by the copy already on his machine, on its next claim, with no update and
  * no version collision.
  */
-export const WORKER_FINGERPRINT = 'f5374daa5b4a95b6';
+/*
+ * ─── 09.11.2026 — AGAIN THE FINGERPRINT MOVED AND THE VERSION DID NOT ──────
+ *
+ *   "יומן פעילות (N)… יש להציג רק אירועים אמיתיים שנשמרו במערכת"
+ *
+ * The redesigned "פרטי הפרסום" window needs the log lines of ONE publication,
+ * so client.ts gained listQueueActivity() and the queueIdOf import it uses.
+ * client.ts is under src/lib/social, so the gate asked its question again.
+ *
+ * MEASURED AGAINST A BUNDLE BUILT FROM THIS EXACT TREE (node scripts/build-app.mjs,
+ * then grep -o … | wc -l over dist/app/worker.cjs):
+ *
+ *   listQueueActivity  0      queueIdOf          0
+ *   planQueue          4      evaluateQueueItem  4      (the control)
+ *
+ * Zero against four: the new function is not compiled in, and neither is the
+ * helper it imports. It is read-only display code — the window's own log — and
+ * the only caller is src/components/social/ActivityDetailSheet.tsx, which runs
+ * in the browser and nowhere else. The built worker.cjs came out byte for byte
+ * the size of the one built before the change (1,187,080 bytes).
+ *
+ * So this is the case the gate's own message describes: it genuinely does not
+ * have to reach the PC. The fingerprint is pasted, 4.56.0 stands, and nobody
+ * is asked to update anything for a window that only draws what is already in
+ * social_activity_log.
+ */
+export const WORKER_FINGERPRINT = 'dbb4a48c0a395e20';

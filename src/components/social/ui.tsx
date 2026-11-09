@@ -1209,16 +1209,43 @@ export function Sheet({
   open,
   onClose,
   title,
+  icon,
   footer,
   children,
   size = 'md',
+  placement = 'sheet',
 }: {
   open: boolean;
   onClose: () => void;
   title: string;
+  /**
+   * An optional glyph before the title, which only the centred placement draws.
+   *
+   * ADDED 09.11.2026 for "פרטי הפרסום" — "בצד ימין: אייקון כחול וכותרת". Every
+   * other sheet in this product passes nothing and renders byte-identically to
+   * what it rendered before.
+   */
+  icon?: React.ReactNode;
   footer?: React.ReactNode;
   children: React.ReactNode;
   size?: 'md' | 'lg';
+  /**
+   * ─── WHERE THE PANEL SITS, AND WHY THIS IS A PROP RATHER THAN A FORK ─────
+   *
+   *   "יש להחליף אותו בחלונית Modal צפה וממורכזת… רוחב 90%… מקסימום 480px…
+   *    גובה מקסימלי 75dvh… פינות מעוגלות 24px."   09.11.2026
+   *
+   * 'sheet' is everything this component has always been: full-width, pinned
+   * to the bottom, sliding up. It is the DEFAULT, so the seventeen other call
+   * sites are untouched — that matters more than the new placement, because
+   * this primitive carries the focus trap, the Escape handler, the portal, the
+   * theme carry-across and the body-scroll freeze, and all five are things the
+   * new window needs and none of them should be written twice.
+   *
+   * 'center' floats the panel in the middle instead. Everything above it in
+   * this function — the trap, the portal, the freeze — is shared verbatim.
+   */
+  placement?: 'sheet' | 'center';
 }) {
   const titleId = useId();
   // document.body only exists in the browser, so the portal waits for mount.
@@ -1423,22 +1450,70 @@ export function Sheet({
          * of that work. The lift is the lighter surface plus the hairline;
          * the shadow only deepens the separation. No glow.
          */
-        className={`sheet-in fixed inset-x-0 bottom-0 z-[71] mx-auto flex max-h-[85svh] flex-col rounded-t-sheet border border-ink-700 bg-ink-800 shadow-[0_4px_14px_rgba(40,20,80,0.06),0_18px_44px_-12px_rgba(46,16,101,0.18)] md:bottom-[8vh] md:max-h-[80svh] md:rounded-card ${
-          size === 'lg' ? 'md:max-w-2xl' : 'md:max-w-lg'
-        }`}
+        className={
+          placement === 'center'
+            ? /*
+               * THE CENTRED MODAL.
+               *
+               * w-[90%] / max-w-[480px] / max-h-[75dvh] / rounded-[24px] are the
+               * four numbers the brief gives by name. The height is AUTO — there
+               * is no `h-` here — so a short publication draws a short window and
+               * only a long one reaches the cap, which is what "גובה אוטומטי לפי
+               * התוכן" asks for; the content div below already scrolls when it
+               * does ("גלילה פנימית רק כאשר התוכן חורג").
+               *
+               * dvh rather than the svh the bottom sheet uses, because the brief
+               * says dvh and because at 75% it is the safer of the two anyway:
+               * three quarters of the DYNAMIC viewport stays inside the small
+               * one at every toolbar state, so the cap can never exceed what is
+               * visible — which is the property the svh note above was protecting.
+               *
+               * Centred with translate rather than flex-on-an-overlay: the
+               * overlay here is a <button>, deliberately (see its note), so there
+               * is no flex parent to centre in, and a second full-screen box to
+               * get one would re-introduce the iOS containing-block trap that
+               * note describes.
+               */
+              'sheet-center-in fixed left-1/2 top-1/2 z-[71] flex w-[90%] max-w-[480px] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-[24px] border border-brand-500/10 bg-ink-850 shadow-[0_8px_24px_-8px_rgba(13,38,76,0.14),0_24px_60px_-20px_rgba(13,38,76,0.28)] max-h-[75dvh]'
+            : `sheet-in fixed inset-x-0 bottom-0 z-[71] mx-auto flex max-h-[85svh] flex-col rounded-t-sheet border border-ink-700 bg-ink-800 shadow-[0_4px_14px_rgba(40,20,80,0.06),0_18px_44px_-12px_rgba(46,16,101,0.18)] md:bottom-[8vh] md:max-h-[80svh] md:rounded-card ${
+                size === 'lg' ? 'md:max-w-2xl' : 'md:max-w-lg'
+              }`
+        }
       >
-        <div aria-hidden className="mx-auto mt-2 h-1 w-10 shrink-0 rounded-full bg-ink-600 md:hidden" />
-        <header className="flex shrink-0 items-center justify-between gap-3 px-4 py-3.5">
-          <h2 id={titleId} className="text-base font-extrabold leading-tight text-mist-100">
-            {title}
+        {/* The drag handle belongs to a sheet that is dragged. A centred modal
+            is not, and drawing one would be an element the reference does not
+            have. */}
+        {placement === 'sheet' && (
+          <div aria-hidden className="mx-auto mt-2 h-1 w-10 shrink-0 rounded-full bg-ink-600 md:hidden" />
+        )}
+        <header className={`flex shrink-0 items-center justify-between gap-3 ${placement === 'center' ? 'px-4 pt-4 pb-2' : 'px-4 py-3.5'}`}>
+          <h2 id={titleId} className="flex min-w-0 items-center gap-2 text-base font-extrabold leading-tight text-mist-100">
+            {icon}
+            <span dir="auto" className="min-w-0 truncate">{title}</span>
           </h2>
-          <IconButton label="סגור" onClick={onClose} className="-me-2">
-            <CloseIcon className="h-5 w-5" />
-          </IconButton>
+          {placement === 'center' ? (
+            /* A ROUND button on a tinted disc — "כפתור X עגול לסגירה". It keeps
+               IconButton's own 44px hit box; only the shape is the reference's. */
+            <IconButton label="סגור" onClick={onClose} className="shrink-0 rounded-full bg-brand-500/10 text-brand-500">
+              <CloseIcon className="h-5 w-5" />
+            </IconButton>
+          ) : (
+            <IconButton label="סגור" onClick={onClose} className="-me-2">
+              <CloseIcon className="h-5 w-5" />
+            </IconButton>
+          )}
         </header>
         {/* The safe-area inset belongs to whichever element is last, so the
             action button never sits under the home indicator. */}
-        <div className={`min-h-0 grow overflow-y-auto px-4 ${footer ? 'pb-4' : 'pb-[calc(1rem+var(--safe-b))]'}`}>{children}</div>
+        <div
+          className={`min-h-0 grow overflow-y-auto px-4 ${
+            /* A centred modal is never under the home indicator, so it takes
+               the plain padding; the bottom sheet still needs the safe area. */
+            placement === 'center' ? 'pb-4' : footer ? 'pb-4' : 'pb-[calc(1rem+var(--safe-b))]'
+          }`}
+        >
+          {children}
+        </div>
         {footer && (
           <footer className="shrink-0 border-t border-ink-700 bg-ink-800 px-4 pt-3 pb-[calc(0.75rem+var(--safe-b))]">{footer}</footer>
         )}

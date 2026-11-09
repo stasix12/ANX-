@@ -1248,6 +1248,39 @@
 }
 
 /*
+ * A CENTRED MODAL ARRIVING — "החלון נפתח ונסגר בצורה חלקה, ללא קפיצות".
+ *
+ * IT MAY NOT TRANSLATE, and that is measured rather than stylistic.
+ *
+ * It cannot reuse sheet-rise, which ends at `transform: none` — a centred
+ * panel would snap on the last frame. The obvious replacement was to carry
+ * `translate(-50%, -50%)` through both keyframes, and that is WRONG here:
+ * Tailwind v4 implements -translate-x-1/2 with the standalone `translate`
+ * property, not with `transform`, so the two compose and the panel is pulled
+ * a full width and height off centre. Measured on the real markup at 390px:
+ * the dialog's centre landed at (20, 217) instead of (195, 422), its
+ * bottom-right corner sitting exactly on the viewport's centre.
+ *
+ * So the centring belongs to `translate` and this animation touches only
+ * `scale` and `opacity`. The two properties apply in order — translate, then
+ * transform — so the panel scales about its own centred position.
+ */
+@keyframes modal-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.sheet-center-in {
+  animation: modal-pop 0.2s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/*
  * A line arriving in the activity log.
  *
  * Shorter and smaller than either of the two above, because this is the one
@@ -1280,6 +1313,7 @@
   .skeleton-shimmer,
   .toast-in,
   .sheet-in,
+  .sheet-center-in,
   .log-in {
     animation: none;
   }

@@ -153,6 +153,47 @@ async function main(): Promise<void> {
     'social_schedules.drip_gap_seconds is missing again — every launch to more than one group will answer PGRST204',
   );
 
+  /*
+   * ─── AND THE DEFAULT, WHICH IS A COLUMN FACT NO SOURCE-TEXT GUARD CAN SEE ─
+   *
+   *   "לא אמור ליהנות גם 600 שניות, הפרסום צריך לצאת אחד אחרי השני לפי קצב
+   *    מהיר בינוני או בטוח לפי מה שבחרתי"   09.11.2026
+   *
+   * HAD THIS LINE EXISTED, "every new round is born with ten minutes" would
+   * have been a failing test instead of twenty rows of live data. v26 added
+   * `schedule_gap_seconds smallint not null default 600`, no screen wrote the
+   * column at birth, and so every round opened at one post per ten minutes —
+   * while plan.ts and rules.ts take max(account, campaign), which handed those
+   * ten minutes the decision over whatever mode the owner had picked. Measured
+   * on 09.11.2026: 20 of 41 live rounds carried exactly 600, and one stretched
+   * 90 groups over four days (78 consecutive deltas of exactly 600.0 s).
+   *
+   * The code writes the gap explicitly now, so the default is only a safety
+   * net — and the direction of a safe net here is the opposite of the one for
+   * the ACCOUNT pace, which is the distinction that hid this. On the account
+   * pace a smaller number means posting faster, so slower is the safe error.
+   * This column is one round's BRAKE, read through max(account, campaign): a
+   * small number here cannot speed anything up, because the account gap stays
+   * the binding gate. A large one can slow everything down. So the safe net
+   * is a small number, and ten minutes was the dangerous one.
+   */
+  const gapDefaults = new Map(
+    rows(`select column_name, coalesce(column_default, '') from information_schema.columns
+            where table_schema = 'public' and table_name = 'social_campaigns'
+              and column_name in ('schedule_gap_seconds', 'schedule_gap_minutes')`).map(
+      ([c, d]) => [c, d] as const,
+    ),
+  );
+  is(gapDefaults.has('schedule_gap_seconds'), 'social_campaigns.schedule_gap_seconds is missing — v26 did not reach this database');
+  is(
+    !/^600\b/.test(gapDefaults.get('schedule_gap_seconds') ?? ''),
+    `social_campaigns.schedule_gap_seconds defaults to ${gapDefaults.get('schedule_gap_seconds')} again — a round opened without that column being written is born at ten minutes, and max(account, campaign) hands those ten minutes the decision over whatever mode the owner picked`,
+  );
+  is(
+    !/^10\b/.test(gapDefaults.get('schedule_gap_minutes') ?? ''),
+    `social_campaigns.schedule_gap_minutes defaults to ${gapDefaults.get('schedule_gap_minutes')} — the minutes are the rounded-up mirror of the seconds, and the two defaults must say the same thing or a worker reading only the minutes brakes a round the seconds let through`,
+  );
+
   console.log(`${NAME} OK — ${checks} assertions, ${compared} columns compared against a real Postgres`);
 }
 

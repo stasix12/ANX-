@@ -192,21 +192,50 @@ const codeOnly = (src: string) => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/
   is(/logClientActivity\('info', 'limits_changed'/.test(fn), 'the change is written to the activity log');
   is(/accountGapLabel\(wasSeconds\)/.test(fn) && /accountGapLabel\(want\)/.test(fn), 'naming both the old floor and the new one, in the unit each actually has');
 
-  /* ...and it is called from BOTH screens that can change a campaign's gap.
-     One of the two left behind is the version of this bug that is hardest to
-     find: the feature works on the dashboard and silently does not on the
-     campaigns screen. */
+  /*
+   * ─── RE-POINTED 09.11.2026 — THE CALL SITES ARE GONE, AND THAT IS THE PIN ─
+   *
+   *   "לא אמור ליהנות גם 600 שניות, הפרסום צריך לצאת אחד אחרי השני לפי קצב
+   *    מהיר בינוני או בטוח לפי מה שבחרתי"
+   *
+   * This asked both schedule screens to call matchAccountGapTo(next.gapSeconds)
+   * on every save. That was right while a human typed a gap into the campaign
+   * panel. The field was removed from the interface entirely on 07.11 — "יש
+   * להסיר לחלוטין מהממשק את השדה הישן: הפרש בין פרסומים... ואין ליצור הגדרה
+   * כפולה" — and ever since, `next.gapSeconds` is the STORED COLUMN: a number
+   * nobody chose, defaulting to 600 in Postgres. The re-point lower down this
+   * same file (line 224) already wrote the argument on the day the field went:
+   * "There is no per-campaign gap field left to disagree with the floor, so
+   * there is no moment at which one campaign's choice is about to move an
+   * account-wide number." It removed the notice and left the write. This
+   * removes the write.
+   *
+   * Live harm, measured, in the owner's own complaint shape with the sign
+   * flipped: five tenants sit on the shipped 3900-second account gap, and the
+   * first time one of them switched a round's window on, a stored 600 took
+   * their whole account from 65 minutes to 10 — a 6.5x speed-up chosen by
+   * nobody, which is the thing that gets Facebook accounts restricted.
+   *
+   * The account pace has exactly two writers from here on: applyGapFloor,
+   * reached by picking a mode, and the queue tuner, the one control a human
+   * ever typed a gap into. Both are below.
+   */
   for (const [where, src] of [
     ['the dashboard', 'src/app/social/page.tsx'],
     ['the campaigns screen', 'src/app/social/campaigns/page.tsx'],
   ] as const) {
     const page = readFileSync(new URL(`../../${src}`, import.meta.url), 'utf8');
-    is(/await matchAccountGapTo\(next\.gapSeconds\)/.test(page), `${where} lowers the floor when the campaign's gap changes`);
     is(
-      page.indexOf('await saveCampaign(') < page.indexOf('await matchAccountGapTo('),
-      `${where} does it AFTER the campaign is saved — a failed save must not still have loosened the whole account`,
+      !/matchAccountGapTo\(/.test(page),
+      `${where} no longer moves the account pace from a campaign column — the per-campaign gap field was removed from the interface on 07.11, so that number is one nobody chose`,
     );
-    is(/זה חל על כל הסבבים/.test(page), `${where} tells the owner the change reaches every round, not only the one he was editing`);
+    is(
+      !/זה חל על כל הסבבים/.test(page),
+      `${where} no longer announces an account-wide change it no longer makes`,
+    );
+    /* And the one write that IS account-wide is still announced, on the one
+       control that makes it: picking a mode. */
+    is(/חל על כל החשבון/.test(page), `${where} still says out loud that picking a publishing mode is an account-wide act`);
   }
 
   /* And the panel says so BEFORE the write, where the choice is being made. */
@@ -618,24 +647,49 @@ const codeOnly = (src: string) => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/
  * way back.
  */
 {
+  /*
+   * ─── RE-POINTED 09.11.2026, AND MADE STRONGER ────────────────────────────
+   *
+   * This block pinned the `next.enabled ?` GUARD on the call. The guard was
+   * the right fix for the symptom and the wrong level: it narrowed when a
+   * number nobody chose may move the one setting that governs every campaign,
+   * instead of refusing it. The campaign gap field has not existed in the
+   * interface since 07.11, so there is no longer any case in which the guard
+   * should open. The call is gone; what replaces the pin is the rule it was
+   * standing in for, in three parts that are each still load-bearing.
+   */
   const strip = (src: string) => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+
+  /* (1) NEITHER SCREEN. Not guarded — absent. */
   for (const f of ['../../src/app/social/page.tsx', '../../src/app/social/campaigns/page.tsx']) {
     const code = strip(readFileSync(new URL(f, import.meta.url), 'utf8'));
-    const at = code.indexOf('matchAccountGapTo(next.gapSeconds)');
-    is(at > -1, `${f} no longer lowers the account floor with the campaign's gap`);
-    /* The guard has to be on the SAME expression, not somewhere in the file:
-       `next.enabled ? await matchAccountGapTo(...) : …`. */
-    const before = code.slice(Math.max(0, at - 120), at);
     is(
-      /next\.enabled\s*\n?\s*\?/.test(before),
-      `${f}: the account-wide floor is lowered even when that campaign's gate is off — a gap that enforces nothing must not move one that enforces everything`,
+      !code.includes('matchAccountGapTo('),
+      `${f}: a campaign column may not move the account pace — the column defaults to 600 in Postgres and no screen sets it`,
+    );
+    is(
+      !code.includes('matchAccountGapTo'),
+      `${f}: and the import is gone with it, so the next person does not find it in scope and re-wire it`,
     );
   }
-  /* And the queue tuner is deliberately NOT guarded: there the owner typed
-     the number into a control whose only job is the gap, so it is a choice
-     rather than a side effect. */
+
+  /* (2) AND THE DISCIPLINE INSIDE IT IS NOT QUIETLY DELETED WITH THE CALL
+         SITES. matchAccountGapTo still exists, the tuner still calls it, and
+         it still refuses to RAISE — the invariant campaign-floor.test.ts:102
+         also holds, re-asserted here so that removing the callers cannot be
+         mistaken for removing the rule. */
+  const client = strip(readFileSync(new URL('../../src/lib/social/client.ts', import.meta.url), 'utf8'));
+  const floorFn = client.slice(client.indexOf('export async function matchAccountGapTo'));
+  is(
+    /if \(wasSeconds <= want\) return \{ changed: false/.test(floorFn.slice(0, 1200)),
+    'matchAccountGapTo still only ever LOWERS the account pace, never raises it',
+  );
+
+  /* (3) AND THE ONE PLACE A HUMAN TYPES A GAP STILL MOVES THE FLOOR WITH IT.
+         "תשנה גם את המרווח המינימלי הגלובלי ברגע שמשנים את הזמנים בקמפיין" —
+         honoured here, where it is a choice rather than a side effect. */
   const tuner = strip(readFileSync(new URL('../../src/components/social/QueueTunerSheet.tsx', import.meta.url), 'utf8'));
-  is(tuner.includes('matchAccountGapTo('), 'the tuner no longer matches the account floor to the gap the owner just typed');
+  is(tuner.includes('matchAccountGapTo('), 'the tuner still matches the account floor to the gap the owner just typed');
 }
 
 console.log(`account gap tests OK — ${checks} assertions`);

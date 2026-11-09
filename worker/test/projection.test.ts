@@ -864,8 +864,42 @@ const row = (id: string, scheduledAt: string, extra: Partial<ProjectableRow> = {
   /* The account-wide path is untouched: with no campaign in scope the sheet
      still writes the account settings and nothing else. */
   is(/if \(campaignId && snap\?\.campaign && snap\.window\) \{/.test(tuner), 'the account-wide tuner is unchanged — this only applies when a round is in scope');
-  /* And the campaign columns still have exactly one writer. */
-  is(!/schedule_gap_seconds:/.test(client), 'client.ts never writes the gap columns directly — scheduleColumns() is still their one writer');
+  /*
+   * ─── RE-POINTED 09.11.2026 ───────────────────────────────────────────────
+   *
+   *   "לא אמור ליהנות גם 600 שניות, הפרסום צריך לצאת אחד אחרי השני לפי קצב
+   *    מהיר בינוני או בטוח לפי מה שבחרתי"
+   *
+   * This read `!/schedule_gap_seconds:/` over client.ts — "scheduleColumns()
+   * is their one writer". That rule was protecting the right thing by the
+   * wrong measure, and the measure is what let the bug through: because no
+   * code path in client.ts was allowed to write the gap, a NEW ROUND was born
+   * with whatever Postgres supplied, and Postgres supplied `default 600`.
+   * Twenty of forty-one live rows carried ten minutes nobody chose, and one of
+   * them stretched a round of 90 groups across four days while the card said
+   * "מהיר".
+   *
+   * The rule worth keeping is the one the tuner note above actually states:
+   * nothing may rebuild the WHOLE WINDOW in order to change a gap (that is
+   * what silently restored the hours, the days and the name), and the two gap
+   * columns are never written apart — seconds, with the rounded-up minutes
+   * beside them, so a worker that has not updated is slower than asked rather
+   * than faster. That is now asserted per write site, which is strictly more
+   * than the old line checked.
+   */
+  const gapWrites = [...client.matchAll(/schedule_gap_seconds: (?!number)([A-Za-z.]+),/g)];
+  is(gapWrites.length === 3, `client.ts has exactly three gap writers — a round's birth, a duplicate, and the publishing mode (found ${gapWrites.length})`);
+  for (const m of gapWrites) {
+    const after = client.slice((m.index ?? 0), (m.index ?? 0) + 220);
+    is(
+      new RegExp(`schedule_gap_minutes: gapMinutesFor\\(${m[1].replace('.', '\\.')}\\)`).test(after),
+      `the gap write of \`${m[1]}\` carries the rounded-up minutes beside it — an un-updated worker reading only the minutes must err slow, never fast`,
+    );
+  }
+  is(
+    !/scheduleColumns\(\{ \.\.\./.test(client),
+    'and no writer in client.ts rebuilds a whole window in order to change a gap — that is what restored the hours, the days and the name behind the owner',
+  );
 }
 
 /* ───── 18. THE DAY HE RE-CHOSE, AND THE ROUND THAT WOULD NOT COME BACK ── */

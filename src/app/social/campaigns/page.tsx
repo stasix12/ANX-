@@ -32,7 +32,6 @@ import {
   getLimits,
   applyPace,
   lastPublishedAt,
-  matchAccountGapTo,
   saveCampaign,
   rescheduleCampaignQueue,
   setCampaignRepeat,
@@ -443,24 +442,33 @@ export default function CampaignsPage() {
             }
           }
 
-          /* And the account-wide floor comes down with it, exactly as on the
-             dashboard — see the long note on the dashboard's copy. Without it
-             the gap chosen here is only the first of two gates and the second
-             one, 65 minutes out of the box, decides.
-
-             ONLY WHEN THE GATE IS ON, for the reason spelled out on the
-             dashboard's copy: a gap that enforces nothing may not lower an
-             account-wide floor that enforces everything, and this call never
-             raises it back. */
-          const floor = next.enabled
-            ? await matchAccountGapTo(next.gapSeconds)
-            : { changed: false, wasSeconds: 0, nowSeconds: 0 };
-          if (floor.changed) {
-            toast(
-              `המרווח המינימלי של כל החשבון ירד מ-${accountGapLabel(floor.wasSeconds)} ל-${accountGapLabel(floor.nowSeconds)} — זה חל על כל הסבבים, לא רק על זה`,
-              'info',
-            );
-          }
+          /*
+           * ─── וְהַקּוֹמָה שֶׁשּׁוּם מָסָךְ לֹא כּוֹתֵב ────────────────────────────
+           *
+           * כאן עמדה קריאה ל-matchAccountGapTo עם next.gapSeconds: היא לקחה את
+           * המרווח של
+           * הסבב והוריד אליו את קצב החשבון — חד-כיווני, לכל החשבון, לתמיד.
+           *
+           * זה היה נכון כל עוד היה בפאנל שדה מרווח שאדם הקליד בו. השדה הוסר
+           * לגמרי ב-07.11 ("יש להסיר לחלוטין מהממשק את השדה הישן... ואין
+           * ליצור הגדרה כפולה"), ומאז next.gapSeconds הוא העמודה השמורה —
+           * מספר שאף אחד לא בחר. account-gap.test.ts כבר כתב את זה במילים
+           * שלו באותו יום: "THE CONDITION CANNOT ARISE ANY MORE... There is
+           * no per-campaign gap field left to disagree with the floor." אותו
+           * שינוי הסיר את ההודעה והשאיר את הכתיבה. זה מסיים אותה.
+           *
+           * וזה נזק חי, בצורת התלונה של הבעל עם הסימן הפוך: חמישה עסקים
+           * יושבים על 3900 שניות (65 דקות) שנשלחו בברירת המחדל, והרגע שאחד
+           * מהם מדליק חלון שעות על סבב עם 600 היה לוקח את כל החשבון שלו
+           * מ-65 דקות לעשר — האצה של פי 6.5 שאף אחד לא בחר, וזה בדיוק מה
+           * שמביא להגבלה בפייסבוק.
+           *
+           * לקצב החשבון יש מהיום שני כותבים בלבד: applyGapFloor, כשנבחר מצב
+           * פרסום, והטיונר — המקום היחיד שאדם מקליד בו מספר, ושם ההוראה
+           * המקורית ("תשנה גם את המרווח המינימלי הגלובלי ברגע שמשנים את
+           * הזמנים בקמפיין") מקוימת כפי שהייתה. matchAccountGapTo עצמו לא
+           * נמחק ולא נחלש.
+           */
 
           /* AND THE QUEUE MOVES WITH THE HOURS — the same call the dashboard
              makes, for the same reason, because this is the same record and a
@@ -598,11 +606,14 @@ export default function CampaignsPage() {
     async (campaign: Campaign, id: PaceId) => {
       setScheduleBusy((b) => ({ ...b, [campaign.id]: true }));
       try {
-        const { pace: picked, gap } = await applyPace(id);
+        const { pace: picked, gap, campaigns: synced } = await applyPace(id);
         await changeSchedule(campaign, { ...readSchedule(campaign), gapSeconds: picked.gapSeconds });
         await load();
+        /* ומספר הסבבים שסונכרנו נאמר בקול, כמו בלוח — כתיבה שמגיעה לסבבים
+           מלבד זה שנלחץ לא תהיה שקטה. */
         toast(
-          `מצב "${picked.label}" הופעל — פרסום כל ${accountGapLabel(gap.minGapSeconds + gap.groupMinGapSeconds)}. חל על כל החשבון.`,
+          `מצב "${picked.label}" הופעל — פרסום כל ${accountGapLabel(gap.minGapSeconds + gap.groupMinGapSeconds)}. חל על כל החשבון.` +
+            (synced > 1 ? ` (${synced} סבבים סונכרנו למצב הזה)` : ''),
           'info',
         );
       } catch (err) {

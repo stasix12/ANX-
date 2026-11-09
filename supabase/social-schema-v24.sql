@@ -51,6 +51,12 @@ alter table public.social_campaigns
 alter table public.social_campaigns
   add column if not exists schedule_gap_minutes smallint not null default 10;
 
+-- 1 ולא 10, בשביל אותה סיבה שהעמודה בשניות עומדת על 30 — ראו את ההערה שם.
+-- העמודה הזאת היא המראה המעוגלת של העמודה בשניות; gapMinutesFor(30) הוא 1,
+-- ולכן שתי ברירות המחדל אומרות מהיום אותו דבר.
+alter table public.social_campaigns
+  alter column schedule_gap_minutes set default 1;
+
 -- The range is enforced here as well as in the app, because this column feeds
 -- a defer instant: a 0 would make the gap no gap at all, and a negative one
 -- would push a publication into the past on every claim. Dropped first so the

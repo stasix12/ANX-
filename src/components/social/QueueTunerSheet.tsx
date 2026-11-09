@@ -553,10 +553,41 @@ export function QueueTunerSheet({
    */
   const otherChannels = plan ? plan.targets.filter((t) => t.target.channel !== 'facebook_group') : [];
 
+  /**
+   * ─── הַשַּׁעַר שֶׁהַמָּנוֹעַ בֶּאֱמֶת מַפְעִיל ─────────────────────────────────────
+   *
+   * plan.effectiveGapSeconds הוא קצב החשבון לבדו (accountGapSeconds), בלי שום
+   * קלט מהסבב. אבל plan.ts ו-rules.ts לוקחים max(קצב החשבון, מרווח הסבב) כל
+   * עוד חלון השעות של הסבב דלוק — ולכן זה, ולא קצב החשבון, מה שהתור חייב
+   * להימדד מולו. השוואה מול קצב החשבון לבדו הייתה אומרת לכל בעל שהסבב שלו
+   * איטי בכוונה שהתור שלו שבור.
+   */
+  const engineGate = plan
+    ? Math.max(plan.effectiveGapSeconds, snap?.window?.enabled ? snap.window.gapSeconds : 0)
+    : 0;
+
   /** The queue's real spacing versus what the settings demand — the actual bug. */
   const mismatch =
     plan && plan.gapSeconds !== null && plan.gapSeconds < plan.effectiveGapSeconds
       ? `הפרסומים בתור מרווחים כרגע ב-${gapChoiceLabel(plan.gapSeconds)}, אבל ההגדרות דורשות ${gapChoiceLabel(plan.effectiveGapSeconds)} — לכן כל פרסום שמגיע מוקדם מדי נדחה שוב ושוב במקום לצאת. עדכון המרווח כאן מיישר בין השניים.`
+      : null;
+
+  /*
+   * ─── וְהַכִּוּוּן הַהָפוּךְ, שֶׁאַף מָסָךְ לֹא אָמַר עָלָיו מִלָּה ────────────────────
+   *
+   *   "לא אמור ליהנות גם 600 שניות, הפרסום צריך לצאת אחד אחרי השני"
+   *
+   * ההודעה שמעל נדלקת רק כשהתור צפוף מהמותר. המצב החי של הבעל היה ההפוך
+   * בדיוק: 90 שורות חתומות במרווח של עשר דקות, פרושות על ארבעה ימים, בזמן
+   * שהמצב שנבחר היה "מהיר". כל מסך הסכים עם עצמו ואף אחד לא אמר שהתור
+   * מרווח רחב ממה שהוא ביקש — ולכן זה זחל ארבעה ימים.
+   *
+   * חותמות שכבר בתור לא מתכווצות מעצמן כשמשנים מרווח: המנוע מציית לחותמת.
+   * לכן ההודעה גם אומרת מה מזיז אותן, ולא רק שיש פער.
+   */
+  const slowerThanSettings =
+    plan && plan.gapSeconds !== null && plan.gapSeconds > engineGate
+      ? `הפרסומים בתור חתומים במרווח של ${gapChoiceLabel(plan.gapSeconds)}, רחב יותר מהמרווח שבחרתם (${gapChoiceLabel(engineGate)}). השורות שכבר בתור ימשיכו לצאת במרווח הרחב — שינוי המרווח לבדו לא מקדים חותמת שנכתבה. "הזיזו את התור" כאן למטה הוא מה שמצמיד אותן למרווח החדש.`
       : null;
 
   const inQueue = useMemo(() => new Set(rows.map((r) => r.target_id)), [rows]);
@@ -929,6 +960,7 @@ export function QueueTunerSheet({
             </p>
 
             {mismatch && <Notice tone="warn">{mismatch}</Notice>}
+            {slowerThanSettings && <Notice tone="warn">{slowerThanSettings}</Notice>}
             {splitNote && <Notice tone="info">{splitNote}</Notice>}
             {otherChannels.length > 0 && (
               <Notice tone="warn">

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { evaluateQueueItem } from '../../src/lib/social/rules';
+import { evaluateQueueItem, PACE_PROFILES } from '../../src/lib/social/rules';
+import { DEFAULT_CAMPAIGN_SCHEDULE, GAP_CHOICES, MAX_GAP_SECONDS, MIN_GAP_SECONDS, readSchedule, scheduleColumns } from '../../src/lib/social/campaign-schedule';
 import { DEFAULT_LIMITS } from '../../src/lib/social/types';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
@@ -506,6 +507,178 @@ async function main(): Promise<void> {
      */
     assert.ok(!/pace\.gapSeconds/.test(rules), 'no gate reads a MODE\'s gap at publish time — it is written into the account floor, which is the one number both gates compare against');
     assert.ok(!/pace\.gapSeconds/.test(worker), 'and the worker\'s gate does not either');
+
+    /* ── 4. AND PICKING A MODE REACHES EVERY ROUND, NOT ONLY THE CARD TAPPED ─
+     *
+     *   "לא אמור ליהנות גם 600 שניות, הפרסום צריך לצאת אחד אחרי השני לפי קצב
+     *    מהיר בינוני או בטוח לפי מה שבחרתי"   09.11.2026
+     *
+     * EVERYTHING ABOVE WAS GREEN WHILE THIS WAS BROKEN, and that is why these
+     * assertions exist. The two handlers were pinned to write the mode's gap
+     * into the campaign column — and they each write it to ONE campaign, the
+     * one whose card was tapped. `social_campaigns.schedule_gap_seconds`
+     * carries `default 600` in Postgres and no screen set it at birth, so a
+     * round created after the mode was picked kept ten minutes nobody chose,
+     * and max(account, campaign) handed it the decision.
+     *
+     * Measured in the live database on 09.11.2026: 20 of 41 rounds carried
+     * exactly 600 seconds, and one of them stretched 90 groups across four
+     * days (78 consecutive deltas of exactly 600.0 s) while the card said
+     * "מהיר".
+     */
+    const paceSlice = clientSrc.slice(
+      clientSrc.indexOf('export async function applyPace'),
+      clientSrc.indexOf('export async function liveQueuePlan'),
+    );
+    assert.ok(paceSlice.length > 400, 'the applyPace slice could not be isolated — the checks below would be vacuous');
+    assert.ok(/from\('social_campaigns'\)/.test(paceSlice), 'picking a mode reaches the rounds themselves, not only the account settings');
+    assert.ok(
+      /\.update\(\{\s*schedule_gap_seconds: pace\.gapSeconds,/.test(paceSlice),
+      'writing the mode\'s own gap into every round of the account — a round born later used to keep the 600 default, and that is exactly what happened on 09.11.2026',
+    );
+    assert.ok(
+      /schedule_gap_minutes: gapMinutesFor\(pace\.gapSeconds\)/.test(paceSlice),
+      'with the rounded-up minutes beside it, so a worker that has not updated is slower than asked rather than faster',
+    );
+    assert.ok(/\.in\('id', ids\)/.test(paceSlice), 'scoped to an explicit list of ids — never a bare filter, because the RLS policy permits every tenant the signed-in user belongs to');
+    assert.ok(/tenants\.size > 1/.test(paceSlice), 'and it refuses outright when more than one business is visible from here — single-tenancy is written in code, not inferred from today\'s data');
+    /* AND IT MOVES NO PUBLICATION. This is the safety call the whole fan-out
+       rests on: writing a column removes a brake, it does not bring any
+       publication forward. The account-wide re-anchor starts from now() and
+       lays the whole queue out from there, so one tap would have dragged
+       another round's overdue rows onto today. */
+    assert.ok(!/respaceQueue/.test(paceSlice), 'the fan-out writes numbers and re-anchors no queue — that would pull another round\'s overdue rows onto today');
+    assert.ok(!/rescheduleCampaignQueue/.test(paceSlice), 'and it re-stamps no round either; the one re-stamp stays where it is, on the card that was tapped');
+
+    /* ── 5. A ROUND IS BORN AT THE ACCOUNT'S OWN PACE ────────────────────── */
+    const bornSlice = clientSrc.slice(
+      clientSrc.indexOf('async function bornGapSeconds'),
+      clientSrc.indexOf('export async function ensureRunForPost'),
+    );
+    assert.ok(bornSlice.length > 300, 'the birth slice could not be isolated — the checks below would be vacuous');
+    assert.ok(
+      /effectiveGroupGapSeconds\(limits, browser\)/.test(bornSlice),
+      'a new round is born at what rules.ts will actually demand between two group publications — not at a column default',
+    );
+    assert.ok(
+      /Math\.min\(MAX_GAP_SECONDS, Math\.max\(MIN_GAP_SECONDS,/.test(bornSlice),
+      'clamped into the column\'s own 30..1800 CHECK, towards MAX: a gap above 1800 would make the insert fail outright and break opening a round, and MAX can never speed anything up because the account stays the binding gate',
+    );
+    assert.ok(/schedule_gap_seconds: born,/.test(bornSlice), 'and the birth value is written explicitly, so Postgres never supplies one');
+    const dupSlice = clientSrc.slice(
+      clientSrc.indexOf('export async function duplicateCampaign'),
+      clientSrc.indexOf('export async function duplicateCampaign') + 900,
+    );
+    assert.ok(
+      /schedule_gap_seconds: born,/.test(dupSlice),
+      'a DUPLICATE is born at the account\'s pace too — the row spread makes the source\'s gap an EXPLICIT insert value, which no column default and no one-time migration can ever reach, so duplicating any of the 20 rows at 600 re-created the defect',
+    );
+    assert.ok(
+      /const OPTIONAL_CAMPAIGN_COLUMNS = \['repeat_enabled', 'repeat_min_hours', 'schedule_gap_seconds', 'schedule_gap_minutes'\] as const;/.test(clientSrc),
+      'and both gap columns are listed as optional, because PostgREST refuses the whole write when one column is missing and a database that predates v26 must still be able to open a round',
+    );
+  }
+
+  /* ───── 5. THE ENGINE OBEYS THE COLUMN — WHICH IS WHY IT MUST NEVER HOLD A
+             NUMBER NOBODY CHOSE ─────────────────────────────────────────────
+   *
+   * Written deliberately in BOTH directions, because the first draft of this
+   * guard asserted the wrong thing: that a round storing 600 on a 40-second
+   * account should publish at 41 seconds. It must not, and no part of this
+   * change makes it. rules.ts and plan.ts take max(account, campaign) and
+   * they are not touched — the engine is right to enforce what is stored.
+   *
+   * So the fault was never in the gate. It was that 600 reached the column at
+   * all: `default 600` in Postgres, no writer at birth, and a mode that only
+   * reached the round whose card was tapped. These two cases pin the
+   * consequence, so that the next person who finds the 600 cannot mistake it
+   * for a gate that is too strict and go and loosen the gate.
+   */
+  {
+    const { decision } = await decide({ gapSeconds: 600, sinceLast: 41 });
+    eq(
+      decision.action,
+      'defer',
+      'A ROUND STORING TEN MINUTES IS ENFORCED AT TEN MINUTES, 41 seconds in. The engine is right; the number is the bug, and it got there from a column default nobody chose',
+    );
+  }
+  {
+    const { decision } = await decide({ gapSeconds: 40, sinceLast: 41 });
+    eq(
+      decision.action,
+      'publish',
+      'and the same round storing the mode\'s own 40 publishes one after another — which is what picking "מהיר" now writes into every round of the account',
+    );
+  }
+
+  /* ───── 6. THE COLUMN MAY ONLY EVER BRAKE; IT MAY NEVER BE THE GATE ─────
+   *
+   * Pure, over every shipped mode and the four account floors that exist
+   * live today (40 = PACE_PROFILES.fast, 45 = the owner's stale stored pace,
+   * 120 = a third tenant, 3900 = the five tenants on the shipped default).
+   *
+   * THIS ASSERTION IS ONLY NON-CIRCULAR BECAUSE THE TWO SCHEDULE SCREENS NO
+   * LONGER PUSH THE COLUMN INTO THE ACCOUNT FLOOR. While they did, `floor`
+   * was a function of the column one save later, and the comparison proved
+   * nothing — see the re-pointed block in account-gap.test.ts.
+   */
+  {
+    /* AND EVERY SHIPPED MODE FITS THE COLUMN IT IS WRITTEN INTO. applyPace
+       writes pace.gapSeconds straight into schedule_gap_seconds, whose CHECK
+       is 30..1800 — a mode outside that would make the whole fan-out answer
+       an error, land in the activity log, and leave the rounds un-synced
+       while the account pace had already changed. */
+    for (const pace of PACE_PROFILES) {
+      is(
+        pace.gapSeconds >= MIN_GAP_SECONDS && pace.gapSeconds <= MAX_GAP_SECONDS,
+        `the mode "${pace.label}" is ${pace.gapSeconds}s, outside the 30..1800 the campaign column accepts — picking it would write the account pace and then fail to reach a single round`,
+      );
+    }
+    for (const pace of PACE_PROFILES) {
+      for (const floor of [40, 45, 120, 3900]) {
+        const stored = Math.min(MAX_GAP_SECONDS, Math.max(MIN_GAP_SECONDS, pace.gapSeconds));
+        const read = readSchedule({ schedule_gap_seconds: stored } as never).gapSeconds;
+        if (stored > floor) continue;
+        eq(
+          Math.max(floor, read),
+          floor,
+          `"${pace.label}" (${pace.gapSeconds}s) stored against a ${floor}s account: the gate must still be the account's own number`,
+        );
+      }
+    }
+  }
+
+  /* ───── 7. AND NO WRITER MAY EMIT THE ZERO THAT ROUND-TRIPS AS SIXTY ────
+   *
+   * The trap worth keeping written down, because it is why the fix is "a
+   * small positive number everywhere" and never 0 as a sentinel:
+   *   • the column carries `check (schedule_gap_seconds between 30 and 1800)`,
+   *     so 0 is refused outright by Postgres;
+   *   • readSchedule()'s `rawSeconds > 0` treats 0 as "column absent" and
+   *     falls back to the minutes;
+   *   • gapMinutesFor(0) is 1, written beside it.
+   * So a stored 0 round-trips as SIXTY SECONDS, not as "no gap at all".
+   */
+  {
+    for (const choice of GAP_CHOICES) {
+      const cols = scheduleColumns({ enabled: true, days: [0], start: '08:00', gapSeconds: choice } as never);
+      eq(cols.schedule_gap_seconds, choice, `the gap the owner picked (${choice}s) is written through unchanged — no rounding, no unit trip`);
+      eq(cols.schedule_gap_minutes, Math.max(1, Math.ceil(choice / 60)), `with the rounded-up minutes beside it (${choice}s)`);
+      is((cols.schedule_gap_seconds as number) >= MIN_GAP_SECONDS, `and never below the column's CHECK floor (${choice}s)`);
+    }
+    for (const bad of [0, -5, Number.NaN]) {
+      const cols = scheduleColumns({ enabled: true, days: [0], start: '08:00', gapSeconds: bad } as never);
+      is(
+        (cols.schedule_gap_seconds as number) >= MIN_GAP_SECONDS,
+        `a schedule carrying ${bad} is NEVER written as ${bad} — the CHECK would refuse the whole save, and a stored 0 reads back as 60 rather than as "no gap"`,
+      );
+      eq(
+        cols.schedule_gap_seconds,
+        DEFAULT_CAMPAIGN_SCHEDULE.gapSeconds,
+        `and it falls back to exactly what readSchedule() falls back to for the same input (${bad}) — the read and the write of one number must not disagree, which is this module's oldest scar`,
+      );
+      is((cols.schedule_gap_minutes as number) >= 1, `with a minutes column of at least 1 (${bad})`);
+    }
   }
 
   console.log(`campaign gap tests OK — ${checks} assertions, decided by the real engine against a fake database`);

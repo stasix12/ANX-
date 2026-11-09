@@ -198,6 +198,27 @@ export const TIME_CHOICES: string[] = Array.from({ length: 48 }, (_, i) =>
  * default that publishes into Shabbat is a default that gets noticed by the
  * wrong people. `enabled: false` regardless: these are the values the panel
  * opens on, not a behaviour that starts by itself.
+ *
+ * AND THE TEN MINUTES ARE A FALLBACK ONLY — 09.11.2026.
+ *
+ *   "לא אמור ליהנות גם 600 שניות, הפרסום צריך לצאת אחד אחרי השני לפי קצב
+ *    מהיר בינוני או בטוח לפי מה שבחרתי"
+ *
+ * `gapSeconds: 600` here is what readSchedule() returns for a row whose gap
+ * COLUMNS ARE ABSENT, and what scheduleColumns() writes for a schedule object
+ * carrying an unusable gap. It is deliberately NOT a round's birth value: a
+ * round is born at the account's own pace, written explicitly by
+ * bornGapSeconds() in client.ts, because `default 600` in Postgres plus no
+ * writer at birth is exactly how 20 of 41 live rounds came to carry ten
+ * minutes nobody chose — and max(account, campaign) then handed those ten
+ * minutes the decision over whatever mode the owner had picked.
+ *
+ * It stays 600 rather than following the column default down to 30 for one
+ * reason: the read and the write of one number must agree, and an unreadable
+ * value is the one case where erring SLOW is right. Changing it reaches no
+ * live behaviour and removes two protections — schedule-panel.test.ts:171,
+ * which stops the panel clobbering a field nobody touched, and
+ * campaign-schedule.test.ts:124, which pins that 0 is not a sentinel.
  */
 export const DEFAULT_CAMPAIGN_SCHEDULE: CampaignSchedule = {
   enabled: false,
@@ -285,6 +306,10 @@ export function readSchedule(campaign: ScheduleFields | null | undefined): Campa
 
 /** The schedule → the four columns it still owns, for saveCampaign(). */
 export function scheduleColumns(s: CampaignSchedule): Required<ScheduleFields> {
+  const rawGap = Number(s.gapSeconds);
+  const gapOut = Number.isFinite(rawGap) && rawGap > 0
+    ? Math.min(MAX_GAP_SECONDS, Math.max(MIN_GAP_SECONDS, Math.round(rawGap)))
+    : DEFAULT_CAMPAIGN_SCHEDULE.gapSeconds;
   return {
     schedule_enabled: s.enabled,
     schedule_days: [...s.days].sort((a, b) => a - b),
@@ -293,12 +318,32 @@ export function scheduleColumns(s: CampaignSchedule): Required<ScheduleFields> {
        any more, so writing one would be this module inventing a value the
        owner cannot see; leaving the column out of the update keeps whatever
        is stored there exactly as it is. "אסור למחוק מידע." */
-    schedule_gap_seconds: s.gapSeconds,
+    /*
+     * CLAMPED ON THE WAY OUT, and never 0.
+     *
+     * readSchedule() already clamps what it READS, so every value that comes
+     * back through it is inside 30..1800. This clamps what is WRITTEN, for a
+     * schedule object built by hand — the type permits `gapSeconds: 0` and
+     * the trap behind it is worth stating, because it is why the fix for the
+     * ten-minute default is a small positive number everywhere and never 0 as
+     * a sentinel meaning "no gap":
+     *
+     *   • the column carries `check (schedule_gap_seconds between 30 and
+     *     1800)`, so Postgres refuses 0 outright and the whole save fails;
+     *   • readSchedule()'s `rawSeconds > 0` treats 0 as "the column is
+     *     absent" and falls back to the MINUTES beside it;
+     *   • gapMinutesFor(0) is 1, which is what gets written there.
+     *
+     * So a stored 0 round-trips as SIXTY SECONDS, not as "no gap at all". A
+     * row cannot say "use the account's pace" without a schema change, so no
+     * writer may try to say it with a zero.
+     */
+    schedule_gap_seconds: gapOut,
     /* Written beside it, rounded up — see gapMinutesFor. Dropping this column
        would leave an un-updated worker reading nothing and falling back to a
        default, which is a change to how fast the account posts made by a
        deployment rather than by the owner. */
-    schedule_gap_minutes: gapMinutesFor(s.gapSeconds),
+    schedule_gap_minutes: gapMinutesFor(gapOut),
   };
 }
 

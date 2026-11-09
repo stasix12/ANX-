@@ -16,15 +16,34 @@
 -- had.
 -- ───────────────────────────────────────────────────────────────────────────
 
+-- ברירת המחדל היא 30, לא 600, וזה לא סתירה ל"איטי זה הכיוון הבטוח" שכתוב
+-- למעלה — זה אותו כלל בעמודה הנכונה. הכלל הזה מדבר על קצב החשבון, ושם מספר
+-- קטן יותר הוא פרסום מהיר יותר. העמודה הזאת היא בלם של סבב אחד, והמנוע לוקח
+-- max(קצב החשבון, מרווח הסבב): מספר קטן כאן לא יכול להאיץ כלום, כי קצב
+-- החשבון נשאר השער הקובע. מספר גדול כאן כן יכול להאט הכל.
+--
+-- ו-600 כאן זה לא היפותטי: הקוד לא כתב את העמודה בלידה, כל סבב נולד עם עשר
+-- דקות שאף אחד לא בחר, ו-20 מ-41 השורות החיות נשאו 600 ב-09.11.2026 — אחת
+-- מהן מתחה סבב של 90 קבוצות על ארבעה ימים בזמן שהכרטיס אמר "מהיר". הקוד
+-- כותב מהיום את המרווח במפורש, ולכן זו רק רשת ביטחון; רשת ביטחון של עשר
+-- דקות היא בדיוק מה שהפיל את זה.
 alter table public.social_campaigns
   add column if not exists schedule_gap_seconds smallint not null default 600;
 
+alter table public.social_campaigns
+  alter column schedule_gap_seconds set default 30;
+
 -- Existing campaigns keep the gap they have. `default 600` above only covers
 -- rows created from now on; this covers the ones already there.
+--
+-- העמודה בשניות היא המקור, והדקות שלידה הן רק מראה מעוגלת כלפי מעלה. לכן
+-- מילוי שקורא את הדקות מרחיב מרווח שהבעל בחר: gapMinutesFor(40) מחזיר 1,
+-- כלומר 60 שניות, וקצב של 40 שניות היה נמחק בכל הרצה חוזרת של הקובץ הזה.
+-- מי שיש לו כבר ערך בשניות שומר עליו; רק שורה שאין לה ערך כזה נגזרת מהדקות.
 update public.social_campaigns
-   set schedule_gap_seconds = greatest(30, least(1800, coalesce(schedule_gap_minutes, 10) * 60))
+   set schedule_gap_seconds = greatest(30, least(1800, coalesce(nullif(schedule_gap_seconds, 0), coalesce(schedule_gap_minutes, 10) * 60)))
  where schedule_gap_seconds is distinct from
-       greatest(30, least(1800, coalesce(schedule_gap_minutes, 10) * 60));
+       greatest(30, least(1800, coalesce(nullif(schedule_gap_seconds, 0), coalesce(schedule_gap_minutes, 10) * 60)));
 
 alter table public.social_campaigns
   drop constraint if exists social_campaigns_schedule_gap_seconds_range;

@@ -4,7 +4,7 @@ import { supabase } from '@/lib/supabase';
 import { campaignState, type CampaignQueueRow, type CampaignState } from './campaign';
 import { detectCity } from './cities';
 import { addDaysISO, counted, startOfZonedDay, zonedDateISO, zonedHM, zonedToUtc } from './time';
-import { DEFAULT_CAMPAIGN_REPEAT, MIN_GAP_SECONDS, MIN_REPEAT_HOURS, dayRelativeHe, repeatWindowSentence, gapChoiceLabel, readRounds, readSchedule, readRepeat, repeatColumns, roundsColumn, roundsWindowFix, weeklyPlanFor, type RoundsVerdict, type CampaignRepeat, type CampaignRound, type CampaignSchedule, type RoundFields, type ScheduleFields } from './campaign-schedule';
+import { DEFAULT_CAMPAIGN_REPEAT, MAX_GAP_SECONDS, MIN_GAP_SECONDS, MIN_REPEAT_HOURS, gapMinutesFor, dayRelativeHe, repeatWindowSentence, gapChoiceLabel, readRounds, readSchedule, readRepeat, repeatColumns, roundsColumn, roundsWindowFix, weeklyPlanFor, type RoundsVerdict, type CampaignRepeat, type CampaignRound, type CampaignSchedule, type RoundFields, type ScheduleFields } from './campaign-schedule';
 import { projectQueue, roundAnchor, spacingFrom, windowedCascade, type AccountSpacing, type CampaignGate } from './projection';
 import { JOINED_QUERY, normalizeQuery } from './discovery';
 import { dedupeKey, renderPostText } from './compose';
@@ -716,7 +716,7 @@ export async function saveCampaign(input: Partial<Campaign> & { name: string }):
  * launch opens a fresh one, counting from zero.
  */
 /** העמודות שקמפיין חדש מנסה לכתוב, ושמסד שלא עודכן עשוי לא להכיר. */
-const OPTIONAL_CAMPAIGN_COLUMNS = ['repeat_enabled', 'repeat_min_hours'] as const;
+const OPTIONAL_CAMPAIGN_COLUMNS = ['repeat_enabled', 'repeat_min_hours', 'schedule_gap_seconds', 'schedule_gap_minutes'] as const;
 
 /**
  * קמפיין חדש, עם ברירת המחדל של המוצר כתובה בו במפורש.
@@ -729,12 +729,42 @@ const OPTIONAL_CAMPAIGN_COLUMNS = ['repeat_enabled', 'repeat_min_hours'] as cons
  * ונאמר בפעם הבאה שהוא מסתכל, כי מסד בלי העמודות האלה חוזר להתנהגות שבה
  * פוסט לא יוצא פעמיים לאותה קבוצה — וזאת בדיוק ההגבלה שהוא ביקש להסיר.
  */
+/**
+ * ─── המרווח שסבב חדש נולד איתו ─────────────────────────────────────────────
+ *
+ *   "לא אמור ליהנות גם 600 שניות, הפרסום צריך לצאת אחד אחרי השני לפי קצב
+ *    מהיר בינוני או בטוח לפי מה שבחרתי"   (09.11.2026)
+ *
+ * schedule_gap_seconds הוא עמודה עם `default 600` במסד. אף מסך לא כותב
+ * אותה בלידה, ולכן כל סבב נפתח עם עשר דקות שאף אחד לא בחר — ו-plan.ts:334
+ * וגם rules.ts לוקחים max(קצב החשבון, מרווח הסבב), כך שעשר הדקות האלה
+ * מנצחות כל מצב פרסום שהוא יבחר. ככה נולדו עשרים שורות עם 600 בטבלה, ואחת
+ * מהן מתחה סבב של 90 קבוצות על ארבעה ימים.
+ *
+ * מהיום העמודה היא מראה של קצב החשבון, לא מקור שמתחרה בו: סבב נולד עם
+ * בדיוק מה ש-rules.ts ידרוש ממילא בין שני פרסומים לקבוצה.
+ *
+ * הקיצוץ הוא כלפי MAX_GAP_SECONDS ובכוונה, לא כלפי MIN: ה-CHECK על העמודה
+ * הוא 30..1800, ולכן חשבון איטי מ-1800 חייב קיצוץ אחרת ההוספה נדחית לגמרי
+ * ופתיחת סבב נשברת. MAX לא יכול להאיץ שום דבר — max(3900, 1800) = 3900,
+ * והחשבון נשאר השער הקובע. MIN היה המספר המהיר ביותר במערכת, ובזמן שהיה
+ * מסך שדוחף את העמודה אל קצב החשבון הוא היה מוריד חשבון של 65 דקות ל-30
+ * שניות. אותו מסך הוסר בשינוי הזה, ו-MAX בטוח בשני המצבים.
+ */
+async function bornGapSeconds(): Promise<number> {
+  const [limits, browser] = await Promise.all([getLimits(), getBrowserSettings()]);
+  return Math.min(MAX_GAP_SECONDS, Math.max(MIN_GAP_SECONDS, effectiveGroupGapSeconds(limits, browser)));
+}
+
 async function createRunWithRepeat(name: string): Promise<Campaign> {
+  const born = await bornGapSeconds();
   const wanted = {
     name,
     status: 'active' as const,
     repeat_enabled: DEFAULT_CAMPAIGN_REPEAT.enabled,
     repeat_min_hours: DEFAULT_CAMPAIGN_REPEAT.minHours,
+    schedule_gap_seconds: born,
+    schedule_gap_minutes: gapMinutesFor(born),
   };
   const first = await db().from('social_campaigns').insert(wanted).select('*').single();
   if (!first.error) return first.data as Campaign;
@@ -1146,15 +1176,29 @@ export async function duplicatePost(id: string): Promise<Post> {
   return copy;
 }
 
-/** Copies a campaign's settings (not its posts) as a fresh active campaign. */
+/**
+ * Copies a campaign's settings (not its posts) as a fresh active campaign.
+ *
+ * המרווח לא מועתק. ה-spread של השורה מכניס את schedule_gap_seconds כערך
+ * מפורש בהוספה, ולכן לא ברירת מחדל של עמודה ולא UPDATE חד-פעמי במסד יכולים
+ * להגיע אליו אחר כך: שכפול של שורה עם 600 היה מייצר את התקלה מחדש, ועשרים
+ * מארבעים ואחת השורות החיות נושאות 600. עותק נולד בקצב החשבון, כמו סבב חדש.
+ */
 export async function duplicateCampaign(id: string): Promise<Campaign> {
   const source = (await listCampaigns()).find((c) => c.id === id);
   if (!source) throw new Error('הסבב לא נמצא.');
+  const born = await bornGapSeconds();
   const { id: _id, created_at: _c, ...rest } = source;
   return unwrap<Campaign>(
     await db()
       .from('social_campaigns')
-      .insert({ ...rest, name: `${source.name} — עותק`, status: 'active' })
+      .insert({
+        ...rest,
+        name: `${source.name} — עותק`,
+        status: 'active',
+        schedule_gap_seconds: born,
+        schedule_gap_minutes: gapMinutesFor(born),
+      })
       .select('*')
       .single(),
   );
@@ -3925,13 +3969,78 @@ export function effectiveGroupGapSeconds(limits: LimitsSettings, browser: Browse
  * way round would have applyGapFloor read the row before the pace landed and
  * write it back without it — the pace silently lost, one call later.
  */
-export async function applyPace(id: PaceId): Promise<{ pace: PaceProfile; gap: GapFloor }> {
+export async function applyPace(id: PaceId): Promise<{ pace: PaceProfile; gap: GapFloor; campaigns: number }> {
   const pace = paceProfile(id);
   if (!pace) throw new Error('מצב פרסום לא מוכר.');
   const gap = await applyGapFloor(pace.gapSeconds);
   const limits = await getLimits();
   await saveSetting('limits', { ...limits, pace: id });
-  return { pace, gap };
+
+  /*
+   * ─── וְהַסְּבָבִים, שֶׁנִּשְׁאֲרוּ עַל עֶשֶׂר דַּקּוֹת ──────────────────────────
+   *
+   *   "לא אמור ליהנות גם 600 שניות, הפרסום צריך לצאת אחד אחרי השני"
+   *
+   * עד כאן נכתב קצב החשבון, וזה המספר שהמנוע באמת מציית לו. אבל שני המסכים
+   * שמפעילים מצב פרסום כותבים את המרווח לסבב אחד — זה שכרטיסו נלחץ — ולכן
+   * סבב שנפתח אחר כך נשאר עם 600 ומנצח את המצב שנבחר, כי plan.ts ו-rules.ts
+   * לוקחים max(קצב החשבון, מרווח הסבב). ככה סבב של 90 קבוצות נמתח על
+   * ארבעה ימים אחרי שנבחר "מהיר".
+   *
+   * לכן בחירת מצב מסנכרנת את כל הסבבים של החשבון, לא רק את הכרטיס שנלחץ.
+   *
+   * ושלוש החלטות שחייבות להישאר כתובות:
+   *
+   * 1. רשימת מזהים מפורשת, ולא סינון עירום ולא הסתמכות על RLS. המדיניות
+   *    היא `tenant_id in (select unnest(social_tenant_ids()))` — מערך, שמתיר
+   *    כתיבה לכל עסק שהמשתמש חבר בו, וה-schema עצמו מתאר את המקרה הזה
+   *    ("בעל המוצר מסתכל על הלקוח"). חד-עסקיות היום היא תכונה של הנתונים,
+   *    לא של המדיניות. הסירוב על יותר מעסק אחד הוא מה שהופך אותה לכתובה
+   *    בקוד, באותה צורה כמו moreThanOneBusiness() ב-server/worker.ts.
+   *
+   * 2. עמודות בלבד. הסנכרון לא מזיז שום פרסום. הפונקציה שמרווחת מחדש את כל
+   *    התור של החשבון לא מרווחת באמת אלא מעגנת מחדש — היא מתחילה מ-now()
+   *    ופורשת את כל התור משם — ולכן לחיצה אחת הייתה גוררת שורות של סבב אחר
+   *    אל היום, כולל שורות שעבר זמנן. כתיבת עמודה
+   *    מסירה בלם; היא לא מקדימה אף פרסום. החתימה מחדש נשארת היכן שהיא
+   *    היום: הסבב שנלחץ, דרך changeSchedule, עם כל השערים שלו.
+   *
+   * 3. try/catch וממשיכים. קצב החשבון — המספר שהמנוע מציית לו — כבר נשמר,
+   *    ולכן כישלון של הסנכרון אסור שיפיל את בחירת המצב.
+   */
+  let campaigns = 0;
+  try {
+    const rows = unwrap<{ id: string; tenant_id: string; schedule_gap_seconds: number | null }[]>(
+      await db()
+        .from('social_campaigns')
+        .select('id, tenant_id, schedule_gap_seconds')
+        .neq('status', 'archived'),
+    );
+    const tenants = new Set(rows.map((r) => r.tenant_id));
+    if (tenants.size > 1) throw new Error('יותר מעסק אחד נראה מכאן — מצב הפרסום לא נכתב לסבבים.');
+    const ids = rows.filter((r) => r.schedule_gap_seconds !== pace.gapSeconds).map((r) => r.id);
+    if (ids.length) {
+      unwrap(
+        await db()
+          .from('social_campaigns')
+          .update({
+            schedule_gap_seconds: pace.gapSeconds,
+            schedule_gap_minutes: gapMinutesFor(pace.gapSeconds),
+          })
+          .in('id', ids),
+      );
+      campaigns = ids.length;
+    }
+  } catch (err) {
+    await logClientActivity(
+      'warn',
+      'campaign_column_missing',
+      `מצב הפרסום "${pace.label}" נשמר לחשבון, אבל לא הצלחתי לסנכרן אותו לסבבים עצמם — סבב עם מרווח איטי יותר ימשיך לפרסם בקצב שלו עד שתיגעו בכרטיס שלו. ${friendlyMessage(err)}`,
+      { paceId: id, gapSeconds: pace.gapSeconds },
+    );
+  }
+
+  return { pace, gap, campaigns };
 }
 
 export async function liveQueuePlan(opts: { campaignId?: string } = {}): Promise<LiveQueuePlan> {

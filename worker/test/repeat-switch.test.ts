@@ -74,7 +74,10 @@ ok(
  * הצלקת שלה — אחת-עשרה ימים של השקות שלא הכניסו כלום לתור, בלי שאף מסך אמר
  * מילה.
  */
-ok(/const OPTIONAL_CAMPAIGN_COLUMNS = \['repeat_enabled', 'repeat_min_hours'\] as const;/.test(code), 'שתי העמודות רשומות כעמודות שמסד לא מעודכן עשוי לא להכיר');
+ok(
+  /const OPTIONAL_CAMPAIGN_COLUMNS = \['repeat_enabled', 'repeat_min_hours', 'schedule_gap_seconds', 'schedule_gap_minutes'\] as const;/.test(code),
+  'ארבע העמודות רשומות כעמודות שמסד לא מעודכן עשוי לא להכיר — והרשימה היא ליטרל מדויק בכוונה, כדי שלא תגדל בשקט',
+);
 ok(/isMissingColumnNamed\(first\.error as/.test(helper), 'והניסיון השני רק על השגיאה שאומרת "העמודה לא קיימת"');
 ok(
   !/if \(first\.error\) \{[\s\S]{0,120}insert\(rest\)/.test(helper),

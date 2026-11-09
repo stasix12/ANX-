@@ -46,7 +46,6 @@ import {
   runCovers,
   getBrowserSettings,
   lastPublishedAt,
-  matchAccountGapTo,
   saveCampaign,
   setCampaignRepeat,
   repeatRefusedText,
@@ -1214,33 +1213,32 @@ export default function SocialDashboard() {
           }
 
           /*
-           * AND THE ACCOUNT-WIDE FLOOR COMES DOWN WITH IT.
+           * ─── וְהַקּוֹמָה שֶׁשּׁוּם מָסָךְ לֹא כּוֹתֵב ────────────────────────────
            *
-           * "תשנה גם את המרווח המינימלי הגלובלי ברגע שמשנים את הזמנים בקמפיין".
-           * The campaign's own gap is only the FIRST of the gates; the second
-           * — minGap + groupMinGap, 65 minutes out of the box — is an ACCOUNT
-           * setting, so a campaign set to thirty seconds sat in the queue for
-           * an hour anyway. matchAccountGapTo only ever LOWERS it.
+           * כאן עמדה קריאה ל-matchAccountGapTo עם next.gapSeconds: היא לקחה את
+           * המרווח של
+           * הסבב והוריד אליו את קצב החשבון — חד-כיווני, לכל החשבון, לתמיד.
            *
-           * ONLY WHEN THE GATE IS ON. Every function in campaign-schedule.ts
-           * short-circuits on `enabled: false`, so a disabled campaign's
-           * gapSeconds governs nothing at all — and this call is account-wide
-           * and one-directional: it lowers the floor for EVERY campaign and
-           * never puts it back. Unguarded, tapping one day chip on a campaign
-           * whose switch has never been turned on took the shipped 65-minute
-           * floor down to that campaign's untouched 10-minute default, for
-           * the whole account. A number that governs nothing may not move a
-           * setting that governs everything.
+           * זה היה נכון כל עוד היה בפאנל שדה מרווח שאדם הקליד בו. השדה הוסר
+           * לגמרי ב-07.11 ("יש להסיר לחלוטין מהממשק את השדה הישן... ואין
+           * ליצור הגדרה כפולה"), ומאז next.gapSeconds הוא העמודה השמורה —
+           * מספר שאף אחד לא בחר. account-gap.test.ts כבר כתב את זה במילים
+           * שלו באותו יום: "THE CONDITION CANNOT ARISE ANY MORE... There is
+           * no per-campaign gap field left to disagree with the floor." אותו
+           * שינוי הסיר את ההודעה והשאיר את הכתיבה. זה מסיים אותה.
+           *
+           * וזה נזק חי, בצורת התלונה של הבעל עם הסימן הפוך: חמישה עסקים
+           * יושבים על 3900 שניות (65 דקות) שנשלחו בברירת המחדל, והרגע שאחד
+           * מהם מדליק חלון שעות על סבב עם 600 היה לוקח את כל החשבון שלו
+           * מ-65 דקות לעשר — האצה של פי 6.5 שאף אחד לא בחר, וזה בדיוק מה
+           * שמביא להגבלה בפייסבוק.
+           *
+           * לקצב החשבון יש מהיום שני כותבים בלבד: applyGapFloor, כשנבחר מצב
+           * פרסום, והטיונר — המקום היחיד שאדם מקליד בו מספר, ושם ההוראה
+           * המקורית ("תשנה גם את המרווח המינימלי הגלובלי ברגע שמשנים את
+           * הזמנים בקמפיין") מקוימת כפי שהייתה. matchAccountGapTo עצמו לא
+           * נמחק ולא נחלש.
            */
-          const floor = next.enabled
-            ? await matchAccountGapTo(next.gapSeconds)
-            : { changed: false, wasSeconds: 0, nowSeconds: 0 };
-          if (floor.changed) {
-            toast(
-              `המרווח המינימלי של כל החשבון ירד מ-${accountGapLabel(floor.wasSeconds)} ל-${accountGapLabel(floor.nowSeconds)} — זה חל על כל הסבבים, לא רק על זה`,
-              'info',
-            );
-          }
 
           /*
            * ───────── AND THE QUEUE MOVES WITH THE HOURS ─────────
@@ -1442,15 +1440,19 @@ export default function SocialDashboard() {
     async (campaign: Campaign, id: PaceId) => {
       setScheduleBusy((b) => ({ ...b, [campaign.id]: true }));
       try {
-        const { pace, gap } = await applyPace(id);
+        const { pace, gap, campaigns: synced } = await applyPace(id);
         await changeSchedule(campaign, { ...readSchedule(campaign), gapSeconds: pace.gapSeconds });
         await load();
         /* The SUM is what the engine compares against — minGap plus the group
            surcharge — so that is the number the toast names, not the one the
            mode nominally asked for. They differ whenever the surcharge had to
-           absorb part of it. */
+           absorb part of it.
+
+           ומספר הסבבים שסונכרנו נאמר בקול: כתיבה שמגיעה לסבבים מלבד זה
+           שנלחץ לא תהיה שקטה. */
         toast(
-          `מצב "${pace.label}" הופעל — פרסום כל ${accountGapLabel(gap.minGapSeconds + gap.groupMinGapSeconds)}. חל על כל החשבון.`,
+          `מצב "${pace.label}" הופעל — פרסום כל ${accountGapLabel(gap.minGapSeconds + gap.groupMinGapSeconds)}. חל על כל החשבון.` +
+            (synced > 1 ? ` (${synced} סבבים סונכרנו למצב הזה)` : ''),
           'info',
         );
       } catch (err) {

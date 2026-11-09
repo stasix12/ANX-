@@ -525,6 +525,86 @@ async function main(): Promise<void> {
 
   exec(`delete from social_queue; delete from social_targets where external_id like 'bulk%';`);
 
+  /* ───── THE MIGRATION THAT UNDID THE FIX ──────────────────────────────────
+   *
+   *   "לא אמור ליהנות גם 600 שניות, הפרסום צריך לצאת אחד אחרי השני לפי קצב
+   *    מהיר בינוני או בטוח לפי מה שבחרתי"   09.11.2026
+   *
+   * THIS IS THE TEST WHOSE ABSENCE LET A BACKFILL HIDE, and it belongs in
+   * this file for the reason stated at line 373: applySchema() runs the
+   * numbered migrations AND THEN social-latest.sql, which is the file the
+   * owner actually runs by name. So this asks the one question that matters —
+   * does a gap he chose survive a re-run — against the files in the order
+   * they really execute.
+   *
+   * Five lines below `default 600`, v26 carried an UNCONDITIONAL backfill:
+   *
+   *   update public.social_campaigns
+   *      set schedule_gap_seconds = greatest(30, least(1800,
+   *            coalesce(schedule_gap_minutes, 10) * 60))
+   *    where schedule_gap_seconds is distinct from <the same expression>;
+   *
+   * It is not guarded by "the column was just added" — it runs on every
+   * execution. And it reads the MINUTES, which are the rounded-up mirror of
+   * the seconds: gapMinutesFor(40) is 1, so a 40-second round was silently
+   * widened to 60 the next time the file ran, and max(account 40, campaign 60)
+   * is 60. The gap the owner picked, undone by a migration, with nothing said.
+   *
+   * It was live: two rounds stored 45 seconds and one stored 40 on 09.11.2026,
+   * and a re-run of the file he is told to run would have widened all three.
+   */
+  {
+    const chosen = '55555555-5555-4555-8555-5555555555a0';
+    exec(`
+      insert into social_campaigns (id, name, status, schedule_gap_seconds, schedule_gap_minutes)
+        values ('${chosen}', 'סבב בארבעים שניות', 'active', 40, 1)
+      on conflict (id) do update set schedule_gap_seconds = 40, schedule_gap_minutes = 1;
+    `);
+    is(one(`select schedule_gap_seconds from social_campaigns where id='${chosen}'`) === '40', 'the forty-second round could not be stored in the first place');
+
+    /* The real thing, in the real order: every numbered migration and then
+       social-latest.sql, exactly as the owner runs it. */
+    applySchema(repoRoot);
+
+    is(
+      one(`select schedule_gap_seconds from social_campaigns where id='${chosen}'`) === '40',
+      'A GAP THE OWNER CHOSE WAS WIDENED BY RE-RUNNING THE SCHEMA. The v26 backfill is unconditional and reads the rounded-up MINUTES beside the seconds, so every sub-minute gap becomes 60 — and max(account, campaign) then makes 60 the gate. Any value he picks below a minute is undone by the file he is told to run.',
+    );
+    is(
+      one(`select schedule_gap_minutes from social_campaigns where id='${chosen}'`) === '1',
+      'and the minutes column beside it still reads 1 — the two are one number and a backfill may not split them',
+    );
+    /* AND A ROW THAT GENUINELY HAS NO SECONDS VALUE IS STILL DERIVED FROM ITS
+       MINUTES. That is what the backfill is FOR, and narrowing it to "only
+       touch rows with no seconds value" must not turn into "touch nothing".
+       The CHECK refuses 0 outright on a current database, which is itself
+       worth knowing — so the constraint is dropped to stage the row a
+       pre-v26 database would have, and re-added by applySchema() below, the
+       same way the file re-adds it on every run. */
+    const legacy = '55555555-5555-4555-8555-5555555555a1';
+    is(
+      refused(`insert into social_campaigns (id, name, schedule_gap_seconds) values ('${legacy}', 'אפס', 0)`),
+      'a gap of 0 is accepted by the column — readSchedule() reads 0 as "the column is absent" and falls back to the minutes, so a stored 0 round-trips as SIXTY seconds rather than as "no gap"',
+    );
+    exec(`
+      alter table social_campaigns drop constraint if exists social_campaigns_schedule_gap_seconds_range;
+      insert into social_campaigns (id, name, status, schedule_gap_minutes)
+        values ('${legacy}', 'סבב ישן בדקות', 'active', 3)
+      on conflict (id) do update set schedule_gap_minutes = 3;
+      update social_campaigns set schedule_gap_seconds = 0 where id = '${legacy}';
+    `);
+    applySchema(repoRoot);
+    is(
+      one(`select count(*) from pg_constraint where conname = 'social_campaigns_schedule_gap_seconds_range'`) === '1',
+      'the 30..1800 constraint was not put back by the schema run — it is what refuses the 0 that reads as 60',
+    );
+    is(
+      one(`select schedule_gap_seconds from social_campaigns where id='${legacy}'`) === '180',
+      'a row with no seconds value of its own is no longer derived from its minutes — the backfill has been narrowed into doing nothing at all',
+    );
+    exec(`delete from social_campaigns where id in ('${chosen}', '${legacy}')`);
+  }
+
   console.log(`${NAME} OK — ${checks} assertions against a real Postgres`);
 }
 

@@ -1307,5 +1307,34 @@ export const WORKER_VERSION = '4.56.0';
  *
  * AND THE NUMBER WAS CHECKED AGAINST THE RELEASE LIST, not against this file:
  * v4.55.0 was published on 08.11, so 4.56.0 is free.
+ *
+ * ─── 09.11.2026 — THE FINGERPRINT MOVED AND THE VERSION DELIBERATELY DID NOT ─
+ *
+ *   "לא אמור ליהנות גם 600 שניות, הפרסום צריך לצאת אחד אחרי השני לפי קצב
+ *    מהיר בינוני או בטוח לפי מה שבחרתי"
+ *
+ * Two files under src/lib/social changed, so the fingerprint changed with
+ * them, and the gate asked its question. The answer is measured, not reasoned,
+ * against the bundle that is actually installed (dist/app/worker.cjs):
+ *
+ *   createRunWithRepeat  0      duplicateCampaign  0      applyPace  0
+ *   bornGapSeconds       0      effectiveGroupGapSeconds  0
+ *   ensureRunForPost     0      liveQueuePlan      0      logClientActivity 0
+ *   scheduleColumns      0
+ *   planQueue            3      evaluateQueueItem  3      (the control)
+ *
+ * client.ts is browser-only and is not compiled in at all — every symbol
+ * unique to it answers zero while the engine's own answer three. The one
+ * change in campaign-schedule.ts is inside scheduleColumns(), a write-side
+ * helper no worker code calls, and it is tree-shaken out of the bundle.
+ *
+ * SO THIS IS THE CASE THE GATE'S OWN MESSAGE DESCRIBES: it genuinely does not
+ * have to reach the PC, so the fingerprint is pasted and the version stays.
+ * And the shape of the fix is what makes that true — what actually paces his
+ * publishing is `social_campaigns.schedule_gap_seconds`, which the worker
+ * READS FROM THE DATABASE at claim time (schedule_gap_seconds appears 3 times
+ * in the bundle, nextPublishAt 3). Lowering that column is therefore obeyed
+ * by the copy already on his machine, on its next claim, with no update and
+ * no version collision.
  */
-export const WORKER_FINGERPRINT = 'e28ec25dfb19e755';
+export const WORKER_FINGERPRINT = 'f5374daa5b4a95b6';

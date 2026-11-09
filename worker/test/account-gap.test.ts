@@ -267,9 +267,21 @@ const codeOnly = (src: string) => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/
     /currentGapSeconds=\{effectiveGapSeconds\}/.test(codeOnly(panel)),
     'the account floor still reaches the control that states it — the mode card is handed the same effectiveGapSeconds the deleted field used to show',
   );
+  /*
+   * RE-POINTED 09.11.2026. The card was rebuilt to a reference that draws no
+   * text under the tiles, so the floor is no longer PRINTED — it is SPOKEN,
+   * in the card's screen-reader line, through paceGapWords(). The claim that
+   * matters survives and is asked of that line: the number the engine is
+   * holding must still reach the control, and must still be stated in the
+   * unit it actually has rather than rounded into minutes.
+   */
   is(
-    /accountGapLabel\(currentGapSeconds\)/.test(codeOnly(card)),
-    'and the card prints that floor in the unit it actually has, so the number the engine is holding is never left un-named on screen',
+    /paceGapWords\(currentGapSeconds\)/.test(codeOnly(card)),
+    'the card still states the floor the engine is holding, in the unit it actually has, so that number is never left un-named',
+  );
+  is(
+    /data-pace-state/.test(codeOnly(card)),
+    'and it is on the one element that states it — read aloud, never drawn, because the reference forbids the ink and not the fact',
   );
   is(
     /typeof currentGapSeconds === 'number' && Number\.isFinite\(currentGapSeconds\)/.test(codeOnly(card)),

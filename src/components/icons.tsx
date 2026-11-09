@@ -850,6 +850,22 @@ export function RocketIcon(props: IconProps) {
   );
 }
 
+/**
+ * A leaf — the "איטי" publishing mode.
+ *
+ * The reference image for מצב פרסום חכם draws a leaf on the slow card, where
+ * a shield used to be: a shield is a claim about safety, and this product may
+ * not make one about Meta. A leaf says unhurried and promises nothing.
+ */
+export function LeafIcon(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M20 4c0 8.3-4.3 13-11 13H6.2C6.8 10.3 11.4 6 20 4z" />
+      <path d="M4 20c1.1-3.8 3.4-6.8 6.8-8.9" />
+    </svg>
+  );
+}
+
 /** A coffee cup — the rest between runs. */
 export function CoffeeIcon(props: IconProps) {
   return (

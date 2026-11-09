@@ -1,78 +1,83 @@
 'use client';
 
-import { PACE_PROFILES, accountGapLabel, paceGapWords, paceProfile, paceRatePerHour, type PaceProfile } from '@/lib/social/rules';
+import { PACE_PROFILES, paceGapWords, paceProfile, paceRatePerHour, type PaceProfile } from '@/lib/social/rules';
 import type { PaceId } from '@/lib/social/types';
-import { BoltIcon, CheckIcon, ClockIcon, GaugeIcon, RocketIcon, ShieldIcon } from '@/components/icons';
+import { BoltIcon, CheckIcon, GaugeIcon, LeafIcon, RocketIcon } from '@/components/icons';
 
 /**
  * ─────────────────────────────────────────────────────────────────────────────
  * "מצב פרסום חכם" — the three publishing modes, drawn to the reference image.
  *
- * "יש ליצור רכיב חדש בשם: מצב פרסום חכם… יש להציג את שלוש האפשרויות בשורה
- *  אחת, בדיוק לפי הרפרנס. המצב הנבחר יודגש באמצעות מסגרת כחולה, רקע עדין
- *  וסימון בחירה. מתחת לכרטיסיות תופיע שורת סיכום דינמית המציגה את הקצב ואת
- *  משך ההפסקה של המצב שנבחר."
+ * ─── REBUILT TO A NEW REFERENCE, 09.11.2026 ───────────────────────────────
  *
- * ─── WHAT THIS REPLACES, AND WHY THERE IS NOTHING LEFT OF IT ──────────────
+ *   "התמונה המצורפת היא הרפרנס הסופי… אין לבצע עיצוב מחדש לפי שיקול דעתך.
+ *    אין להוסיף אלמנטים שלא מופיעים ברפרנס."
  *
- * The field "הפרש בין פרסומים" is gone from every screen in this product:
- * "יש להסיר לחלוטין מהממשק את השדה הישן… אין להשאיר אותו במקום אחר ואין
- *  ליצור הגדרה כפולה." A mode now carries the gap AND the rest, and picking
- * one writes the gap into the very same account settings the old field wrote
- * — through applyGapFloor(), the writer every other screen already used. So
- * the engine, the planner, the projection and every screen that prints a gap
- * are reading exactly what they read before; only the control changed.
+ * The three cards were two-line tiles carrying their own gap and rate, under
+ * a dynamic summary sentence. The reference replaces all of it with three
+ * compact tiles — icon above the word, nothing else — inside a shorter white
+ * shell. What changed is every pixel; what did NOT change is a single line of
+ * behaviour, and that boundary is the whole of this brief:
+ *
+ *   "מדובר בשינוי עיצובי בלבד, ללא שינוי לוגיקה."
+ *
+ * So the props, the handler, the radio semantics and PACE_PROFILES are
+ * untouched — the gaps, the writer (applyGapFloor through the caller), the
+ * storage and the queue cannot tell this file was rewritten.
+ *
+ * ─── WHERE THE NUMBERS WENT ───────────────────────────────────────────────
+ *
+ *   "אין להציג טקסטי הסבר או זמני פרסום מתחת לכרטיסיות."
+ *
+ * Each card used to print "כל 40 שניות" and "כ-90 בשעה", with a summary line
+ * under the row. All of it is gone from the SCREEN and none of it is gone
+ * from the COMPONENT: the gap and the rate are still read off PACE_PROFILES
+ * and still spoken, in each button's aria-label. A sighted reader gets the
+ * reference's clean row; a screen-reader user still hears which mode is which
+ * rather than three bare adjectives. The table remains the one source, so a
+ * card and a gate still cannot disagree about a mode.
  *
  * ─── THE THREE ARE ORDERED FAST → SLOW IN THE DOM ────────────────────────
  *
- * Which, in an RTL row, draws them מהיר · בינוני · איטי from the right —
- * i.e. איטי · בינוני · מהיר left to right, which is what the reference draws.
- * PACE_PROFILES is already in that order and this maps it straight through,
- * so the row cannot disagree with the table the engine reads.
+ * Which, in an RTL row, draws them מהיר · בינוני · איטי from the right — what
+ * the reference draws. PACE_PROFILES is already in that order and this maps it
+ * straight through.
  *
  * ─── NO MODE IS SELECTED UNTIL ONE IS STORED, AND THAT IS DELIBERATE ──────
  *
- * Every live settings row predates this card and carries no `pace` key. The
- * tempting move is to light up whichever mode is nearest the stored gap so
- * the screen looks like the reference on first load — and it would be a
- * screen that is not true: 40 stored seconds would light "מהיר" while the
- * engine rests after nothing. This product's recurring fault is a screen
- * agreeing with a picture instead of with the engine. So nothing is lit, the
- * strip below says what IS in force, and one tap makes the screen and the
- * engine true together.
+ * Lighting up whichever mode is nearest the stored gap would make the screen
+ * look like the reference on first load and would be a screen that is not
+ * true. Nothing is lit until the account has picked one.
  *
  * ─── IT PROMISES NOTHING ABOUT FACEBOOK ───────────────────────────────────
  *
- * "אין להציג את המצבים כהבטחה למניעת חסימות בפייסבוק." The reference image's
- * own subtitle ends "להגנה מפייסבוק"; that half is not reproduced, because
- * the specification forbids it in so many words and the two cannot both be
- * honoured. Everything else about the subtitle is the image's.
+ * "אין להציג את המצבים כהבטחה למניעת חסימות בפייסבוק." No mode carries a
+ * claim about Meta, which is also why the slow card's icon is a leaf and not
+ * the shield it used to be: a shield is a promise, a leaf is a pace.
  * ─────────────────────────────────────────────────────────────────────────────
  */
 
-/** The reference's icon per mode. The TONE comes from PACE_PROFILES so the
-    engine's table is the one place that says which mode is which colour; only
-    the glyph is chosen here, because a React component cannot live in a module
-    the worker bundles. */
+/** The reference's icon per mode — fast is a bolt, medium a gauge, slow a leaf. */
 const PACE_ICON: Record<PaceId, (p: { className?: string }) => React.ReactElement> = {
   fast: (p) => <BoltIcon aria-hidden {...p} />,
   medium: (p) => <GaugeIcon aria-hidden {...p} />,
-  slow: (p) => <ShieldIcon aria-hidden {...p} />,
+  slow: (p) => <LeafIcon aria-hidden {...p} />,
 };
 
 /*
  * THE PALETTE IS THE PRODUCT'S, NOT A NEW ONE.
  *
- * "צבעי כחול, לבן ותכלת הקיימים באפליקציה" — so orange, blue and green here
- * are warning-400, brand-400 and success-400, the three semantic tokens this
- * app already carries, measured over the white card at 5.43, 6.48 and 5.19.
- * A hex would be a fourth palette nobody can re-theme.
+ * "שימוש בצבעי הכחול, הלבן והתכלת הקיימים באפליקציה בלבד." Every colour below
+ * is a token this app already resolves per theme: brand-500 (#027cbb) is the
+ * action blue, brand-600 the step under it, ink-850 white, ink-800 the pale
+ * blue-grey, mist-100 the deep navy text. A hex here would be a fourth
+ * palette nobody can re-theme, and the dark storefront theme would break.
+ *
+ * The mode's own tone no longer tints anything: the reference draws all three
+ * cards in one blue family and distinguishes them by FILL, not by hue. Keeping
+ * three hues would be designing instead of reproducing. `tone` is still on the
+ * profile and still read by the rest of the product.
  */
-const TONE_TEXT: Record<PaceProfile['tone'], string> = {
-  warning: 'text-warning-400',
-  brand: 'text-brand-400',
-  success: 'text-success-400',
-};
 
 export function SmartPaceCard({
   pace,
@@ -86,43 +91,58 @@ export function SmartPaceCard({
   /** The caller owns the write and the reload — this component stores nothing. */
   onChange: (id: PaceId) => void;
   disabled?: boolean;
-  /** What the engine enforces between two publications right now, in seconds.
-      Printed only while no mode is picked, where it is the whole truth. */
+  /**
+   * What the engine enforces between two publications right now, in seconds.
+   *
+   * KEPT ON THE PROP LIST THOUGH THE REFERENCE DRAWS NO LINE FOR IT. The two
+   * callers pass it, removing it would be an edit to files this brief puts
+   * out of bounds ("אין לבצע Refactoring לקבצים שאינם קשורים"), and the next
+   * reference may want it back. It reaches the accessible description below,
+   * where it is not a displayed "זמן פרסום" and still answers "what is in
+   * force" for a reader who cannot see which card is lit.
+   */
   currentGapSeconds?: number;
   className?: string;
 }) {
   const selected = paceProfile(pace);
 
-
   return (
     <section
       data-smart-pace
       aria-label="מצב פרסום חכם"
-      className={`rounded-2xl border border-ink-600 bg-ink-900 p-2 ${className}`}
+      /*
+       * THE SHELL: white, a thin blue hairline, generously rounded, one soft
+       * shadow. "מעטפת לבנה עם מסגרת כחולה דקה… פינות מעוגלות והצללה עדינה."
+       *
+       * ink-850 and not ink-900: the reference's shell is WHITE against the
+       * page, and ink-900 is the page. p-3 with no vertical padding beyond it
+       * is what "לצמצם את הגובה הכולל" and "להסיר שטחים ריקים מיותרים" come
+       * to — the shell is now the header row plus the tiles plus two gaps.
+       */
+      className={`rounded-3xl border border-brand-500/25 bg-ink-850 p-2.5 shadow-[0_4px_16px_-10px_rgba(2,124,187,0.45)] ${className}`}
     >
-      {/* ─── 1. the heading: rocket, title, subtitle ──────────────────────── */}
-      <div className="flex items-start gap-2">
-        <span aria-hidden className="grid h-7 w-7 shrink-0 place-items-center rounded-xl bg-brand-300/15">
-          <RocketIcon className="h-3.5 w-3.5 text-brand-400" />
+      {/* ─── 1. the heading: rocket badge, then the title ─────────────────── */}
+      {/*
+        The badge is a SOLID blue disc with a white rocket, at the start of the
+        row — which in RTL is the right edge, where the reference puts it. The
+        subtitle the old card carried is not in the reference and is not drawn:
+        "אין להוסיף אלמנטים שלא מופיעים ברפרנס."
+      */}
+      <div className="flex items-center gap-2.5">
+        <span aria-hidden className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-brand-500 text-on-brand">
+          <RocketIcon className="h-4 w-4" />
         </span>
-        <span className="min-w-0 grow">
-          <span className="block text-[12.5px] font-extrabold leading-4 text-mist-100">מצב פרסום חכם</span>
-          <span className="mt-px block text-[10px] font-bold leading-[13px] text-mist-300">
-            בחר את המרווח בין פרסום לפרסום
-          </span>
-        </span>
+        <span dir="auto" className="min-w-0 truncate text-[15px] font-extrabold leading-5 text-mist-100">מצב פרסום חכם</span>
       </div>
 
       {/* ─── 2. the three modes, one row, three equal columns ─────────────── */}
       {/*
-        grid-cols-3 and not a flex row: the three must stay on one line at
-        every width this card is drawn at — a mode that wraps onto a second
-        line stops being comparable with the other two, which is the entire
-        point of drawing them together. `[&>*]:min-w-0` is the product's
-        standing rule for every multi-column grid and is what lets the three
-        narrow together instead of overflowing the card.
+        grid-cols-3 and not a flex row: "שלוש הכרטיסיות חייבות להופיע בשורה
+        אחת… אין גלילה אופקית." `[&>*]:min-w-0` is the product's standing rule
+        for every multi-column grid and is what lets the three narrow together
+        on a 320px phone instead of overflowing the shell.
       */}
-      <div role="radiogroup" aria-label="קצב הפרסום" className="mt-2 grid grid-cols-3 gap-1.5 [&>*]:min-w-0">
+      <div role="radiogroup" aria-label="קצב הפרסום" className="mt-2 grid grid-cols-3 gap-2 [&>*]:min-w-0">
         {PACE_PROFILES.map((p) => {
           const on = selected?.id === p.id;
           const Icon = PACE_ICON[p.id];
@@ -134,100 +154,96 @@ export function SmartPaceCard({
               aria-checked={on}
               disabled={disabled}
               onClick={() => onChange(p.id)}
+              /*
+               * THE GAP AND THE RATE LIVE HERE NOW — read off the table, never
+               * typed. The reference forbids drawing them; nothing forbids
+               * saying them to someone who cannot see which tile is lit.
+               */
               aria-label={`${p.label} — פרסום כל ${paceGapWords(p.gapSeconds)}, כ-${Math.round(paceRatePerHour(p))} פרסומים בשעה`}
               /*
-                THE SELECTED CARD IS BLUE-BORDERED WITH A SOFT FILL, which is
-                what the specification asks for by name, and it is the SAME
-                blue whichever mode is chosen — the mode's own colour stays on
-                its icon and its word. Two colours fighting over one border is
-                how "which one is on" stops being readable.
-
-                NO min-h. The first draft forced 96px, which was 27 more than
-                the three stacked rows actually need — and campaign-card.test.ts
-                measured the whole card 929px against a 910 ceiling because of
-                it. The card is 40px-plus several times over on its own
-                content, so the product's hit-test floor is cleared without
-                reserving a pixel of air the brief asked to remove
-                ("עיצוב מקצועי, קומפקטי ונקי").
-              */
-              className={`flex min-w-0 flex-col rounded-2xl border p-1.5 text-start transition-colors disabled:opacity-60 ${
+               * THE TILE.
+               *
+               * Selected: a blue gradient with white glyph and word, a stronger
+               * blue hairline and a deeper shadow — "כרטיסייה כחולה עם רקע
+               * Gradient כחול, אייקון ברק לבן וסימון בחירה".
+               *
+               * Unselected: white falling to the pale blue-grey, blue glyph,
+               * navy word — "כרטיסייה בהירה בגווני לבן ותכלת".
+               *
+               * `min-h-[64px]` is the compact height, measured off the
+               * reference rather than chosen: the image is 1040px wide over a
+               * 358px card, so its scale is almost exactly 2 and its tiles are
+               * ~130 image px — 65 CSS px. It is also comfortably past this
+               * product's 44px hit-target floor, so "מרווחי לחיצה נוחים" and
+               * "גובה קומפקטי" are met by the same number rather than traded
+               * against each other.
+               *
+               * The three are the same height in both states on purpose: a
+               * selected tile that grew would shift the other two every tap.
+               */
+              className={`relative flex min-h-[64px] min-w-0 flex-col items-center justify-center gap-1 overflow-hidden rounded-2xl border px-1.5 py-1.5 transition-colors disabled:opacity-60 ${
                 on
-                  ? 'border-brand-500 bg-brand-300/15 shadow-[0_2px_8px_-4px_rgba(37,99,235,0.5)]'
-                  : 'border-ink-600 bg-ink-900 hover:border-brand-300'
+                  ? 'border-brand-600 bg-gradient-to-br from-brand-500 to-brand-600 text-on-brand shadow-[0_6px_14px_-6px_rgba(2,124,187,0.65)]'
+                  : 'border-brand-500/20 bg-gradient-to-br from-ink-850 to-ink-800 text-mist-100 shadow-[0_2px_8px_-6px_rgba(13,38,76,0.35)] hover:border-brand-500/45'
               }`}
             >
-              {/* top row: the word and its icon at the start, the mark at the end */}
-              <span className="flex min-w-0 items-center gap-1">
-                <Icon className={`h-3.5 w-3.5 shrink-0 ${TONE_TEXT[p.tone]}`} />
-                <span dir="auto" className={`min-w-0 truncate text-[12px] font-extrabold leading-4 ${TONE_TEXT[p.tone]}`}>
-                  {p.label}
-                </span>
-                {/*
-                  THE SELECTION MARK IS A SECOND CHANNEL, not decoration — the
-                  same rule the day chips in CampaignSchedulePanel follow. A
-                  row whose only difference between chosen and not chosen is a
-                  border colour says nothing to a colour-blind reader and very
-                  little in sunlight. The empty ring holds the same box so the
-                  three cards cannot change height between states.
-                */}
-                <span
-                  aria-hidden
-                  className={`ms-auto grid h-4 w-4 shrink-0 place-items-center rounded-full border ${
-                    on ? 'border-brand-500 bg-brand-500 text-on-brand' : 'border-ink-600 bg-ink-900'
-                  }`}
-                >
-                  <CheckIcon className={`h-2.5 w-2.5 ${on ? 'opacity-100' : 'opacity-0'}`} />
-                </span>
+              {/*
+                THE SHEEN the reference draws across the lower half of every
+                tile. One gradient, no invented shape — and pointer-events-none
+                so it can never swallow the tap.
+              */}
+              <span
+                aria-hidden
+                className={`pointer-events-none absolute inset-x-0 bottom-0 h-1/2 ${
+                  on ? 'bg-gradient-to-t from-white/20 to-transparent' : 'bg-gradient-to-t from-brand-500/10 to-transparent'
+                }`}
+              />
+
+              {/*
+                ONE SELECTION MARK, AND ONLY ONE — "סימון בחירה ברור, ללא
+                כפילות של סימוני V". The reference draws two on the lit tile (a
+                ring at one corner and a badge at the other); the brief forbids
+                the duplication in so many words, so the ring stays and the
+                badge does not. It holds the same box in both states, so the
+                tiles cannot change height between them, and it is a SECOND
+                channel beside the fill — the rule the day chips follow, and
+                the only thing a colour-blind reader has to go on.
+              */}
+              <span
+                aria-hidden
+                className={`absolute end-1.5 top-1.5 grid h-[17px] w-[17px] place-items-center rounded-full border ${
+                  on ? 'border-white/70 bg-white text-brand-600' : 'border-brand-500/35 bg-ink-850'
+                }`}
+              >
+                <CheckIcon className={`h-3 w-3 ${on ? 'opacity-100' : 'opacity-0'}`} />
               </span>
 
-              {/* the gap */}
-              <span className="mt-1 flex min-w-0 items-center gap-1 text-[10.5px] font-bold leading-[13px] text-mist-300">
-                <ClockIcon aria-hidden className="h-3 w-3 shrink-0 text-mist-500" />
-                <span className="min-w-0 truncate">כל {paceGapWords(p.gapSeconds)}</span>
-              </span>
-
-              {/* the reference's own hairline between the two facts */}
-              <span aria-hidden className="my-0.5 block h-px w-full bg-ink-700" />
-
-              {/* the rate the gap works out to — the second fact the
-                  reference's two-line card wants, and the one a reader
-                  actually ranks the three modes by. It replaced the rest when
-                  the rest was removed on 08.11.2026. */}
-              <span className="flex min-w-0 items-center gap-1 text-[10.5px] font-bold leading-[13px] text-mist-300">
-                <GaugeIcon aria-hidden className="h-3 w-3 shrink-0 text-mist-500" />
-                <span className="min-w-0 truncate">כ-{Math.round(paceRatePerHour(p))} בשעה</span>
+              {/* the glyph, above the word, exactly as the reference stacks them */}
+              <Icon className={`relative h-5 w-5 shrink-0 ${on ? 'text-on-brand' : 'text-brand-500'}`} />
+              {/* dir="auto" sits on the SAME line as `truncate` deliberately:
+                  layout.test.ts reads this rule line by line, and a mode name
+                  clipped at the wrong end is the bug it was written for. */}
+              <span dir="auto" className={`relative min-w-0 truncate text-[13px] font-extrabold leading-4 ${on ? 'text-on-brand' : 'text-mist-100'}`}>
+                {p.label}
               </span>
             </button>
           );
         })}
       </div>
 
-      {/* ─── 4. the dynamic summary line the specification asks for ───────── */}
-      {selected ? (
-        <p data-pace-summary className="mt-1 text-[10.5px] font-bold leading-4 text-brand-400">
-          נבחר <span className="font-extrabold">{selected.label}</span>: כל {paceGapWords(selected.gapSeconds)},
-          כ-{Math.round(paceRatePerHour(selected))} פרסומים בשעה. המצב חל על כל החשבון ועל כל הסבבים.
-        </p>
-      ) : (
-        /*
-          NOTHING PICKED YET, SAID AS A FACT ABOUT THE ENGINE.
-
-          This is the state every existing account loads in, and the line has
-          to carry the gap the engine is ACTUALLY holding — otherwise the card
-          looks like a setting nobody set while the queue keeps publishing to a
-          number no screen names.
-        */
-        <p data-pace-summary className="mt-1 text-[10.5px] font-bold leading-4 text-mist-300">
-          עדיין לא נבחר מצב
-          {typeof currentGapSeconds === 'number' && Number.isFinite(currentGapSeconds) ? (
-            <> — הפרסום יוצא כרגע כל {accountGapLabel(currentGapSeconds)}</>
-          ) : (
-            <> — הפרסום יוצא לפי המרווח הקיים</>
-          )}
-          . בחירת מצב קובעת את המרווח.
-        </p>
-      )}
-
+      {/*
+        NOTHING UNDER THE ROW. "אין להציג טקסטי הסבר או זמני פרסום מתחת
+        לכרטיסיות." The summary sentence that used to sit here is gone from the
+        screen; what it said is in each tile's aria-label and in the line below,
+        which is read aloud and never drawn.
+      */}
+      <p className="sr-only" data-pace-state>
+        {selected
+          ? `המצב שנבחר: ${selected.label} — פרסום כל ${paceGapWords(selected.gapSeconds)}. המצב חל על כל החשבון ועל כל הסבבים.`
+          : typeof currentGapSeconds === 'number' && Number.isFinite(currentGapSeconds)
+            ? `עדיין לא נבחר מצב. הפרסום יוצא כרגע כל ${paceGapWords(currentGapSeconds)}.`
+            : 'עדיין לא נבחר מצב. הפרסום יוצא לפי המרווח הקיים.'}
+      </p>
     </section>
   );
 }

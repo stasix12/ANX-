@@ -439,12 +439,47 @@ eq(offenders, [], 'no screen labels a control "הפרש בין פרסומים" o
   is(/aria-checked=\{on\}/.test(code), 'with the chosen one marked for a screen reader');
   is(/PACE_PROFILES\.map/.test(code), 'the row is built FROM the table the engine reads, so a card and a gate cannot disagree about a mode');
   is(/grid-cols-3/.test(code), 'all three on one line — "יש להציג את שלוש האפשרויות בשורה אחת"');
-  is(/border-brand-500/.test(code), 'the chosen one takes a blue border — "יודגש באמצעות מסגרת כחולה"');
-  is(/bg-brand-300\/15/.test(code), 'with a soft fill behind it — "רקע עדין"');
+  /*
+   * ─── RE-POINTED 09.11.2026 TO A NEW REFERENCE IMAGE ──────────────────────
+   *
+   *   "התמונה המצורפת היא הרפרנס הסופי… מהיר – כרטיסייה כחולה עם רקע Gradient
+   *    כחול, אייקון ברק לבן וסימון בחירה… סימון בחירה ברור, ללא כפילות של
+   *    סימוני V… אין להציג טקסטי הסבר או זמני פרסום מתחת לכרטיסיות."
+   *
+   * Four pins here described the OLD visual language — a soft brand-300/15
+   * fill and two drawn summary sentences — and the new reference replaces
+   * both. What each pin was really protecting is re-asked of the new shape,
+   * and two of them come back STRONGER: the selection mark is now pinned as
+   * exactly one (the brief forbids the duplication the reference image itself
+   * draws), and the numbers are pinned as present-but-unpainted rather than
+   * merely present.
+   */
+  is(/border-brand-600/.test(code), 'the chosen one takes a blue border — "מסגרת כחולה עדינה"');
+  is(/bg-gradient-to-br from-brand-500 to-brand-600/.test(code), 'and a blue gradient behind it — "כרטיסייה כחולה עם רקע Gradient כחול"');
+  is(/from-ink-850 to-ink-800/.test(code), 'while the other two stay white falling to the pale blue — "כרטיסייה בהירה בגווני לבן ותכלת"');
+  is(/text-on-brand/.test(code), 'with a white glyph on the chosen one — "אייקון ברק לבן"');
   is(/CheckIcon/.test(code), 'and a check mark, which is the second channel a border colour alone cannot give a colour-blind reader');
-  is(/data-pace-summary/.test(code), 'there is a dynamic summary line under the row — "שורת סיכום דינמית"');
-  is(/paceRatePerHour\(selected\)/.test(code), 'and it quotes the rate, computed rather than typed');
-  is(/paceGapWords\(p\.gapSeconds\)/.test(code), 'each card prints its own gap off the table, so a card and a gate cannot disagree about a mode');
+  is((code.match(/<CheckIcon/g) ?? []).length === 1, 'exactly ONE check mark is RENDERED on a tile — "סימון בחירה ברור, ללא כפילות של סימוני V". The reference image draws two on the lit tile; the brief forbids the duplication in so many words, so the ring stays and the badge does not.');
+  is(/LeafIcon/.test(code), 'and the slow mode wears a leaf — "אייקון עלה", and a shield would be a promise about Meta this card may not make');
+
+  /* THE NUMBERS ARE STILL READ OFF THE TABLE — and no longer painted. */
+  is(/data-pace-state/.test(code), 'the card states the chosen mode and its interval in one place');
+  is(/className="sr-only"/.test(code), 'and that place is spoken, not drawn — "אין להציג טקסטי הסבר או זמני פרסום מתחת לכרטיסיות"');
+  is(/paceRatePerHour\(p\)/.test(code), 'each mode still quotes the rate, computed rather than typed');
+  is(/paceGapWords\(p\.gapSeconds\)/.test(code), 'and its own gap off the table, so a card and a gate cannot disagree about a mode');
+  /*
+   * A TILE MAY NOT PAINT A NUMBER. Asserted on the JSX that actually renders —
+   * from the glyph to the close of the button — rather than on the whole file,
+   * because the gap and the rate DO appear above it, inside the aria-label,
+   * which is the point: spoken, never drawn.
+   */
+  {
+    const body = code.slice(code.indexOf('<Icon className='), code.indexOf('</button>'));
+    is(body.length > 80, 'the tile body could not be isolated — the checks over it would be vacuous');
+    is(!/paceGapWords/.test(body), 'no tile draws its gap as text');
+    is(!/paceRatePerHour/.test(body), 'and none draws its rate');
+    is(/\{p\.label\}/.test(body), 'the only text a tile renders is the mode\'s own word');
+  }
 
   /* EVERY multi-column grid in this product carries the min-w-0 guard, or a
      long word inside one blows the card's width out on a phone. */

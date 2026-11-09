@@ -299,8 +299,23 @@ async function main(): Promise<void> {
     const mode = (label: string) => page.locator(`[data-schedule] [data-smart-pace] [role="radio"]`).filter({ hasText: label });
     await mode('איטי').first().click();
     eq(await mode('איטי').first().getAttribute('aria-checked'), 'true', 'tapping a mode selects it');
-    const paceLine = () => page.locator('[data-schedule] [data-pace-summary]').innerText();
-    is((await paceLine()).includes('איטי'), 'and the summary line under the row names the mode that was chosen');
+    /*
+     * ─── RE-POINTED 09.11.2026 — THE LINE MOVED, THE FACTS DID NOT ────────
+     *
+     *   "אין להציג טקסטי הסבר או זמני פרסום מתחת לכרטיסיות."
+     *
+     * The card was rebuilt to a new reference and the summary sentence under
+     * the row is gone from the SCREEN. Every fact it carried is still read off
+     * PACE_PROFILES and still SPOKEN — in the chosen tile's aria-label and in
+     * the card's screen-reader line — so this asks the same questions of the
+     * accessible name, which is where a sighted reader's eyes and a blind
+     * reader's ears now diverge and where a wrong number would hide.
+     */
+    const paceLine = async () =>
+      ((await mode('איטי').first().getAttribute('aria-label')) ?? '') +
+      ' ' +
+      (await page.locator('[data-schedule] [data-smart-pace] [data-pace-state]').innerText());
+    is((await paceLine()).includes('איטי'), 'the chosen mode is named');
     is((await paceLine()).includes('2 דקות'), 'with its interval — the slow mode is two minutes since 08.11.2026');
     is(/30 פרסומים בשעה/.test(await paceLine()), 'and the rate that gap works out to, computed rather than typed');
     is((await paceLine()).includes('על כל החשבון'), 'and that the mode is account-wide, which is the one consequence that reaches outside this campaign');
@@ -308,6 +323,17 @@ async function main(): Promise<void> {
        that still promised one would describe a hold the engine is not
        applying. */
     is(!/הפסקה|רצופים/.test(await paceLine()), 'and nothing about an automatic rest, because there is none');
+    /*
+     * AND IT IS NOT DRAWN. The reference's whole point is a shorter card, so
+     * this measures ink rather than strings: the spoken line must occupy no
+     * space, and the tiles must paint their word and nothing else.
+     */
+    const srBox = await page.locator('[data-schedule] [data-smart-pace] [data-pace-state]').boundingBox();
+    is(Boolean(srBox && srBox.width <= 1 && srBox.height <= 1), 'the spoken line occupies no drawn space — no explanatory text under the tiles');
+    is(
+      !/שניות|בשעה|דק׳/.test(await page.locator('[data-schedule] [data-smart-pace] [role="radio"]').first().innerText()),
+      'and no tile draws a publishing time inside it',
+    );
     /*
      * THE SCHEDULE SUMMARY NO LONGER CARRIES THE INTERVAL, deliberately: two
      * places stating one number is the "הגדרה כפולה" the brief forbids, and
@@ -341,24 +367,40 @@ async function main(): Promise<void> {
      * exactly what the 33-option version was for.
      */
     const cards = page.locator('[data-schedule] [data-smart-pace] [role="radio"]');
-    const labels = await cards.evaluateAll((els) => els.map((e) => (e.textContent ?? '').replace(/\s+/g, ' ').trim()));
-    eq(labels.length, 3, 'three modes are offered, no more and no fewer');
-    is(labels[0].startsWith('מהיר'), 'מהיר first — fastest at the start of the row, which in RTL draws it rightmost as the reference does');
-    is(labels[1].startsWith('בינוני'), 'בינוני second');
-    is(labels[2].startsWith('איטי'), 'איטי third');
-    /* Each card carries its gap and the rate that gap works out to — the two
-       facts the reference's two-line card wants, and the two a reader actually
-       ranks the three modes by. The rest that used to be the second fact was
-       removed on 08.11.2026. */
-    is(labels[0].includes('40 שניות') && labels[0].includes('90 בשעה'), 'מהיר: every 40 seconds, about 90 an hour');
-    is(labels[1].includes('דקה וחצי') && labels[1].includes('40 בשעה'), 'בינוני: every minute and a half, about 40 an hour');
-    is(labels[2].includes('2 דקות') && labels[2].includes('30 בשעה'), 'איטי: every 2 minutes, about 30 an hour');
     /*
-     * AND NO TWO CARDS READ THE SAME. The medium mode is 90 seconds and the
-     * slow one 120; a label that rounded to the nearest minute printed both as
-     * two minutes, which is how an owner stops believing the screen.
+     * ─── RE-POINTED 09.11.2026 — READ THE ACCESSIBLE NAME, NOT THE INK ────
+     *
+     *   "אין להציג טקסטי הסבר או זמני פרסום מתחת לכרטיסיות."
+     *
+     * The new reference draws a tile as an icon above a word and nothing else,
+     * so textContent is now just "מהיר". The claim this block was written for
+     * is unchanged and is asked of the accessible name instead: what is
+     * OFFERED is read off the real elements, each mode still carries its own
+     * gap and rate, and no two modes read alike. A mode that exists in
+     * PACE_PROFILES and never reaches the card still fails here.
+     *
+     * Both are read: `words` is what is painted, `names` is what is spoken.
      */
-    eq(new Set(labels).size, 3, 'three cards, three different readings');
+    const words = await cards.evaluateAll((els) => els.map((e) => (e.textContent ?? '').replace(/\s+/g, ' ').trim()));
+    const labels = await cards.evaluateAll((els) => els.map((e) => (e.getAttribute('aria-label') ?? '').replace(/\s+/g, ' ').trim()));
+    eq(labels.length, 3, 'three modes are offered, no more and no fewer');
+    is(words[0] === 'מהיר', 'מהיר first — fastest at the start of the row, which in RTL draws it rightmost as the reference does');
+    is(words[1] === 'בינוני', 'בינוני second');
+    is(words[2] === 'איטי', 'איטי third');
+    is(words.every((w) => !/\d/.test(w)), 'and a tile paints its word alone — no number is drawn on it');
+    /* Each mode still carries its gap and the rate that gap works out to, off
+       the table rather than typed. They are spoken, not drawn: the reference
+       forbids the ink, nothing forbids telling a screen-reader user which
+       mode is which. */
+    is(labels[0].includes('40 שניות') && labels[0].includes('90 פרסומים בשעה'), 'מהיר: every 40 seconds, about 90 an hour');
+    is(labels[1].includes('דקה וחצי') && labels[1].includes('40 פרסומים בשעה'), 'בינוני: every minute and a half, about 40 an hour');
+    is(labels[2].includes('2 דקות') && labels[2].includes('30 פרסומים בשעה'), 'איטי: every 2 minutes, about 30 an hour');
+    /*
+     * AND NO TWO READ THE SAME. The medium mode is 90 seconds and the slow one
+     * 120; a label that rounded to the nearest minute printed both as two
+     * minutes, which is how an owner stops believing the screen.
+     */
+    eq(new Set(labels).size, 3, 'three modes, three different readings');
     /* AND NOT A WORD ABOUT A REST, anywhere on the card. */
     {
       const whole = (await page.locator('[data-schedule] [data-smart-pace]').innerText()).replace(/\s+/g, ' ');

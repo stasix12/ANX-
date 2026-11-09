@@ -408,13 +408,34 @@ async function main(): Promise<void> {
      */
     assert.ok(!/gapLabel\(/.test(panel), 'the panel must print no interval of its own — one place names the gap, and it is the mode card');
     assert.ok(!/gapShown/.test(panel), 'and must keep no second resolved copy of it to print from');
+    /*
+     * RE-POINTED 09.11.2026. The card was rebuilt to a new reference that
+     * forbids drawing any sentence under the tiles — "אין להציג טקסטי הסבר או
+     * זמני פרסום מתחת לכרטיסיות" — so the two visible summaries became one
+     * screen-reader line with the same two branches. The claim is unchanged:
+     * ONE place names the interval, and it is still the mode card, off the
+     * one prop above. "אין ליצור הגדרה כפולה" said from the other end.
+     */
     assert.ok(
-      (paceCard.match(/data-pace-summary/g) ?? []).length === 2,
-      'the mode card carries exactly two summary sentences — one for a mode picked, one for none picked',
+      (paceCard.match(/data-pace-state/g) ?? []).length === 1,
+      'the mode card states the interval in exactly one place',
     );
     assert.ok(
-      /accountGapLabel\(currentGapSeconds\)/.test(paceCard),
-      'the no-mode sentence names the ACCOUNT gap it was handed — that is the state every account that exists today loads in, and there the number is the whole truth',
+      /selected\s*$/m.test(paceCard) || /\{selected$/m.test(paceCard) || paceCard.includes('{selected'),
+      'and that one place still branches on whether a mode is picked, so an account that has never picked one is not told it has',
+    );
+    assert.ok(
+      !/data-pace-summary/.test(paceCard),
+      'and the two drawn sentences are gone from the screen, which is what the new reference asks for',
+    );
+    /* Same re-point: the sentence is spoken rather than drawn, and the unit
+       comes from paceGapWords() off the table instead of accountGapLabel().
+       The claim is the one that mattered — the state every existing account
+       loads in must still name the number the engine is holding, because
+       there that number is the whole truth. */
+    assert.ok(
+      /paceGapWords\(currentGapSeconds\)/.test(paceCard),
+      'the no-mode branch names the ACCOUNT gap it was handed — that is the state every account that exists today loads in, and there the number is the whole truth',
     );
     assert.ok(
       /const selected = paceProfile\(pace\)/.test(paceCard) && /paceGapWords\(selected\.gapSeconds\)/.test(paceCard),

@@ -643,7 +643,27 @@
  *
  * התזמון, סדר התור, מנגנון הפרסום וחישוב זמני הפרסום לא נגעו.
  */
-export const WORKER_VERSION = '4.56.0';
+/*
+ * ─── 4.56.0 → 4.57.0 — DOES THIS HAVE TO REACH THE PC? YES, AND IT IS THE
+ *     CLEAREST YES SINCE THE PLANNER ───────────────────────────────────────
+ *
+ * The gate that decides whether anything publishes at all lives in
+ * worker/social-worker.ts and runs THERE. Measured on his account on
+ * 09.11.2026 at 17:21: the freeze cleared from the dashboard at 17:14, the
+ * row reading `rateLimitedUntil = null`, the worker alive five seconds ago
+ * with Facebook connected and no job running, 46 rows waiting and five of
+ * them already past their minute — and nothing going out, because
+ * `state.attention` could only ever be cleared inside the branch that the
+ * cleared row had just made unreachable.
+ *
+ * It is in MEMORY, so the only cure was closing the app. Left on 4.56.0 the
+ * dashboard would keep offering a "נקה" button whose effect is to lock the
+ * machine it is supposed to free. There is no server-side half of this fix.
+ *
+ * AND THE NUMBER WAS CHECKED AGAINST THE RELEASE LIST, not against this
+ * file: v4.56.0 was published today at 05:59, so 4.57.0 is free.
+ */
+export const WORKER_VERSION = '4.57.0';
 
 /**
  * A FINGERPRINT OF EVERYTHING THE INSTALLER CARRIES.
@@ -1363,4 +1383,4 @@ export const WORKER_VERSION = '4.56.0';
  * is asked to update anything for a window that only draws what is already in
  * social_activity_log.
  */
-export const WORKER_FINGERPRINT = 'dbb4a48c0a395e20';
+export const WORKER_FINGERPRINT = 'e408d33e7756143e';

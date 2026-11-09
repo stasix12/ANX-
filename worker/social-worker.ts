@@ -1028,6 +1028,39 @@ async function tick(state: WorkerState): Promise<void> {
     console.log('[worker] ההקפאה הסתיימה — ממשיכים לפרסם.');
   }
 
+  /*
+   * ─── THE BANNER COMES DOWN HOWEVER THE FREEZE ENDED ──────────────────────
+   *
+   * MEASURED ON HIS OWN ACCOUNT, 09.11.2026 17:21 — the worker alive and
+   * heartbeating five seconds ago, Facebook connected, no job running, FIVE
+   * rows past their minute, and nothing going out:
+   *
+   *   social_settings.control     rateLimitedUntil = null   (cleared 17:14)
+   *   social_workers              status = needs_attention
+   *   attention_message           "…מוקפא ל-3 שעות ויחזור אוטומטית ב-17:34"
+   *
+   * The database said free and the worker was holding a notice it could no
+   * longer take down. The block above is the ONLY place that clears
+   * `state.attention`, and it lives inside `if (control.rateLimitedUntil)` —
+   * so the moment the row is nulled from anywhere else (clearMetaHold(), the
+   * "נקה" button in the dashboard) that branch becomes unreachable, the
+   * notice is immortal, and the gate four lines down returns "ממתין לטיפול
+   * ידני" on every tick until the PROCESS is restarted. `state.attention`
+   * lives in memory, so closing the app was the only cure — for a freeze that
+   * had already expired.
+   *
+   * The sign that makes it safe to clear is `freezeHold` and not the text:
+   * it is set only where the freeze is written (see the rate-limit branch
+   * below), so a notice about a login Facebook challenged, or about the
+   * browser-window burst, is untouched. One flag, one owner, one release.
+   */
+  if (!control.rateLimitedUntil && state.freezeHold) {
+    state.attention = '';
+    state.freezeHold = false;
+    await logActivity('info', 'rate_limit_cleared', 'ההגבלה כבר לא בתוקף — הפרסום חוזר לפעול כרגיל.');
+    console.log('[worker] ההגבלה נוקתה מבחוץ — ממשיכים לפרסם.');
+  }
+
   /* Each of these three is a sentence that answers "למה לא מפרסם" — see
      idle(). They are the only three ways the gate closes, and every one of
      them now reaches the owner's screen instead of his terminal. */

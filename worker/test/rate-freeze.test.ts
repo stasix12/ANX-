@@ -382,10 +382,56 @@ function manualExitPass(): void {
     'and no longer types out its own copy of that read-merge-write');
 }
 
+/**
+ * ─── CLEARING THE HOLD BY HAND MUST NOT LOCK THE WORKER ────────────────────
+ *
+ * MEASURED ON THE OWNER'S OWN ACCOUNT, 09.11.2026 17:21. The freeze had been
+ * cleared from the dashboard at 17:14. Seven minutes later:
+ *
+ *   social_settings.control  rateLimitedUntil = null
+ *   social_workers           status = needs_attention, last_seen 5s ago,
+ *                            browser connected, current_job none
+ *   attention_message        "…מוקפא ל-3 שעות ויחזור אוטומטית ב-17:34"
+ *   social_queue             46 waiting, 5 of them already past their minute
+ *
+ * `state.attention` was cleared in exactly one place, inside
+ * `if (control.rateLimitedUntil)`. Nulling the row from the button made that
+ * branch unreachable, so the notice could never come down, and
+ * `if (state.attention) return idle(...)` four lines below held the queue
+ * shut on every tick. It lives in memory, so only restarting the app cured
+ * it — for a freeze that had already ended.
+ *
+ * The release is guarded by `freezeHold`, not by the text: that flag is set
+ * only where the freeze is written, so a login challenge or the
+ * browser-burst notice is left exactly where it is.
+ */
+function externalClearPass(): void {
+  const release = /if \(!control\.rateLimitedUntil && state\.freezeHold\) \{[\s\S]{0,260}state\.attention = '';[\s\S]{0,120}state\.freezeHold = false;/;
+  is(release.test(worker), 'a freeze that is gone from the row releases the notice, however it went');
+
+  /* The release must stand OUTSIDE the `if (control.rateLimitedUntil)` block —
+     inside it, it is the same unreachable code this test exists about. */
+  const gateAt = worker.indexOf('if (control.rateLimitedUntil) {');
+  const releaseAt = worker.search(release);
+  const attentionGateAt = worker.indexOf("if (state.attention) return idle(state,");
+  is(gateAt > -1 && releaseAt > -1 && attentionGateAt > -1, 'all three landmarks were located');
+  is(releaseAt > gateAt, 'the release comes after the freeze gate');
+  is(releaseAt < attentionGateAt, 'and BEFORE the notice gate it exists to open — after it, it would free the queue one tick late, for ever');
+
+  /* It may not fire on a notice it does not own. */
+  is(!/if \(!control\.rateLimitedUntil\) \{\s*state\.attention = '';/.test(worker),
+    'it is guarded by freezeHold — an unguarded clear would wipe a login challenge the owner still has to answer');
+
+  /* And it says so once, rather than silently. */
+  is(/if \(!control\.rateLimitedUntil && state\.freezeHold\)[\s\S]{0,400}logActivity\('info', 'rate_limit_cleared'/.test(worker),
+    'and it writes one line to the log, so "why did it start again" has an answer');
+}
+
 async function main(): Promise<void> {
   await browserPass();
   await cardPass();
   manualExitPass();
+  externalClearPass();
   console.log(`rate-limit freeze OK — ${checks} assertions`);
 }
 

@@ -24,18 +24,36 @@ import { friendlyMessage } from '@/lib/social/errors';
 import { relativeHe } from '@/lib/social/time';
 
 /**
- * THE AGE AS THE PILL SAYS IT.
+ * ─── THE AGE, IN THE PILL'S OWN SHORTHAND ────────────────────────────────
  *
- * relativeHe() is the product's own clock vocabulary and this does not fork
- * it — it changes exactly one answer, the one the reference disagrees with.
- * Under a minute relativeHe says "לפני פחות מדקה": fourteen characters in a
- * pill the reference fills with "עכשיו", and on the busiest row in the list,
- * the one that just happened. Everything from a minute up is relativeHe
- * verbatim, and the exact stamp is on `title` either way.
+ *   "להוריד את הגובה של הכרטיסיות זה ממש גדול" — 09.11.2026.
+ *
+ * This is a WIDTH fix that reads as a height fix, and that is not a trick:
+ * the pill and the sentence share one line, so every pixel the pill takes is
+ * a pixel the group's name does not get, and a name that does not fit wraps
+ * — which is what made the cards tall on his phone.
+ *
+ * relativeHe() is the product's clock vocabulary everywhere else and stays
+ * exactly as it is. Here it is said short, in the words his own reference
+ * image uses: "עכשיו", "לפני דקה", "לפני 2 דק׳", "לפני 3 שע׳" — against
+ * relativeHe's "לפני פחות מדקה", "לפני שתי דקות", "לפני שעתיים". Measured at
+ * 390px: 85px of pill becomes 58, and the sentence gains 27px.
+ *
+ * Nothing is rounded differently and nothing is hidden — the same minute and
+ * the same hour, with fewer letters, and the exact stamp on `title`. Days are
+ * handed back to relativeHe, where the long form is already short enough.
  */
 function agePill(at: string): string {
-  const ms = Date.now() - new Date(at).getTime();
-  return ms >= 0 && ms < 60_000 ? 'עכשיו' : relativeHe(at);
+  const diff = Date.now() - new Date(at).getTime();
+  if (diff < 0) return relativeHe(at);
+  const min = Math.round(diff / 60_000);
+  if (min < 1) return 'עכשיו';
+  if (min === 1) return 'לפני דקה';
+  if (min < 60) return `לפני ${min} דק׳`;
+  const hours = Math.round(min / 60);
+  if (hours === 1) return 'לפני שעה';
+  if (min < 60 * 48) return `לפני ${hours} שע׳`;
+  return relativeHe(at);
 }
 import { ChevronDownIcon } from '@/components/icons';
 import { stampText } from './DateTime';
@@ -262,7 +280,7 @@ export function ActivityFeed({
   }
 
   return (
-    <ul className="space-y-3">
+    <ul className="space-y-2">
       {entries.slice(0, limit).map((e) => {
         const mark = EVENT_MARK[e.event] ?? LEVEL_MARK[e.level] ?? LEVEL_MARK.info;
         const Icon = mark.icon;
@@ -298,7 +316,7 @@ export function ActivityFeed({
         const body = t.detail || (HEBREW.test(e.message) ? '' : TECHNICAL);
         const line = (
           <>
-            <p dir="auto" className={`text-sm font-bold leading-snug ${e.level === 'error' ? 'text-error-400' : 'text-mist-100'}`}>
+            <p dir="auto" className={`text-[13px] font-bold leading-snug ${e.level === 'error' ? 'text-error-400' : 'text-mist-100'}`}>
               {t.title}
             </p>
             {/*
@@ -321,7 +339,7 @@ export function ActivityFeed({
               mouse.
             */}
             {body && (
-              <p dir="auto" title={body} className="mt-0.5 line-clamp-2 text-[12.5px] leading-snug text-mist-300">
+              <p dir="auto" title={body} className="mt-0.5 truncate text-[12px] leading-snug text-mist-300">
                 {body}
               </p>
             )}
@@ -358,7 +376,7 @@ export function ActivityFeed({
            * RIGHT edge, and `start` is the only spelling that stays correct if
            * a screen in this product is ever mirrored.
            */
-          <li key={e.id} className={`log-in relative overflow-hidden rounded-[18px] border border-ink-700 py-3 pe-3 ps-4 shadow-[0_2px_6px_-3px_rgba(13,38,76,0.18)] ${TONE_SURFACE[mark.tone]}`}>
+          <li key={e.id} className={`log-in relative overflow-hidden rounded-[16px] border border-ink-700 py-2 pe-2.5 ps-3.5 shadow-[0_2px_6px_-3px_rgba(13,38,76,0.18)] ${TONE_SURFACE[mark.tone]}`}>
             {/*
               THE BAR IS CLIPPED BY THE CARD, NOT ROUNDED BY ITSELF.
               In the reference it is the card's own leading edge: it follows
@@ -369,7 +387,7 @@ export function ActivityFeed({
               top, which is the thing it is not.
             */}
             <span aria-hidden className={`absolute inset-y-0 start-0 w-[5px] ${TONE_FILL[mark.tone]}`} />
-            <div className="flex min-w-0 items-start gap-2.5">
+            <div className="flex min-w-0 items-start gap-2">
               {/*
                 THE MARK, ON ITS OWN WHITE TILE.
                 `good` is drawn filled and everything else outlined, because
@@ -380,14 +398,14 @@ export function ActivityFeed({
               */}
               <span
                 aria-hidden
-                className="grid h-12 w-12 shrink-0 self-center place-items-center rounded-[14px] bg-ink-850 shadow-[0_1px_4px_-2px_rgba(13,38,76,0.35)]"
+                className="grid h-10 w-10 shrink-0 self-center place-items-center rounded-[12px] bg-ink-850 shadow-[0_1px_4px_-2px_rgba(13,38,76,0.35)]"
               >
                 {mark.tone === 'good' ? (
-                  <span className={`grid h-8 w-8 place-items-center rounded-[40%] ${TONE_FILL.good}`}>
-                    <CheckIcon strokeWidth={3} className="h-[18px] w-[18px] text-on-state" />
+                  <span className={`grid h-[26px] w-[26px] place-items-center rounded-[40%] ${TONE_FILL.good}`}>
+                    <CheckIcon strokeWidth={3} className="h-4 w-4 text-on-state" />
                   </span>
                 ) : (
-                  <Icon className={`h-6 w-6 ${TONE_TEXT[mark.tone]}`} />
+                  <Icon className={`h-5 w-5 ${TONE_TEXT[mark.tone]}`} />
                 )}
               </span>
               {/*
@@ -422,7 +440,7 @@ export function ActivityFeed({
               */}
               <span
                 title={stampText(e.at)}
-                className={`mt-1 shrink-0 rounded-full px-2 py-1 text-[11px] font-bold whitespace-nowrap text-mist-100 ${TONE_PILL[mark.tone]}`}
+                className={`mt-px shrink-0 rounded-full px-1.5 py-0.5 text-[10.5px] font-bold whitespace-nowrap text-mist-100 ${TONE_PILL[mark.tone]}`}
               >
                 {agePill(e.at)}
               </span>
@@ -433,7 +451,7 @@ export function ActivityFeed({
               which on four successes in a row is four gaps of nothing.
             */}
             {(retryable || groupUrl || (technical && hasTechnicalDetail(e))) && (
-              <div className="flex min-w-0 flex-wrap items-center gap-x-3 ps-[58px]">
+              <div className="flex min-w-0 flex-wrap items-center gap-x-3 ps-[46px]">
                 {retryable && (
                   <button
                     type="button"
@@ -479,7 +497,7 @@ export function ActivityFeed({
               the meta because it is JSON.
             */}
             {technical && openRow === e.id && (
-              <div className="mt-1.5 grid gap-1.5 rounded-xl bg-ink-850/70 p-2.5 ms-[58px]">
+              <div className="mt-1.5 grid gap-1.5 rounded-xl bg-ink-850/70 p-2.5 ms-[46px]">
                 <p className="text-[11px] font-bold text-mist-500">
                   <span dir="ltr" className="font-mono">{e.event}</span>
                   {' · '}

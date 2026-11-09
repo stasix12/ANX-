@@ -1638,7 +1638,25 @@ export default function SocialDashboard() {
           state: 'live' as const,
           note: QUEUE_STEP_LABEL[(r.step ?? '') as QueueStep] || 'מפרסם עכשיו',
         })),
-        ...data.upcoming.slice(0, 1).map((r) => ({
+        /*
+         * ─── THE NEXT FIVE, NOT THE NEXT ONE ────────────────────────────
+         *
+         * "בברים בתור להראות את ה-5 הבאים במקום 1" — 09.11.2026.
+         *
+         * One upcoming row answered "what is next" and nothing else: a card
+         * headed "תור פרסומים" that drew a queue of one is a list in name
+         * only, and the owner had to open the history screen to see whether
+         * anything stood behind it.
+         *
+         * FIVE COSTS NO QUERY. `upcoming` is already a capped read of
+         * UPCOMING_LIMIT (40) rows, soonest first, made for the timeline — so
+         * this takes five of rows this screen has in hand.
+         *
+         * And the row's own wording already knew: "בתור הבא" is worn only by
+         * the first waiting row (see firstNext in LiveFlow), the ones behind
+         * it say "בתור". That rule was written when only one could ever show.
+         */
+        ...data.upcoming.slice(0, 5).map((r) => ({
           id: r.id,
           name: r.target?.name ?? 'קבוצה',
           image: r.target?.image_url ?? null,

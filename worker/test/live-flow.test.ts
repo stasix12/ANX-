@@ -541,6 +541,75 @@ async function main(): Promise<void> {
         ),
         '390px: a name longer than the row is ellipsised inside it, not carried out of the card',
       );
+
+      /*
+       * ─── AND THE SHAPE THE CARD ACTUALLY DRAWS SINCE 09.11.2026 ────────
+       *
+       * "בברים בתור להראות את ה-5 הבאים במקום 1."
+       *
+       * The dashboard builds this list as one finished row, one in flight and
+       * then the next FIVE (src/app/social/page.tsx, flowRows). Until that
+       * change it took one upcoming row, so every fit measurement in this file
+       * was made on a card that could hold three rows — and a fit test run on
+       * data that cannot overflow is not a fit test, which is the lesson the
+       * section above this one already carries.
+       *
+       * So the real shape goes in, with his own group names, and the card is
+       * measured against it.
+       */
+      await page.evaluate(() => {
+        window.__rows([
+          { id: 'q-done', name: 'דירות למכירה באר שבע', state: 'done', at: '21:21' },
+          { id: 'q-live', name: 'דרושים בערד', state: 'live', note: 'מעלה מדיה' },
+          { id: 'q-n1', name: 'באר שבע והסביבה ❤', state: 'next' },
+          { id: 'q-n2', name: 'Чистка диванов Беэр-Шева и окрестности — объявления', state: 'next' },
+          { id: 'q-n3', name: 'לוח דירות למכירה ערד', state: 'next' },
+          { id: 'q-n4', name: '😍 באר שבע העיר שלנו 😍', state: 'next' },
+          { id: 'q-n5', name: 'עומר מיתר להבים - יישובי הלווין', state: 'next' },
+        ]);
+      });
+      await page.waitForTimeout(140);
+      for (const width of [320, 360, 390, 430, 768, 1280]) {
+        await page.setViewportSize({ width, height: 1600 });
+        await page.waitForTimeout(140);
+        const five = await page.evaluate(() => {
+          const q = document.querySelector('[data-panel] [data-flow] .anxf-qcard') as HTMLElement;
+          const b = q.getBoundingClientRect();
+          const st = getComputedStyle(q);
+          const left = b.left + parseFloat(st.borderLeftWidth) + parseFloat(st.paddingLeft);
+          const right = b.right - parseFloat(st.borderRightWidth) - parseFloat(st.paddingRight);
+          const li = [...q.querySelectorAll<HTMLElement>('.anxf-queue li')];
+          const rects = li.map((el) => el.getBoundingClientRect());
+          return {
+            rows: li.length,
+            worst: rects.length ? Math.round(Math.max(...rects.map((r) => Math.max(left - r.left, r.right - right)))) : 0,
+            inner: Math.round(right - left),
+            /* Every "בתור הבא" / "בתור" label, in order. */
+            labels: [...q.querySelectorAll<HTMLElement>('.anxf-row-at')].map((el) => (el.textContent ?? '').trim()),
+            clipped: [...q.querySelectorAll<HTMLElement>('.anxf-row-name')].some((el) => el.scrollWidth > el.clientWidth + 1),
+            overflow: document.documentElement.scrollWidth > document.documentElement.clientWidth,
+          };
+        });
+        eq(five.rows, 7, `${width}px: one done, one live and five upcoming are all drawn`);
+        is(
+          five.worst <= 1,
+          `${width}px: NO ROW MAY LEAVE ITS CARD with five upcoming in it — over by ${five.worst}px in a ${five.inner}px card`,
+        );
+        is(!five.overflow, `${width}px: and five rows do not push the page sideways`);
+        /*
+         * ONLY THE FIRST WAITING ROW MAY SAY "בתור הבא". That rule was written
+         * when the card could only ever draw one upcoming row, so nothing has
+         * ever exercised it. Now four rows sit behind that one and each must
+         * make the smaller claim.
+         */
+        eq(
+          five.labels.filter((t) => t === 'בתור הבא').length,
+          1,
+          `${width}px: exactly one row claims to be next — the other four say "בתור"`,
+        );
+        eq(five.labels.filter((t) => t === 'בתור').length, 4, `${width}px: and the four behind it say so`);
+      }
+
       await page.evaluate(() => window.__rows(null));
       await page.waitForTimeout(140);
     }

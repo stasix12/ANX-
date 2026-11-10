@@ -340,6 +340,15 @@ function ProductEditor({ initial, onDone }: { initial: Product; onDone: () => vo
           <input type="checkbox" checked={p.featured} onChange={(e) => set('featured', e.target.checked)} className="size-4 accent-x-blue" /> מוצר נבחר (דף הבית)
         </label>
         <label className="flex items-center gap-2">
+          תווית
+          <input
+            value={p.badge ?? ''}
+            onChange={(e) => set('badge', e.target.value || undefined)}
+            placeholder="למשל: הנמכרת ביותר"
+            className="h-9 w-40 rounded-lg border border-x-line px-2 font-normal"
+          />
+        </label>
+        <label className="flex items-center gap-2">
           <input type="checkbox" checked={!!p.madeInIsrael} onChange={(e) => set('madeInIsrael', e.target.checked)} className="size-4 accent-x-blue" /> מיוצר בישראל
         </label>
         <label className="flex items-center gap-2">

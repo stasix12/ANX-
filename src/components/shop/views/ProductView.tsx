@@ -221,7 +221,14 @@ function ProductDetail({ product }: { product: Product }) {
                 )}
               </div>
             </div>
-            {product.madeInIsrael && <MadeInIsrael className="mt-2" />}
+            {(product.madeInIsrael || product.badge) && (
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                {product.badge && (
+                  <span className="rounded-full bg-linear-to-r from-x-violet to-x-indigo px-2.5 py-1 text-[12.5px] font-bold text-white">★ {product.badge}</span>
+                )}
+                {product.madeInIsrael && <MadeInIsrael />}
+              </div>
+            )}
             <div dir="ltr" className="mt-2 flex items-center justify-between">
               <Stars rating={product.rating} count={product.reviewCount} countLabel="ביקורות" size={19} />
               {available ? (

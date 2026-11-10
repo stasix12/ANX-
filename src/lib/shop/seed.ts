@@ -98,6 +98,7 @@ export const SEED_PRODUCTS: Product[] = [
     compatibility: ['Sabrina — ידית שאיבה לניקוי ספות וריפודים'],
     featured: true,
     tags: ['anaconda', 'handle', 'ידית', 'שאיבה', 'הזרקה', 'ספות', 'ריפודים', 'sabrina', 'סברינה'],
+    badge: 'הנמכרת ביותר',
     madeInIsrael: true,
     createdAt: created(5),
     sortOrder: 1,
@@ -541,7 +542,7 @@ const DEMO_ADMIN: User = {
 };
 
 /** Bumped when the seed changes shape, so browsers drop the old demo catalogue. */
-export const DB_VERSION = 21;
+export const DB_VERSION = 22;
 
 export function buildSeedDB(): ShopDB {
   return {

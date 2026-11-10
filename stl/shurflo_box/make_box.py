@@ -194,6 +194,6 @@ if __name__ == '__main__':
     export(sum(plate[1:], plate[0]), 'feet_plate_TPU.stl')
     plate = [make_foot_tpu15().translate([sx*16, sy*16, 0]) for sx in (-1, 1) for sy in (-1, 1)]
     export(sum(plate[1:], plate[0]), 'feet_plate_TPU_15mm.stl')
-    glue = make_foot_tpu15_glue().rotate([180, 0, 0]).translate([0, 0, 15])      # flipped: the glue face prints on the bed (flattest)
-    plate = [glue.translate([sx*16, sy*16, 0]) for sx in (-1, 1) for sy in (-1, 1)]
+    glue = Manifold.batch_hull([cyl(13, 0, 2), cyl(10, 15-1, 15)])               # wide 26 mm face flat on the bed (no grooves), 20 mm glue face on top
+    plate = [glue.translate([sx*20, sy*20, 0]) for sx in (-1, 1) for sy in (-1, 1)]
     export(sum(plate[1:], plate[0]), 'feet_plate_TPU_15mm_glue.stl')

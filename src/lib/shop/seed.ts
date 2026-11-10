@@ -273,10 +273,10 @@ export const SEED_PRODUCTS: Product[] = [
     ...base,
     id: 'p-quick-socket',
     slug: 'quick-socket',
-    name: 'מחבר מהיר נקבה לצינור הזרקה',
-    subtitle: 'תואם סברינה',
+    name: 'מחבר מהיר תואם סברינה',
+    subtitle: 'לקו הזרקת המים',
     description:
-      'מחבר מהיר נקבה (שקע) לקו הזרקת המים, תואם מכונות סברינה. נכנס אליו התקע של צינור ההזרקה בלחיצה, ומשחררים בהזזת הטבעת — חיבור וניתוק של קו המים בשנייה, בלי כלים. גוף מתכת מצופה עם טבעת נעילה מחוספסת ואחיזה נוחה, והברגה פנימית בצד השני.',
+      'מחבר מהיר לקו הזרקת המים, תואם מכונות סברינה. נכנס אליו התקע של צינור ההזרקה בלחיצה, ומשחררים בהזזת הטבעת — חיבור וניתוק של קו המים בשנייה, בלי כלים. גוף מתכת מצופה עם טבעת נעילה מחוספסת ואחיזה נוחה, והברגה פנימית בצד השני.',
     categories: ['adapters'],
     price: 99,
     images: [3, 2, 4, 1].map((n) => real('quick-socket', n)),
@@ -491,7 +491,7 @@ const DEMO_ADMIN: User = {
 };
 
 /** Bumped when the seed changes shape, so browsers drop the old demo catalogue. */
-export const DB_VERSION = 17;
+export const DB_VERSION = 18;
 
 export function buildSeedDB(): ShopDB {
   return {

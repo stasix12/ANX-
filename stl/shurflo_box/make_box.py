@@ -133,6 +133,9 @@ def make_foot_tpu15():            # TPU corner foot, 15 mm high: wide 26 mm base
     f += cyl(FOOT_PIN/2+0.25, 15-0.1, 15+FOOT_PIN_L)                             # +0.5 mm press fit (TPU squeezes in)
     return f - grip_rings(13)
 
+def make_foot_tpu15_glue():       # same 15 mm TPU foot without the pin: flat 20 mm top to glue / tape under the box
+    return Manifold.batch_hull([cyl(13, 0, 2), cyl(10, 15-1, 15)]) - grip_rings(13)
+
 ABS_H = 15.0                      # rigid ABS feet: lift the box 15 mm
 def make_foot_abs():              # corner foot: d10 pin (light press) into the base pillar pocket
     f = Manifold.batch_hull([cyl(10, 0, ABS_H-2), cyl(9, ABS_H-0.01, ABS_H)])
@@ -191,3 +194,6 @@ if __name__ == '__main__':
     export(sum(plate[1:], plate[0]), 'feet_plate_TPU.stl')
     plate = [make_foot_tpu15().translate([sx*16, sy*16, 0]) for sx in (-1, 1) for sy in (-1, 1)]
     export(sum(plate[1:], plate[0]), 'feet_plate_TPU_15mm.stl')
+    glue = make_foot_tpu15_glue().rotate([180, 0, 0]).translate([0, 0, 15])      # flipped: the glue face prints on the bed (flattest)
+    plate = [glue.translate([sx*16, sy*16, 0]) for sx in (-1, 1) for sy in (-1, 1)]
+    export(sum(plate[1:], plate[0]), 'feet_plate_TPU_15mm_glue.stl')

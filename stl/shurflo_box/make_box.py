@@ -128,6 +128,11 @@ MAT_BASE, MAT_RIM, MAT_WALL = 3.0, 6.0, 4.0   # TPU tray: floor under the box, r
 def box_footprint():              # base outline (2D)
     return rrect(L, D, R)
 
+def make_foot_tpu15():            # TPU corner foot, 15 mm high: wide 26 mm base tapering to 20 mm so it does not wobble
+    f = Manifold.batch_hull([cyl(13, 0, 2), cyl(10, 15-1, 15)])
+    f += cyl(FOOT_PIN/2+0.25, 15-0.1, 15+FOOT_PIN_L)                             # +0.5 mm press fit (TPU squeezes in)
+    return f - grip_rings(13)
+
 ABS_H = 15.0                      # rigid ABS feet: lift the box 15 mm
 def make_foot_abs():              # corner foot: d10 pin (light press) into the base pillar pocket
     f = Manifold.batch_hull([cyl(10, 0, ABS_H-2), cyl(9, ABS_H-0.01, ABS_H)])
@@ -184,3 +189,5 @@ if __name__ == '__main__':
     export(sum(plate[1:], plate[0]), 'feet_plate_ABS_15mm.stl')
     plate = [make_foot().translate([sx*12, sy*12, 0]) for sx in (-1, 1) for sy in (-1, 1)]
     export(sum(plate[1:], plate[0]), 'feet_plate_TPU.stl')
+    plate = [make_foot_tpu15().translate([sx*16, sy*16, 0]) for sx in (-1, 1) for sy in (-1, 1)]
+    export(sum(plate[1:], plate[0]), 'feet_plate_TPU_15mm.stl')

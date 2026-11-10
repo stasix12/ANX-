@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { sortProducts } from '@/lib/shop/logic';
+import type { Product } from '@/lib/shop/types';
 import { useShop } from '@/lib/shop/store';
 import { CategoryChips } from '../CategoryChips';
 import { SampleRibbon, ShopFrame } from '../Chrome';
@@ -13,9 +14,14 @@ import { Img } from '../ui';
 export function HomeView() {
   const s = useShop();
   const published = s.db.products.filter((p) => p.published);
-  const featured = sortProducts(published.filter((p) => p.featured), 'recommended');
-  const all = sortProducts(published, 'recommended');
-  const newest = sortProducts(published, 'newest');
+  // On the home page the handles always lead every row; the rest keep their order.
+  const handlesFirst = (list: Product[]) => [
+    ...list.filter((p) => p.categories.includes('handles')),
+    ...list.filter((p) => !p.categories.includes('handles')),
+  ];
+  const featured = handlesFirst(sortProducts(published.filter((p) => p.featured), 'recommended'));
+  const all = handlesFirst(sortProducts(published, 'recommended'));
+  const newest = handlesFirst(sortProducts(published, 'newest'));
 
   return (
     <ShopFrame nav="home" header="overlay" uprightLogo>

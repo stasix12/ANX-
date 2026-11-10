@@ -195,7 +195,6 @@ export const SEED_PRODUCTS: Product[] = [
     specs: [
       { label: 'עמידות', value: 'עד פי 3 מהפאנל המקורי' },
       { label: 'עמידות בחום', value: 'עד 100 מעלות' },
-      { label: 'מידות', value: '258 × 175 מ״מ' },
       { label: 'עובי', value: '5 מ״מ' },
       { label: 'התקנה', value: '6 ברגי M4 בחורי הלוח המקורי' },
       { label: 'מתגים', value: '2 פתחים למתגי נדנדה, עם סמלי התזה ושאיבה' },
@@ -407,7 +406,7 @@ const DEMO_ADMIN: User = {
 };
 
 /** Bumped when the seed changes shape, so browsers drop the old demo catalogue. */
-export const DB_VERSION = 12;
+export const DB_VERSION = 13;
 
 export function buildSeedDB(): ShopDB {
   return {

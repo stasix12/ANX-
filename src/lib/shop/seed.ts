@@ -25,6 +25,7 @@ export const COLORS = {
   green: { id: 'green', name: 'ירוק', swatch: ['#22b04b', '#121419'] },
   jungle: { id: 'jungle', name: 'ירוק ג׳ונגל', swatch: ['#c9e83a'] },
   red: { id: 'red', name: 'אדום', swatch: ['#ef3b3f', '#a3191d'] },
+  pink: { id: 'pink', name: 'ורוד-שחור', swatch: ['#f2707b', '#1d1f24'] },
   purple: { id: 'purple', name: 'סגול', swatch: ['#7d4cf2', '#121419'] },
   white: { id: 'white', name: 'לבן', swatch: ['#f5f5f7'] },
 } satisfies Record<string, ColorOption>;
@@ -118,6 +119,39 @@ export const SEED_PRODUCTS: Product[] = [
     tags: ['viper', 'וייפר', 'ויפר', 'handle', 'ידית', 'שאיבה', 'הזרקה', 'ספות', 'ריפודים'],
     createdAt: created(0),
     sortOrder: 1.5,
+  },
+  {
+    ...base,
+    id: 'p-big-mamba',
+    slug: 'big-mamba',
+    name: 'BIG MAMBA',
+    subtitle: 'ידית עם ראש שאיבה רחב לניקוי ספות',
+    description:
+      'BIG MAMBA היא הידית החדשה של ANX3D עם ראש שאיבה רחב במיוחד: פיית שאיבה ברוחב 113 מ״מ שמכסה יותר שטח בכל משיכה. הראש והידית מודפסים בחלק אחד בשני צבעים, עם חלון פרספקס שקוף שמראה מה נשאב מהריפוד, פיית התזה מובנית בין שני פסי השאיבה, הדק נירוסטה עם שסתום פליז וצינור מים עם מחבר מהיר.',
+    categories: ['handles'],
+    price: null,
+    images: [1, 2, 3, 4].map((n) => real('big-mamba', n)),
+    colors: [{ ...COLORS.pink }],
+    highlights: [
+      'ראש שאיבה רחב — פייה ברוחב 113 מ״מ',
+      'חלון פרספקס שקוף לשליטה במה שנשאב',
+      'פיית התזה מובנית בין שני פסי השאיבה',
+      'הדק נירוסטה עם שסתום פליז',
+      'אחיזה מחוספסת ומשטחי אחיזה בצדי הראש',
+      'ראש וידית בחלק אחד, מודפס בשני צבעים',
+    ],
+    specs: [
+      { label: 'רוחב פיית השאיבה', value: '113 מ״מ (חריץ 100.9 מ״מ)' },
+      { label: 'חלון', value: 'פרספקס 2 מ״מ במסגרת הננעלת בקליק' },
+      { label: 'מבנה', value: 'ראש וידית בחלק אחד, הדפסה בשני צבעים' },
+      { label: 'הזרקה', value: 'פיית התזה מובנית, הדק נירוסטה ושסתום פליז' },
+      { label: 'חיבור מים', value: 'צינור מים עם מחבר מהיר' },
+      { label: 'צבע', value: 'ורוד עם אחיזה שחורה' },
+    ],
+    featured: true,
+    tags: ['big mamba', 'mamba', 'ממבה', 'ביג ממבה', 'handle', 'ידית', 'רחב', 'שאיבה', 'הזרקה', 'ספות', 'ריפודים'],
+    createdAt: created(-1),
+    sortOrder: 1.7,
   },
   {
     ...base,
@@ -318,7 +352,7 @@ const DEMO_ADMIN: User = {
 };
 
 /** Bumped when the seed changes shape, so browsers drop the old demo catalogue. */
-export const DB_VERSION = 5;
+export const DB_VERSION = 6;
 
 export function buildSeedDB(): ShopDB {
   return {

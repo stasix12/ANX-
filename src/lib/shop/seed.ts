@@ -271,6 +271,29 @@ export const SEED_PRODUCTS: Product[] = [
   },
   {
     ...base,
+    id: 'p-quick-socket',
+    slug: 'quick-socket',
+    name: 'מחבר מהיר נקבה לצינור הזרקה',
+    subtitle: 'תואם סברינה',
+    description:
+      'מחבר מהיר נקבה (שקע) לקו הזרקת המים, תואם מכונות סברינה. נכנס אליו התקע של צינור ההזרקה בלחיצה, ומשחררים בהזזת הטבעת — חיבור וניתוק של קו המים בשנייה, בלי כלים. גוף מתכת מצופה עם טבעת נעילה מחוספסת ואחיזה נוחה, והברגה פנימית בצד השני.',
+    categories: ['adapters'],
+    price: 99,
+    images: [3, 2, 4, 1].map((n) => real('quick-socket', n)),
+    highlights: [
+      'תואם מכונות סברינה',
+      'חיבור וניתוק של קו המים בשנייה, בלי כלים',
+      'טבעת נעילה מחוספסת לאחיזה נוחה',
+      'הברגה פנימית לחיבור לקו',
+      'מתחבר לתקע המהיר לצינור ההזרקה',
+    ],
+    compatibility: ['Sabrina', 'התקע המהיר לצינור ההזרקה'],
+    tags: ['quick coupler', 'socket', 'female', 'מחבר מהיר', 'נקבה', 'שקע', 'מחבר', 'הזרקה', 'מים', 'צינור', 'sabrina', 'סברינה'],
+    createdAt: created(-5),
+    sortOrder: 6.6,
+  },
+  {
+    ...base,
     id: 'p-wand-of-troy',
     slug: 'wand-of-troy',
     name: 'Wand of Troy',
@@ -468,7 +491,7 @@ const DEMO_ADMIN: User = {
 };
 
 /** Bumped when the seed changes shape, so browsers drop the old demo catalogue. */
-export const DB_VERSION = 16;
+export const DB_VERSION = 17;
 
 export function buildSeedDB(): ShopDB {
   return {

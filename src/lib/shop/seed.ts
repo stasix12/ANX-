@@ -318,6 +318,27 @@ export const SEED_PRODUCTS: Product[] = [
   },
   {
     ...base,
+    id: 'p-maxi-pump-service',
+    slug: 'maxi-pump-service',
+    name: 'שירות החלפת משאבת מים',
+    subtitle: 'לסברינה מקסי',
+    description:
+      'שירות החלפה של משאבת המים (משאבת ההזרקה) במכונת סברינה מקסי — פירוק המשאבה הישנה, התקנה של המשאבה במכונה וחיבור קו המים. אחרי ההזמנה ניצור קשר לתיאום מועד השירות.',
+    categories: ['parts'],
+    price: 1790,
+    images: [2, 1, 3].map((n) => real('maxi-pump-service', n)),
+    highlights: [
+      'שירות החלפת משאבת מים לסברינה מקסי',
+      'פירוק, התקנה וחיבור קו המים',
+      'תיאום מועד השירות אחרי ההזמנה',
+    ],
+    compatibility: ['Sabrina Maxi'],
+    tags: ['pump', 'water pump', 'service', 'משאבה', 'משאבת מים', 'משאבת הזרקה', 'החלפה', 'שירות', 'תיקון', 'סברינה', 'מקסי', 'sabrina', 'maxi'],
+    createdAt: created(-7),
+    sortOrder: 11.6,
+  },
+  {
+    ...base,
     id: 'p-wand-of-troy',
     slug: 'wand-of-troy',
     name: 'Wand of Troy',
@@ -515,7 +536,7 @@ const DEMO_ADMIN: User = {
 };
 
 /** Bumped when the seed changes shape, so browsers drop the old demo catalogue. */
-export const DB_VERSION = 19;
+export const DB_VERSION = 20;
 
 export function buildSeedDB(): ShopDB {
   return {

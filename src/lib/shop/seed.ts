@@ -119,11 +119,13 @@ export const SEED_PRODUCTS: Product[] = [
       'קנטים ותפרים של ספות, כסאות ומושבים צרים',
       'מתאימה לריפודי רכב',
       'לעבודות שדורשות תשומת לב ודיוק',
+      'מנגנון פטנט ANX SOFT TOUCH — טריס מווסת מובנה בידית לשליטה בעוצמת השאיבה',
+      'חלון הצפייה מתפרק בקליק — מנקים בסיום כל עבודה והידית נראית כמו חדשה',
       'חלון שקוף בראש השאיבה',
       'הדק להתזה תוך כדי עבודה וקו מים מובנה',
     ],
     featured: true,
-    tags: ['mini viper', 'mini', 'מיני', 'מיני וייפר', 'קטנה', 'רכב', 'כסאות', 'קנטים', 'viper', 'וייפר', 'ויפר', 'handle', 'ידית', 'שאיבה', 'הזרקה', 'ספות', 'ריפודים'],
+    tags: ['mini viper', 'soft touch', 'סופט טאץ', 'טריס', 'ויסות שאיבה', 'mini', 'מיני', 'מיני וייפר', 'קטנה', 'רכב', 'כסאות', 'קנטים', 'viper', 'וייפר', 'ויפר', 'handle', 'ידית', 'שאיבה', 'הזרקה', 'ספות', 'ריפודים'],
     createdAt: created(0),
     sortOrder: 1.5,
   },
@@ -142,6 +144,8 @@ export const SEED_PRODUCTS: Product[] = [
     video: { webm: '/video/big-mamba-demo.webm', mp4: '/video/big-mamba-demo.mp4', poster: '/video/big-mamba-demo-poster.jpg' },
     highlights: [
       'ראש שאיבה רחב — פייה ברוחב 113 מ״מ',
+      'מנגנון פטנט ANX SOFT TOUCH — טריס מווסת מובנה בידית לשליטה בעוצמת השאיבה',
+      'חלון הצפייה מתפרק בקליק — מנקים בסיום כל עבודה והידית נראית כמו חדשה',
       'חלון פרספקס שקוף לשליטה במה שנשאב',
       'פיית התזה מובנית בין שני פסי השאיבה',
       'הדק נירוסטה עם שסתום פליז',
@@ -157,7 +161,7 @@ export const SEED_PRODUCTS: Product[] = [
       { label: 'צבע', value: 'ורוד עם אחיזה שחורה' },
     ],
     featured: true,
-    tags: ['big mamba', 'mamba', 'ממבה', 'ביג ממבה', 'handle', 'ידית', 'רחב', 'שאיבה', 'הזרקה', 'ספות', 'ריפודים'],
+    tags: ['big mamba', 'soft touch', 'סופט טאץ', 'טריס', 'ויסות שאיבה', 'mamba', 'ממבה', 'ביג ממבה', 'handle', 'ידית', 'רחב', 'שאיבה', 'הזרקה', 'ספות', 'ריפודים'],
     createdAt: created(-1),
     sortOrder: 1.7,
   },
@@ -360,7 +364,7 @@ const DEMO_ADMIN: User = {
 };
 
 /** Bumped when the seed changes shape, so browsers drop the old demo catalogue. */
-export const DB_VERSION = 9;
+export const DB_VERSION = 10;
 
 export function buildSeedDB(): ShopDB {
   return {

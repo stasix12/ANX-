@@ -45,10 +45,13 @@ def make_handle():
         h += tear.extrude(8.5).transform(np.array([[1, 0, 0, u], [0, 0, -1, 0.5], [0, 1, 0, T/2]], float))  # spigot
         h -= along_v(SCREW_CLEAR/2, -9, 20, u)            # M4 clearance
         h -= along_v(SCREW_HEAD/2+0.4, 4, 40, u)          # screw head seat 4 mm above the lid
-    # ANX3D engraved 0.8 mm into the top of the grip, reading left-to-right from the front of the box
-    top = GRIP_Z + GRIP_R
-    logo = text2d('ANX3D', 17, LOGO_FONT).extrude(2).transform(np.array([[1, 0, 0, 0], [0, 0, 1, top-0.8], [0, -1, 0, T/2]], float))
-    return h - logo
+    return h - logo_inlay(extra=1.0)                      # pocket for the coloured logo inlay
+
+INLAY = 0.6                       # logo depth: 3 layers at 0.2 mm -> only the last 3 layers need the second colour
+def logo_inlay(extra=0.0):        # ANX3D on the big flat side of the grip (faces the front of the box), flush with the surface
+    t = text2d('ANX3D', 15, LOGO_FONT).translate([0, GRIP_Z])
+    return t.extrude(INLAY + extra).translate([0, 0, T - INLAY])
 
 if __name__ == '__main__':
     export(make_handle(), 'carry_handle.stl')
+    export(logo_inlay(), 'carry_handle_logo.stl')          # load together with carry_handle.stl as one object, 2 parts

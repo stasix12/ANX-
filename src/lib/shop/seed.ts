@@ -77,10 +77,10 @@ export const SEED_PRODUCTS: Product[] = [
       'ANX ANACONDA היא ידית השאיבה שלנו לניקוי ספות וריפודים. הגוף מיוצר בישראל מחומרים חזקים ועמידים במיוחד לחום ולשחיקה של עבודה יומיומית, עם אטם קצף היקפי סביב פתח השאיבה שנצמד לבד ושומר על ואקום מלא לאורך המשיכה. ההדק מאפשר לשלוט בהתזה תוך כדי עבודה בלי להוריד את היד מהידית, והחיבור המהיר בבסיס מתחבר ומתנתק בלי כלים.',
     categories: ['handles'],
     price: 850,
-    images: [...anacondaGreen, ...anacondaBlack],
+    images: [...anacondaBlack, ...anacondaGreen],
     colors: [
-      { ...COLORS.jungle, images: anacondaGreen },
       { ...COLORS.black, images: anacondaBlack },
+      { ...COLORS.jungle, images: anacondaGreen },
     ],
     video: { webm: '/video/anaconda-demo.webm', mp4: '/video/anaconda-demo.mp4', poster: '/video/anaconda-demo-poster.jpg' },
     highlights: [
@@ -446,7 +446,7 @@ const DEMO_ADMIN: User = {
 };
 
 /** Bumped when the seed changes shape, so browsers drop the old demo catalogue. */
-export const DB_VERSION = 14;
+export const DB_VERSION = 15;
 
 export function buildSeedDB(): ShopDB {
   return {

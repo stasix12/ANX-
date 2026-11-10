@@ -59,10 +59,10 @@ const assert = (c, m) => { if (!c) throw new Error('ASSERT: ' + m); console.log(
   await go('/shop/p/anaconda');
   await shot('04-product');
   const mainSrc = async () => page.locator('[aria-roledescription="גלריה"] img').first().getAttribute('src');
-  assert((await mainSrc()).includes('anx-anaconda/1'), 'real ANACONDA photo first');
-  await page.getByRole('button', { name: 'שחור', exact: true }).click();
+  assert((await mainSrc()).includes('anx-anaconda/5'), 'black ANACONDA shown by default');
+  await page.getByRole('button', { name: 'ירוק ג׳ונגל', exact: true }).click();
   await page.waitForTimeout(300);
-  assert((await mainSrc()).includes('anx-anaconda/5'), 'black swatch shows the black handle photos');
+  assert((await mainSrc()).includes('anx-anaconda/1'), 'jungle-green swatch shows the green handle photos');
   assert((await page.locator('video').count()) === 1, 'demo video in gallery');
   await page.getByRole('button', { name: 'הוסף כמות' }).click();
   await page.getByRole('button', { name: /הוסף לסל/ }).click();

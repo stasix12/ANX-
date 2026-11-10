@@ -294,6 +294,30 @@ export const SEED_PRODUCTS: Product[] = [
   },
   {
     ...base,
+    id: 'p-suction-motor-2000w',
+    slug: 'suction-motor-2000w',
+    name: 'החלפת מנוע שאיבה 2000 וואט',
+    subtitle: 'כולל עבודה והרכבה',
+    description:
+      'שדרוג המכונה למנוע שאיבה של 2000 וואט — מנוע סופר חזק ועוצמתי לשאיבה מקסימלית מהריפוד. המחיר כולל את המנוע, את העבודה ואת ההרכבה במכונה. אחרי ההזמנה ניצור קשר לתיאום מועד ההתקנה.',
+    categories: ['parts'],
+    price: 1280,
+    images: [1, 2].map((n) => real('suction-motor-2000w', n)),
+    highlights: [
+      'מנוע שאיבה 2000 וואט',
+      'מנוע סופר חזק ועוצמתי',
+      'המחיר כולל עבודה והרכבה',
+    ],
+    specs: [
+      { label: 'הספק', value: '2000 וואט' },
+      { label: 'כולל', value: 'מנוע, עבודה והרכבה' },
+    ],
+    tags: ['motor', 'suction motor', '2000w', 'מנוע', 'מנוע שאיבה', 'שאיבה', 'החלפה', 'שדרוג', 'וואט', 'התקנה'],
+    createdAt: created(-6),
+    sortOrder: 11.5,
+  },
+  {
+    ...base,
     id: 'p-wand-of-troy',
     slug: 'wand-of-troy',
     name: 'Wand of Troy',
@@ -491,7 +515,7 @@ const DEMO_ADMIN: User = {
 };
 
 /** Bumped when the seed changes shape, so browsers drop the old demo catalogue. */
-export const DB_VERSION = 18;
+export const DB_VERSION = 19;
 
 export function buildSeedDB(): ShopDB {
   return {

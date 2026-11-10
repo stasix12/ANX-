@@ -132,6 +132,7 @@ export const SEED_PRODUCTS: Product[] = [
     price: null,
     images: [1, 2, 3, 4].map((n) => real('big-mamba', n)),
     colors: [{ ...COLORS.pink }],
+    video: { webm: '/video/big-mamba-demo.webm', mp4: '/video/big-mamba-demo.mp4', poster: '/video/big-mamba-demo-poster.jpg' },
     highlights: [
       'ראש שאיבה רחב — פייה ברוחב 113 מ״מ',
       'חלון פרספקס שקוף לשליטה במה שנשאב',
@@ -352,7 +353,7 @@ const DEMO_ADMIN: User = {
 };
 
 /** Bumped when the seed changes shape, so browsers drop the old demo catalogue. */
-export const DB_VERSION = 6;
+export const DB_VERSION = 7;
 
 export function buildSeedDB(): ShopDB {
   return {

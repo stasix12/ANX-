@@ -174,7 +174,7 @@ export const SEED_PRODUCTS: Product[] = [
     description:
       'פאנל חזית חלופי למכונת סברינה מקסי, בעיצוב ANX3D: לוח שחור עם לוגו ANX3D לבן ופתחי אוורור, שמחליף את הלוח המקורי באותן נקודות ברגים ובאותם מיקומים של המתגים והחיבורים. שני מתגי הפעלה מסומנים — התזה ושאיבה — שקע חשמל עם מכסה, מחבר מהיר מפליז לקו המים, ופתח לכבל החשמל עם אטם כבל מודפס.',
     categories: ['parts'],
-    price: null,
+    price: 585,
     images: [1, 2].map((n) => real('sabrina-maxi-panel', n)),
     video: {
       webm: '/video/sabrina-panel-demo.webm',
@@ -182,19 +182,25 @@ export const SEED_PRODUCTS: Product[] = [
       poster: '/video/sabrina-panel-demo-poster.jpg',
     },
     highlights: [
+      'עמיד עד פי 3 מהפאנל המקורי',
+      'עמיד בחום עד 100 מעלות',
+      'פתחי אוורור לעבודה רציפה ויעילה של המשאבה',
+      'אזורי כפתורים מודגשים',
+      'כולל גומיית אטימה לחיבור ההזרקה',
       'מחליף את לוח החזית המקורי — אותם חורי ברגים ואותם מיקומים',
       'שני מתגים עם סימון התזה ושאיבה',
-      'מקום לשקע חשמל ולמחבר מהיר לקו המים',
       'פתח לכבל החשמל עם אטם כבל מודפס',
-      'לוגו ANX3D בולט ופתחי אוורור',
       'הדפסה בשני צבעים — לוח שחור, אותיות וסמלים לבנים',
     ],
     specs: [
+      { label: 'עמידות', value: 'עד פי 3 מהפאנל המקורי' },
+      { label: 'עמידות בחום', value: 'עד 100 מעלות' },
       { label: 'מידות', value: '258 × 175 מ״מ' },
       { label: 'עובי', value: '5 מ״מ' },
       { label: 'התקנה', value: '6 ברגי M4 בחורי הלוח המקורי' },
       { label: 'מתגים', value: '2 פתחים למתגי נדנדה, עם סמלי התזה ושאיבה' },
       { label: 'פתחים', value: 'עגול 44 מ״מ ועגול 32 מ״מ לחיבורים' },
+      { label: 'אטימה', value: 'גומיית אטימה לחיבור ההזרקה (כלולה)' },
       { label: 'כבל חשמל', value: 'פתח 16.4 מ״מ עם אטם כבל מודפס לכבל 7–9 מ״מ' },
     ],
     compatibility: ['Sabrina Maxi (Santoemma) — פאנל החזית התחתון'],
@@ -401,7 +407,7 @@ const DEMO_ADMIN: User = {
 };
 
 /** Bumped when the seed changes shape, so browsers drop the old demo catalogue. */
-export const DB_VERSION = 11;
+export const DB_VERSION = 12;
 
 export function buildSeedDB(): ShopDB {
   return {

@@ -70,6 +70,25 @@ export function TargetPicker({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [targets, query, channel, city, category]);
 
+  /*
+   * THE SAME FILTER WITH THE CATEGORY TAKEN OUT OF IT.
+   *
+   * `visible` is the city AND the category at once, which is correct for the
+   * list and is exactly what left him without a button for the city itself —
+   * see the pair sets below. Kept beside `visible` rather than derived from
+   * it, because a category is not a subset of anything: removing it WIDENS.
+   */
+  const baseVisible = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return targets.filter(
+      (t) =>
+        (channel === 'all' || t.channel === channel) &&
+        (!city || cityOf(t) === city) &&
+        (!q || t.name.toLowerCase().includes(q) || t.url.toLowerCase().includes(q)),
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [targets, query, channel, city]);
+
   /* Drawn slice. `visible` stays the real filtered set everything else uses. */
   const page = useMemo(() => visible.slice(0, shown), [visible, shown]);
 
@@ -225,8 +244,69 @@ export function TargetPicker({
    * nobody has ever needed. Both were drawn for one commit and both were
    * clutter on a row he reads every time he sends a post.
    */
-  const quickSets: { label: string; icon?: React.ReactNode; items: SocialTarget[]; except?: boolean }[] = [
-    { label: shownLabel, items: visible, except: true },
+  /*
+   * ─── THE OTHER HALF OF THE PAIR ─────────────────────────────────
+   *
+   * "אני רוצה לבחור שיהיה רק באר שבע / או כל עיר מסוימת ושאפשר גם להוסיף /
+   *  למחוק את הדוברי רוסית."
+   *
+   * The chip above names `visible`, and `visible` is the city AND the
+   * category at once. So from the state his screenshot shows — באר שבע
+   * chosen, דוברי רוסית chosen — the only set on the row was their
+   * intersection, 21 of the city's 158, and THE CITY ITSELF HAD NO BUTTON AT
+   * ALL: to publish to Be'er Sheva he first had to work out that the category
+   * segment was the thing in his way and reset it. The complement was no
+   * help either, because "הכל חוץ מבאר שבע · דוברי רוסית" is 252 —
+   * every OTHER city included — and not the 137 he meant.
+   *
+   * So whichever half of the city/category pair is not currently the filter
+   * is offered beside it:
+   *   city + category → THE CITY ON ITS OWN, the wider set that was
+   *                      unreachable without touching the filter.
+   *   city alone      → EACH CATEGORY INSIDE IT, so "+" and "−" put the
+   *                      Russian-speaking groups into the city he just
+   *                      selected or take them back out — both halves of his
+   *                      sentence, on screen at the same moment.
+   *
+   * "רק" ON ONE OF THESE MOVES THE CATEGORY FILTER TO MATCH, and that is what
+   * keeps it honest: a chip that selects 158 while the screen shows 21 ends on
+   * the "יעדים נבחרים לא מוצגים" bar — a warning that fires on
+   * success, beside a button that undoes it. `except` already does this for
+   * the same reason. "+" and "−" deliberately do NOT: they are modifiers on a
+   * selection being built while browsing, and moving the ground under them is
+   * the opposite of what they are for.
+   *
+   * ONLY WITH A CITY CHOSEN, AND NEVER UNDER A SEARCH. Without a city the
+   * wider half is "everything", which is what clearing the filter already
+   * does; and a search narrows by words no chip can carry, so the label would
+   * name a set it does not hold — the one thing this row must never do.
+   */
+  const pairSets: { label: string; items: SocialTarget[]; pick: () => void }[] =
+    !city || query.trim()
+      ? []
+      : category
+        ? [{ label: city, items: baseVisible, pick: () => setCategory('') }]
+        : Array.from(new Set(baseVisible.map((t) => t.category).filter(Boolean) as string[]))
+            .sort((a, b) => a.localeCompare(b, 'he'))
+            .map((c) => ({
+              label: `${c} · ${city}`,
+              items: baseVisible.filter((t) => (t.category || '') === c),
+              pick: () => setCategory(c),
+            }));
+
+  const quickSets: { label: string; icon?: React.ReactNode; items: SocialTarget[]; except?: boolean; pick?: () => void }[] = [
+    /*
+     * THE WIDER OF THE PAIR FIRST, ALWAYS.
+     *
+     * One of these two is a strict subset of the other — they differ by the
+     * category dimension and nothing else — so ordering them by size orders
+     * them by containment, and the row reads the way the decision is made:
+     * the whole city, then the part of it. Written as a sort rather than two
+     * hand-ordered branches because WHICH ONE is wider flips with the filter:
+     * with a category chosen the pair set is the city and comes first, without
+     * one it is the category inside the city and comes second.
+     */
+    ...[{ label: shownLabel, items: visible, except: true }, ...pairSets].sort((a, b) => b.items.length - a.items.length),
     {
       label: 'מועדפות',
       icon: <StarIcon className="h-3.5 w-3.5" fill="currentColor" />,
@@ -281,7 +361,17 @@ export function TargetPicker({
         {quickSets.map((q) => (
           <Fragment key={q.label}>
             <span className="inline-flex overflow-hidden rounded-xl">
-              <Button size="sm" variant="secondary" className="!rounded-none" onClick={() => only(q.items)}>
+              <Button
+                size="sm"
+                variant="secondary"
+                className="!rounded-none"
+                onClick={() => {
+                  only(q.items);
+                  /* The pair sets carry one; see their note. Without it the
+                     wider half selects rows the category filter is hiding. */
+                  q.pick?.();
+                }}
+              >
                 {q.icon}רק {q.label} ({q.items.length})
               </Button>
               {selected.length > 0 && (

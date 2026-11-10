@@ -1078,11 +1078,48 @@ async function tick(state: WorkerState): Promise<void> {
    * below), so a notice about a login Facebook challenged, or about the
    * browser-window burst, is untouched. One flag, one owner, one release.
    */
+  /*
+   * ─── AND IT ASKS AGAIN BEFORE IT BELIEVES THE ANSWER ─────────────────
+   *
+   * CAUGHT ON HIS LIVE LOG, 09.11.2026, BY THIS FIX'S OWN EVENT:
+   *
+   *   17:11:26  rate_limited        פייסבוק הגביל … (Бээр-Шева и юг Израиля)
+   *   17:11:27  rate_limit_cleared  ההגבלה כבר לא בתוקף   ← ONE SECOND LATER, AND FALSE
+   *   17:11:36  worker_holding      …מוקפא … (עוד 180 דק׳)   ← so it very much WAS in force
+   *   17:13:15  rate_limited        פייסבוק הגביל … (Бээр-Шева на ладони)
+   *
+   * `control` is read ONCE at the top of the tick. A lane that is still
+   * publishing can write the freeze AFTER that read and set `freezeHold` in
+   * the same breath — so this branch compares a `rateLimitedUntil` from
+   * before the freeze existed with a `freezeHold` from after it, and both are
+   * telling the truth about different instants. It then announced the freeze
+   * over, took the notice down, and let the tick fall through to the gate
+   * below — which the notice was the only thing closing. That is the 17:13
+   * line: a fresh publication pushed into an account Facebook was in the
+   * middle of limiting, which is the one thing the freeze exists to stop.
+   *
+   * THE RE-READ IS SOUND AND NOT A RETRY. The rate-limit branch awaits
+   * `saveWorkerSetting` BEFORE it sets `freezeHold`, so wherever this flag is
+   * true the write has already landed — a read taken now cannot miss it. A
+   * genuine clear from the dashboard is minutes old and survives this
+   * unchanged; only the one-second race does not.
+   */
   if (!control.rateLimitedUntil && state.freezeHold) {
-    state.attention = '';
-    state.freezeHold = false;
-    await logActivity('info', 'rate_limit_cleared', 'ההגבלה כבר לא בתוקף — הפרסום חוזר לפעול כרגיל.');
-    console.log('[worker] ההגבלה נוקתה מבחוץ — ממשיכים לפרסם.');
+    const fresh = await getSetting<ControlSettings>('control', { paused: false, rateLimitedUntil: null });
+    const landed = fresh.rateLimitedUntil ? new Date(fresh.rateLimitedUntil) : null;
+    if (landed && Number.isFinite(landed.getTime()) && landed.getTime() > Date.now()) {
+      /* The freeze landed between the two reads, so this tick holds — here
+         and not on the next one, because the gate that would have caught it
+         is already behind us and `state.attention` is the only thing left
+         closing the queue. It carries the lane's own sentence, with the hour
+         in it, so there is nothing to compose. */
+      return idle(state, state.attention || 'פייסבוק הגבילה את קצב הפרסום — הפרסום מוקפא זמנית.');
+    } else {
+      state.attention = '';
+      state.freezeHold = false;
+      await logActivity('info', 'rate_limit_cleared', 'ההגבלה כבר לא בתוקף — הפרסום חוזר לפעול כרגיל.');
+      console.log('[worker] ההגבלה נוקתה מבחוץ — ממשיכים לפרסם.');
+    }
   }
 
   /* Each of these three is a sentence that answers "למה לא מפרסם" — see

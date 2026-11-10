@@ -198,7 +198,18 @@ const code = worker.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, ''
    * running then, because the process that set it may have been closed hours
    * ago — and the tick carries on to publish rather than waiting a cycle.
    */
-  const gate = code.slice(frozen, manual);
+  /*
+   * RE-POINTED AT THE THAW ITSELF, AND NOT AT EVERYTHING BEFORE THE NOTICE
+   * GATE. This used to slice all the way to `manual`, which swept in the
+   * external-clear block below it — and that block grew a `return idle(...)`
+   * of its own when it learned to re-read before believing a stale "no
+   * freeze". The claim here is about THE THAW: past the instant, the tick
+   * carries on and publishes on the same pass rather than costing a cycle.
+   * Measured against the thaw's own braces so it keeps saying only that.
+   */
+  const external = code.indexOf('if (!control.rateLimitedUntil && state.freezeHold) {');
+  is(external > frozen && external < manual, 'the external clear sits between the freeze gate and the notice gate');
+  const gate = code.slice(frozen, external);
   is(/left > 0/.test(gate), 'while the instant is ahead, the tick holds');
   is(/saveWorkerSetting\('control', \{ \.\.\.control, rateLimitedUntil: null \}\)/.test(gate), 'and past it, the freeze is cleared from the database');
   is(!/return idle/.test(gate.slice(gate.indexOf('saveWorkerSetting'))), 'and the tick does NOT return — it goes on and publishes on the same pass');
@@ -406,7 +417,14 @@ function manualExitPass(): void {
  * browser-burst notice is left exactly where it is.
  */
 function externalClearPass(): void {
-  const release = /if \(!control\.rateLimitedUntil && state\.freezeHold\) \{[\s\S]{0,260}state\.attention = '';[\s\S]{0,120}state\.freezeHold = false;/;
+  /*
+   * The window is 1200 and not 260 because the block now re-reads the setting
+   * before it believes a stale "no freeze" — see the note at the foot of this
+   * function. It is still far short of the 3300 that would reach the ten-minute
+   * notice clock below, which has a `state.attention = ''` of its own and must
+   * never be what satisfies this.
+   */
+  const release = /if \(!control\.rateLimitedUntil && state\.freezeHold\) \{[\s\S]{0,1200}state\.attention = '';[\s\S]{0,120}state\.freezeHold = false;/;
   is(release.test(worker), 'a freeze that is gone from the row releases the notice, however it went');
 
   /* The release must stand OUTSIDE the `if (control.rateLimitedUntil)` block —
@@ -423,8 +441,54 @@ function externalClearPass(): void {
     'it is guarded by freezeHold — an unguarded clear would wipe a login challenge the owner still has to answer');
 
   /* And it says so once, rather than silently. */
-  is(/if \(!control\.rateLimitedUntil && state\.freezeHold\)[\s\S]{0,400}logActivity\('info', 'rate_limit_cleared'/.test(worker),
+  is(/if \(!control\.rateLimitedUntil && state\.freezeHold\)[\s\S]{0,900}logActivity\('info', 'rate_limit_cleared'/.test(worker),
     'and it writes one line to the log, so "why did it start again" has an answer');
+
+  /*
+   * ─── AND IT ASKS AGAIN BEFORE IT BELIEVES THE ANSWER ────────────────
+   *
+   * THIS BLOCK'S OWN BUG, CAUGHT BY THIS BLOCK'S OWN LOG LINE, on his live
+   * account on 09.11.2026:
+   *
+   *   17:11:26  rate_limited        פייסבוק הגביל …
+   *   17:11:27  rate_limit_cleared  ההגבלה כבר לא בתוקף   ← one second later
+   *   17:11:36  worker_holding      … (עוד 180 דק׳)         ← so it very much was
+   *   17:13:15  rate_limited        פייסבוק הגביל …         ← the cost
+   *
+   * `control` is read once at the top of the tick. A lane still publishing
+   * writes the freeze after that read and sets `freezeHold` in the same
+   * breath — so this block compared a `rateLimitedUntil` from before the
+   * freeze existed with a `freezeHold` from after it. It then declared the
+   * freeze over and took down the notice, which by then was the only thing
+   * still closing the gate: the freeze gate above had already been passed
+   * with the stale value. That is the 17:13 line.
+   *
+   * THE RE-READ CANNOT MISS. The rate-limit branch awaits its write BEFORE
+   * setting `freezeHold`, so wherever the flag is true the row is there. A
+   * genuine clear from the dashboard is minutes old and is unaffected.
+   */
+  const body = worker.slice(
+    worker.indexOf('if (!control.rateLimitedUntil && state.freezeHold) {'),
+    worker.indexOf("if (state.attention) return idle(state,"),
+  );
+  is(
+    /const fresh = await getSetting<ControlSettings>\('control'/.test(body),
+    'the release asks the database again before it declares the freeze over — the top-of-tick read may predate it',
+  );
+  is(
+    /landed\.getTime\(\) > Date\.now\(\)/.test(body),
+    'and only a freeze whose instant is still ahead counts — an expired one is exactly what this block is for',
+  );
+  is(
+    /landed\.getTime\(\) > Date\.now\(\)[\s\S]{0,500}return idle\(state, state\.attention/.test(body),
+    'a freeze that landed between the two reads HOLDS the tick — falling through would publish past a standing freeze',
+  );
+  /* And the release itself is still in the else, so a real clear behaves
+     exactly as it did: notice down, flag down, one line, then publish. */
+  is(
+    /\} else \{[\s\S]{0,200}state\.attention = '';[\s\S]{0,120}state\.freezeHold = false;/.test(body),
+    'and a freeze that really is gone still releases on this very tick',
+  );
 }
 
 async function main(): Promise<void> {

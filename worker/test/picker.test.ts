@@ -106,6 +106,19 @@ assert.equal(shownLabel('ספות', 'באר שבע', 'דוברי רוסית'), '
   pin('{q.except && complementOf(q.items).length > 0 && (', 'hides "הכל חוץ מ…" when there is nothing left over, or when the set is not the filter');
   pin('{ label: shownLabel, items: visible, except: true },', 'labels that chip with it, and offers the complement of exactly that set');
   pin("const shownLabel = query.trim() ? 'המוצגים' : [city, category].filter(Boolean).join(' · ') || 'כל המוצגים';", 'names the set its first chip replaces');
+  /* THE PAIR SETS. Everything the browser block below presses is these four
+     lines; pinned so the simulation cannot drift from the component. */
+  pin('!city || query.trim()', 'refuses a pair chip without a city, or under a search that no label can carry');
+  pin("? [{ label: city, items: baseVisible, pick: () => setCategory('') }]", 'offers the CITY on its own when a category is narrowing it');
+  pin('pick: () => setCategory(c),', 'and the category inside the city, each moving the filter to match');
+  pin('q.pick?.();', 'and "רק" on a pair chip moves the filter with it, so nothing it selects is left behind the filter');
+  pin('.sort((a, b) => b.items.length - a.items.length)', 'puts the wider of the pair first, which is the order the decision is made in');
+  /* `baseVisible` must NOT read the category, or the wider half is not wider.
+     Matched on the predicate, not the word, so a comment cannot satisfy it. */
+  assert.ok(
+    !/const baseVisible = useMemo\(\(\) => \{[\s\S]{0,600}t\.category/.test(src),
+    'the category-free base set must not filter by category — it is the half that widens',
+  );
   /* `less` must not borrow enabledIds — see the note above. Matched on the
      call, not the word, so the comment explaining it cannot satisfy this. */
   assert.ok(!/const less = \(items: SocialTarget\[\]\) => \{[\s\S]{0,200}enabledIds\(/.test(src), 'subtraction must not skip a disabled target — it would be unremovable');
@@ -363,6 +376,138 @@ async function drive(): Promise<void> {
         await page.locator('[aria-label="עיר"] button[aria-pressed="true"]', { hasText: 'כל הערים' }).count(),
         `${at}: the city filter did not step aside`,
       );
+
+      /*
+       * ── HIS SENTENCE, PRESSED ─────────────────────────────────────────
+       *
+       * "אני רוצה לבחור שיהיה רק באר שבע / או כל עיר מסוימת ושאפשר גם
+       *  להוסיף / למחוק את הדוברי רוסית."
+       *
+       * Both halves have to be reachable FROM THE SAME ROW, without going
+       * back to the category segment in between — that round trip is the
+       * whole complaint. So: pick the city, take the whole city, then take
+       * the Russian-speaking groups back out of it, and check what the picker
+       * handed the campaign.
+       */
+      await page.locator(`[aria-label="עיר"] button`, { hasText: 'באר שבע' }).first().click();
+      await page.waitForFunction(
+        () => [...document.querySelectorAll('button')].some((b) => (b.textContent ?? '').includes('רק באר שבע (')),
+      );
+      const bs = data.filter((t) => t.city === 'באר שבע');
+      const bsRu = bs.filter((t) => t.category === RUSSIAN);
+      const bsRest = bs.filter((t) => t.category !== RUSSIAN && t.enabled).map((t) => t.id);
+      is(bsRu.length > 0 && bsRest.length > 0, `${at}: the fixture cannot tell the two halves apart`);
+
+      /* The city, on its own, with no category chosen. */
+      const cityBtn = btn(`רק באר שבע (${bs.filter((t) => t.enabled).length})`);
+      is(await cityBtn.count(), `${at}: the city has no button of its own`);
+      /* AND THE CATEGORY INSIDE IT, at the same moment — this is the chip
+         that did not exist, and the reason "−" was unreachable from here. */
+      const inCity = `${RUSSIAN} · באר שבע`;
+      is(await btn(`רק ${inCity} (${bsRu.length})`).count(), `${at}: the category inside the city is not offered`);
+
+      await cityBtn.first().click();
+      await page.waitForFunction((n) => window.__selected.length === n, bs.filter((t) => t.enabled).length);
+      eq(await page.locator('text=לא מוצגים').count(), 0, `${at}: taking the whole city stranded part of it behind the filter`);
+
+      /* "− דוברי רוסית · באר שבע" — the second half of his sentence, one tap
+         later, with no filter change in between. */
+      const cityMinus = page.locator(`button[aria-label="הסר את ${inCity} מהבחירה (${bsRu.length})"]`);
+      await cityMinus.waitFor();
+      await cityMinus.click();
+      await page.waitForFunction((n) => window.__selected.length === n, bsRest.length);
+      eq(
+        [...(await out())].sort(),
+        [...bsRest].sort(),
+        `${at}: THE WHOLE POINT — "the city without the Russian-speaking groups" is not what the picker handed back`,
+      );
+      /* And the other direction, from the same chip, with nothing else moved. */
+      const cityPlus = page.locator(`button[aria-label="הוסף את ${inCity} לבחירה הקיימת"]`);
+      await cityPlus.click();
+      await page.waitForFunction((n) => window.__selected.length === n, bs.filter((t) => t.enabled).length);
+      eq([...(await out())].sort(), [...bs.filter((t) => t.enabled).map((t) => t.id)].sort(), `${at}: "+" did not put the category back`);
+
+      /*
+       * ── AND THE WIDER HALF, FROM THE STATE HIS SCREENSHOT IS IN ───────
+       *
+       * City AND category chosen. The chip above names their intersection;
+       * this one names the city, which had no button at all before. Pressing
+       * it must ALSO stand the category filter down, or it selects 138 rows
+       * while the screen shows 46 of them and the success lands under a
+       * "יעדים נבחרים לא מוצגים" warning.
+       */
+      await page.locator(`[aria-label="קטגוריה"] button`, { hasText: RUSSIAN }).first().click();
+      await page.waitForFunction(
+        (n) => [...document.querySelectorAll('button')].some((b) => (b.textContent ?? '').includes(`רק באר שבע · ${n}`)),
+        RUSSIAN,
+      );
+      is(await btn(`רק באר שבע · ${RUSSIAN} (${bsRu.length})`).count(), `${at}: the intersection chip changed meaning`);
+      const widerBtn = btn(`רק באר שבע (${bs.filter((t) => t.enabled).length})`);
+      is(await widerBtn.count(), `${at}: with both filters on, the city itself is unreachable — the complaint, exactly`);
+      /* AND IT READS WIDE-TO-NARROW. The two chips differ by the category and
+         nothing else, so the bigger one contains the smaller; offering the
+         part before the whole is the order that made the whole invisible. */
+      const chipOrder = await page.evaluate(() =>
+        [...document.querySelectorAll('button')].map((b) => (b.textContent ?? '').trim()).filter((t) => t.startsWith('רק ')),
+      );
+      is(
+        chipOrder.findIndex((t) => t.includes(`רק באר שבע (`)) < chipOrder.findIndex((t) => t.includes('·')),
+        `${at}: the narrower chip was offered before the whole city`,
+      );
+      await page.locator('button', { hasText: 'נקה הכל' }).first().click();
+      await page.waitForFunction(() => window.__selected.length === 0);
+      await widerBtn.first().click();
+      await page.waitForFunction((n) => window.__selected.length === n, bs.filter((t) => t.enabled).length);
+      eq(
+        [...(await out())].sort(),
+        [...bs.filter((t) => t.enabled).map((t) => t.id)].sort(),
+        `${at}: the city chip did not select the whole city`,
+      );
+      eq(await page.locator('text=לא מוצגים').count(), 0, `${at}: the city chip left the category filter on, hiding what it selected`);
+      is(
+        await page.locator('[aria-label="קטגוריה"] button[aria-pressed="true"]', { hasText: 'כל הקטגוריות' }).count(),
+        `${at}: the category filter did not step aside for the wider set`,
+      );
+
+      /*
+       * ── AND THE ROW, AT ITS BUSIEST, STILL FITS THE PHONE ─────────────
+       * This is the state with the most chips on it: a city, its category,
+       * the complement, favourites and pages.
+       */
+      await page.locator(`[aria-label="קטגוריה"] button`, { hasText: RUSSIAN }).first().click();
+      await page.waitForFunction(
+        (n) => [...document.querySelectorAll('button')].some((b) => (b.textContent ?? '').includes(`רק באר שבע · ${n}`)),
+        RUSSIAN,
+      );
+      const busy = await page.evaluate(() => ({
+        over: document.documentElement.scrollWidth > document.documentElement.clientWidth,
+        small: [...document.querySelectorAll('button')]
+          .map((e) => e.getBoundingClientRect())
+          .filter((b) => b.width > 0 && (b.height < 40 || b.width < 24)).length,
+      }));
+      eq(busy.over, false, `${at}: the pair chip widened the page`);
+      eq(busy.small, 0, `${at}: the pair chip is under the 40px floor`);
+
+      /*
+       * ── NOT UNDER A SEARCH, AND NOT WITHOUT A CITY ───────────────────
+       *
+       * A search narrows by words no chip can carry, so "רק באר שבע" over a
+       * searched list would name a set it does not hold — the one thing the
+       * note above `shownLabel` says this row must never do. And with no city
+       * the wider half is "everything", which clearing the filter already is.
+       */
+      await page.fill('input[aria-label="חיפוש יעד"]', 'קבוצה 1');
+      await page.waitForFunction(
+        () => ![...document.querySelectorAll('button')].some((b) => (b.textContent ?? '').includes('רק באר שבע (')),
+      );
+      eq(await btn('רק באר שבע (').count(), 0, `${at}: a pair chip survived a search, naming a set it no longer holds`);
+      await page.fill('input[aria-label="חיפוש יעד"]', '');
+      await page.locator(`[aria-label="עיר"] button`, { hasText: 'כל הערים' }).first().click();
+      await page.waitForFunction(
+        () => [...document.querySelectorAll('button')].some((b) => (b.textContent ?? '').includes(`רק ${'דוברי רוסית'} (`)),
+      );
+      eq(await btn('· באר שבע').count(), 0, `${at}: a city-scoped chip was drawn with no city chosen`);
+      await page.locator(`[aria-label="קטגוריה"] button`, { hasText: 'כל הקטגוריות' }).first().click();
 
       /* ── and the row still fits the phone, WITH the new chip on it ──── */
       await page.locator(`[aria-label="קטגוריה"] button`, { hasText: RUSSIAN }).first().click();

@@ -693,7 +693,40 @@
  *
  * התזמון, סדר התור, מנגנון הפרסום, חישוב זמני הפרסום וההגדרות הקיימות לא נגעו.
  */
-export const WORKER_VERSION = '4.58.0';
+/*
+ * ─── 4.58.0 → 4.59.0 — DOES THIS HAVE TO REACH THE PC? YES. THE FIX FOR
+ *     4.57.0'S OWN BUG, FOUND BY 4.57.0'S OWN LOG LINE ──────────────────
+ *
+ * b70bd67 taught the worker to take the freeze banner down when the row had
+ * been cleared from outside. It compares two facts that are read at different
+ * instants, and on his live log the gap between them is visible to the second:
+ *
+ *   17:11:26  rate_limited        פייסבוק הגביל … (Бээр-Шева и юг Израиля)
+ *   17:11:27  rate_limit_cleared  ההגבלה כבר לא בתוקף   ← one second later, and false
+ *   17:11:36  worker_holding      … (עוד 180 דק׳)         ← so it very much was
+ *   17:13:15  rate_limited        פייסבוק הגביל … (Бээр-Шева на ладони)
+ *
+ * `control` is read once at the top of the tick; a lane still publishing
+ * writes the freeze after that read and sets `freezeHold` in the same breath.
+ * So the release saw "no freeze" from before it existed and "mine" from after,
+ * believed both, took the notice down — and the notice was the only thing
+ * still closing the gate, because the freeze gate itself had already been
+ * passed with the stale value. The 17:13 line is the cost: a publication
+ * pushed into an account Facebook was in the middle of limiting.
+ *
+ * It now re-reads before it believes the answer, and holds when the freeze
+ * turns out to be standing. The re-read cannot miss: the rate-limit branch
+ * awaits its write BEFORE setting `freezeHold`, so wherever the flag is true
+ * the row is already there. A real clear from the dashboard is minutes old
+ * and behaves exactly as it did.
+ *
+ * This is the publishing gate and it runs on the PC, so it has to reach it.
+ * CHECKED AGAINST THE RELEASE LIST: v4.58.0 was published 09.11 at 16:34 and
+ * both machines are already running it, so 4.59.0 is free.
+ *
+ * התזמון, סדר התור, מנגנון הפרסום וההגדרות הקיימות לא נגעו.
+ */
+export const WORKER_VERSION = '4.59.0';
 
 /**
  * A FINGERPRINT OF EVERYTHING THE INSTALLER CARRIES.
@@ -1413,4 +1446,4 @@ export const WORKER_VERSION = '4.58.0';
  * is asked to update anything for a window that only draws what is already in
  * social_activity_log.
  */
-export const WORKER_FINGERPRINT = 'd22e1c2b79c8d70f';
+export const WORKER_FINGERPRINT = '067dfb77dad5ae04';

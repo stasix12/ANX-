@@ -115,7 +115,36 @@ const gates = [...tick.matchAll(/return idle\(state, ([^;]+)\);/g)].map((m) => m
  * reason the other three are. If it ever stops going through idle(), this
  * number catches it.
  */
-eq(gates.length, 4, 'the four gates at the top of tick() are the only ways the worker holds back');
+/*
+ * AND A FIFTH, WHICH IS THE SECOND ONE ASKED AGAIN.
+ *
+ * `control` is read once at the top of the tick, and a lane that is still
+ * publishing can write the freeze AFTER that read — so the release below
+ * compared a `rateLimitedUntil` from before the freeze existed with a
+ * `freezeHold` from after it. Seen on his own log on 09.11: rate_limited at
+ * 17:11:26, rate_limit_cleared at 17:11:27, worker_holding "עוד 180 דק׳" at
+ * 17:11:36, and a fresh publication into the limited account at 17:13:15.
+ *
+ * The release now re-reads before it believes the answer, and when the freeze
+ * turns out to be standing it HOLDS rather than falling through — the gate
+ * that would have caught it is already behind this line. So it is a fifth
+ * `return idle(...)`, counted here like the others, and it is the only one
+ * that reports somebody else's sentence: the lane's, which already carries
+ * the hour.
+ */
+eq(gates.length, 5, 'the five gates at the top of tick() are the only ways the worker holds back');
+ok(
+  /const fresh = await getSetting<ControlSettings>\('control'/.test(tick),
+  'the release asks the database again before it declares a freeze over',
+);
+ok(
+  tick.indexOf('const fresh = await getSetting<ControlSettings>(\'control\'') > tick.indexOf('if (!control.rateLimitedUntil && state.freezeHold) {'),
+  'and it asks INSIDE the release, not at the top where the stale read came from',
+);
+ok(
+  /landed\.getTime\(\) > Date\.now\(\)[\s\S]{0,400}return idle\(state, state\.attention/.test(tick),
+  'a freeze that landed between the two reads holds the tick instead of letting it publish',
+);
 /* Its sentence is built one line above the return — the three others are
    written inline — so it is read off the tick body rather than off the
    captured argument, which here is the name the expression was given. */

@@ -249,6 +249,28 @@ export const SEED_PRODUCTS: Product[] = [
   },
   {
     ...base,
+    id: 'p-quick-coupler',
+    slug: 'quick-coupler',
+    name: 'מחבר מהיר לצינור הזרקה',
+    subtitle: 'לסברינה מיני ולסברינה מקסי',
+    description:
+      'מחבר מהיר (תקע) לצינור הזרקת המים, שמתאים למכונות סברינה מיני וסברינה מקסי. מתברג על הצינור ונכנס בלחיצה לשקע המהיר במכונה — מחברים ומנתקים את קו המים בשנייה, בלי כלים. מחבר מתכת בגימור פליז.',
+    categories: ['adapters'],
+    price: 49,
+    images: [1, 2, 3].map((n) => real('quick-coupler', n)),
+    highlights: [
+      'מתאים לסברינה מיני ולסברינה מקסי',
+      'חיבור וניתוק של קו המים בשנייה, בלי כלים',
+      'הברגה פנימית לחיבור לצינור ההזרקה',
+      'מחבר מתכת בגימור פליז',
+    ],
+    compatibility: ['Sabrina Mini', 'Sabrina Maxi', 'צינור הזרקת מים'],
+    tags: ['quick coupler', 'coupler', 'מחבר מהיר', 'מחבר', 'תקע', 'הזרקה', 'מים', 'צינור', 'sabrina', 'סברינה', 'מיני', 'מקסי', 'פליז'],
+    createdAt: created(-4),
+    sortOrder: 6.5,
+  },
+  {
+    ...base,
     id: 'p-wand-of-troy',
     slug: 'wand-of-troy',
     name: 'Wand of Troy',
@@ -446,7 +468,7 @@ const DEMO_ADMIN: User = {
 };
 
 /** Bumped when the seed changes shape, so browsers drop the old demo catalogue. */
-export const DB_VERSION = 15;
+export const DB_VERSION = 16;
 
 export function buildSeedDB(): ShopDB {
   return {

@@ -129,7 +129,7 @@ export const SEED_PRODUCTS: Product[] = [
     description:
       'BIG MAMBA היא הידית החדשה של ANX3D עם ראש שאיבה רחב במיוחד: פיית שאיבה ברוחב 113 מ״מ שמכסה יותר שטח בכל משיכה. הראש והידית מודפסים בחלק אחד בשני צבעים, עם חלון פרספקס שקוף שמראה מה נשאב מהריפוד, פיית התזה מובנית בין שני פסי השאיבה, הדק נירוסטה עם שסתום פליז וצינור מים עם מחבר מהיר.',
     categories: ['handles'],
-    price: null,
+    price: 1050,
     images: [1, 2, 3, 4].map((n) => real('big-mamba', n)),
     colors: [{ ...COLORS.pink }],
     video: { webm: '/video/big-mamba-demo.webm', mp4: '/video/big-mamba-demo.mp4', poster: '/video/big-mamba-demo-poster.jpg' },
@@ -353,7 +353,7 @@ const DEMO_ADMIN: User = {
 };
 
 /** Bumped when the seed changes shape, so browsers drop the old demo catalogue. */
-export const DB_VERSION = 7;
+export const DB_VERSION = 8;
 
 export function buildSeedDB(): ShopDB {
   return {

@@ -251,6 +251,22 @@ function ProductEditor({ initial, onDone }: { initial: Product; onDone: () => vo
             <button type="button" aria-label="הסרה" onClick={() => set('variants', p.variants.filter((_, j) => j !== i))} className="text-x-muted hover:text-x-red">
               <IconTrash size={18} />
             </button>
+            <input
+              aria-label="מחיר לכל אפשרות, מופרדים בפסיק (אופציונלי)"
+              value={(v.prices ?? []).map((x) => (x ?? '')).join(', ')}
+              onChange={(e) =>
+                set(
+                  'variants',
+                  p.variants.map((x, j) =>
+                    j === i
+                      ? { ...x, prices: e.target.value.split(',').map((t) => (t.trim() === '' || isNaN(+t) ? null : +t)) }
+                      : x,
+                  ),
+                )
+              }
+              placeholder="מחיר לכל אפשרות לפי הסדר (אופציונלי), למשל 1170, 2470"
+              className={`${inputCls} col-span-3 h-10`}
+            />
           </div>
         ))}
         <button

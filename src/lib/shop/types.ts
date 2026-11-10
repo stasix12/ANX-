@@ -33,6 +33,11 @@ export interface VariantGroup {
   id: string;
   label: string;
   values: string[];
+  /**
+   * Optional price per value, aligned with `values`. When the chosen value
+   * has one, it replaces the product price (e.g. kit with / without pump).
+   */
+  prices?: (number | null)[];
 }
 
 export interface SpecRow {

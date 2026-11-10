@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { cardImage, inStock, productHref, purchasable } from '@/lib/shop/logic';
+import { cardImage, fromPrice, inStock, productHref, purchasable } from '@/lib/shop/logic';
 import { STATIC_PRODUCT_SLUGS } from '@/lib/shop/static';
 import { actions, useShop } from '@/lib/shop/store';
 import type { Product } from '@/lib/shop/types';
@@ -60,7 +60,8 @@ export function ProductCard({
   const router = useRouter();
   const href = productHref(product, STATIC_PRODUCT_SLUGS);
   const available = inStock(product);
-  const priced = product.price !== null;
+  const from = fromPrice(product);
+  const priced = from.price !== null;
   // A product with versions to choose (or no price yet) is ordered from its page.
   const direct = purchasable(product) && !product.variants.length;
   const note = product.imageNotes[cardImage(product)];
@@ -96,7 +97,10 @@ export function ProductCard({
             <IconCart size={compact ? 19 : 21} />
           </button>
           {priced ? (
-            <Price value={product.price as number} className={compact ? 'text-[17px]' : 'text-[19px]'} />
+            <span className="flex flex-col items-end leading-none">
+              {from.varies && <span className={`font-semibold text-x-muted ${compact ? 'text-[10px]' : 'text-[11px]'}`}>החל מ־</span>}
+              <Price value={from.price as number} className={compact ? 'text-[17px]' : 'text-[19px]'} />
+            </span>
           ) : (
             <span className={`font-bold text-x-muted ${compact ? 'text-[11px]' : 'text-[13px]'}`}>מחיר יעודכן</span>
           )}

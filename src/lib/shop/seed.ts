@@ -209,6 +209,46 @@ export const SEED_PRODUCTS: Product[] = [
   },
   {
     ...base,
+    id: 'p-turbo-x',
+    slug: 'turbo-x',
+    name: 'ערכת שדרוג TURBO X',
+    subtitle: 'לסברינה מיני — משאבה מוגברת ופאנל חדש',
+    description:
+      'TURBO X היא מערכת שדרוג למכונת סברינה מיני, שנועדה להקל על היום־יום של מנקה הספות: המכונה נשארת קטנה וקלה לסחיבה, והביצועים לא נפגעים. בגרסה עם המשאבה, המשאבה המוגברת נותנת לחץ הזרקה חזק עד פי 4 מהמשאבה הקטנה שמגיעה עם המכונה. הערכה כוללת פאנל בקרה ANX3D עם כפתורים מוגנים ממים עם תאורה, מערכת חיווט חשמל, גומיות אטימה וספר הדרכה להתקנה. אפשר להזמין עם המשאבה או בלעדיה.',
+    categories: ['accessories'],
+    price: 1170,
+    images: [1, 2, 3].map((n) => real('turbo-x', n)),
+    video: { webm: '/video/turbo-x-demo.webm', mp4: '/video/turbo-x-demo.mp4', poster: '/video/turbo-x-demo-poster.jpg' },
+    variants: [
+      {
+        id: 'pump',
+        label: 'משאבה',
+        values: ['ללא משאבה', 'כולל משאבה מוגברת'],
+        prices: [1170, 2470],
+      },
+    ],
+    highlights: [
+      'משאבה מוגברת — לחץ הזרקה חזק עד פי 4 מהמשאבה המקורית',
+      'מכונה קטנה וקלה, בלי לוותר על ביצועים',
+      'כפתורים מוגנים ממים עם תאורה',
+      'כולל מערכת חיווט חשמל מלאה',
+      'כולל גומיות אטימה',
+      'כולל ספר הדרכה להתקנה',
+    ],
+    specs: [
+      { label: 'מתאים ל', value: 'סברינה מיני' },
+      { label: 'בערכה', value: 'פאנל בקרה, כפתורים מוגנים ממים עם תאורה, חיווט חשמל, גומיות אטימה, ספר הדרכה' },
+      { label: 'משאבה', value: 'מוגברת, עד פי 4 לחץ הזרקה (בגרסה הכוללת משאבה)' },
+      { label: 'מחיר', value: 'ללא משאבה 1,170 ₪ · כולל משאבה 2,470 ₪' },
+    ],
+    compatibility: ['Sabrina Mini (Santoemma)'],
+    featured: true,
+    tags: ['turbo x', 'turbo', 'טורבו', 'שדרוג', 'ערכה', 'משאבה', 'לחץ', 'sabrina', 'mini', 'סברינה', 'מיני', 'shurflo', 'פאנל', 'כפתורים'],
+    createdAt: created(-3),
+    sortOrder: 1.9,
+  },
+  {
+    ...base,
     id: 'p-wand-of-troy',
     slug: 'wand-of-troy',
     name: 'Wand of Troy',
@@ -406,7 +446,7 @@ const DEMO_ADMIN: User = {
 };
 
 /** Bumped when the seed changes shape, so browsers drop the old demo catalogue. */
-export const DB_VERSION = 13;
+export const DB_VERSION = 14;
 
 export function buildSeedDB(): ShopDB {
   return {

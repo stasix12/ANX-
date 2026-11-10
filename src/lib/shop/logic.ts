@@ -25,6 +25,24 @@ export function optionsText(p: Product, options: Record<string, string>): string
     .join(' · ');
 }
 
+/** Unit price for the chosen variant values; a priced option overrides the base price. */
+export function unitPriceFor(p: Product, options: Record<string, string> = {}): number | null {
+  let price = p.price;
+  for (const v of p.variants) {
+    const i = v.values.indexOf(options[v.id]);
+    const own = i >= 0 ? v.prices?.[i] : undefined;
+    if (typeof own === 'number') price = own;
+  }
+  return price;
+}
+
+/** Lowest price a customer can pay for this product ("החל מ…" on cards). */
+export function fromPrice(p: Product): { price: number | null; varies: boolean } {
+  const all = [p.price, ...p.variants.flatMap((v) => v.prices ?? [])].filter((x): x is number => typeof x === 'number');
+  if (!all.length) return { price: null, varies: false };
+  return { price: Math.min(...all), varies: new Set(all).size > 1 };
+}
+
 /** Has a price, is published and in stock — i.e. can go into the cart. */
 export function purchasable(p: Product): boolean {
   return p.published && p.price !== null && inStock(p);
@@ -244,8 +262,8 @@ export function priceCart(
       colorName: color?.name ?? null,
       optionsText: optionsText(product, l.options ?? {}),
       image: color?.images?.[0] ?? cardImage(product),
-      unitPrice: product.price ?? 0,
-      lineTotal: (product.price ?? 0) * l.qty,
+      unitPrice: unitPriceFor(product, l.options ?? {}) ?? 0,
+      lineTotal: (unitPriceFor(product, l.options ?? {}) ?? 0) * l.qty,
       problem,
     });
   }

@@ -417,7 +417,14 @@ export const actions = {
       compatibility: clean(p.compatibility),
       specs: p.specs.filter((r) => r.label.trim() && r.value.trim()),
       tags: clean(p.tags),
-      variants: p.variants.map((v) => ({ ...v, values: clean(v.values) })).filter((v) => v.label.trim() && v.values.length),
+      variants: p.variants
+        .map((v) => {
+          // Keep each option's price aligned with it while empty options drop out.
+          const keep = v.values.map((val, i) => ({ val: val.trim(), price: v.prices?.[i] ?? null })).filter((x) => x.val);
+          const prices = keep.map((x) => x.price);
+          return { ...v, values: keep.map((x) => x.val), ...(prices.some((x) => x !== null) ? { prices } : { prices: undefined }) };
+        })
+        .filter((v) => v.label.trim() && v.values.length),
     };
     const exists = db.products.some((x) => x.id === p.id);
     commit({ db: { ...db, products: exists ? db.products.map((x) => (x.id === p.id ? p : x)) : [...db.products, p] } });

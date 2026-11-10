@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
-import { categoryHref, galleryFor, inStock, maxQty, optionsText, sortProducts } from '@/lib/shop/logic';
+import { categoryHref, fromPrice, galleryFor, inStock, maxQty, optionsText, sortProducts, unitPriceFor } from '@/lib/shop/logic';
 import { orderLink } from '@/lib/site';
 import { STATIC_CATEGORY_SLUGS } from '@/lib/shop/static';
 import { useShop } from '@/lib/shop/store';
@@ -49,6 +49,11 @@ function ProductDetail({ product }: { product: Product }) {
   ];
   const available = inStock(product);
   const priced = product.price !== null;
+  // A priced option (e.g. with / without pump) sets the price once chosen;
+  // until then the lowest one shows as "החל מ־".
+  const pricedVariant = product.variants.some((v) => v.prices?.some((x) => typeof x === 'number'));
+  const pricePending = pricedVariant && product.variants.some((v) => v.prices && !options[v.id]);
+  const shownPrice = pricePending ? fromPrice(product).price : unitPriceFor(product, options);
   const limit = maxQty(product);
   const standard = s.db.settings.shippingMethods.find((m) => m.id === 'standard');
   const color = product.colors.find((c) => c.id === colorId);
@@ -202,12 +207,13 @@ function ProductDetail({ product }: { product: Product }) {
               <div className="shrink-0 text-left">
                 {priced ? (
                   <>
-                    {product.compareAtPrice && product.compareAtPrice > (product.price as number) && (
+                    {product.compareAtPrice && product.compareAtPrice > (shownPrice as number) && (
                       <span dir="rtl" className="me-2 text-base text-x-faint line-through">
                         {product.compareAtPrice} ₪
                       </span>
                     )}
-                    <Price value={product.price as number} className="text-[28px] lg:text-4xl" />
+                    {pricePending && <span className="block text-[12px] font-semibold text-x-muted">החל מ־</span>}
+                    <Price value={shownPrice as number} className="text-[28px] lg:text-4xl" />
                   </>
                 ) : (
                   <span className="text-[15px] font-bold text-x-muted">מחיר יעודכן בקרוב</span>
@@ -248,7 +254,7 @@ function ProductDetail({ product }: { product: Product }) {
             {product.variants.map((v) => (
               <fieldset key={v.id} className="mt-5">
                 <legend className="mb-3 w-full text-left text-[16px] font-extrabold">{v.label}:</legend>
-                <div dir="ltr" className="grid grid-cols-4 gap-2">
+                <div dir="ltr" className={`grid gap-2 ${v.values.some((x) => x.length > 9) ? 'grid-cols-2' : 'grid-cols-4'}`}>
                   {v.values.map((val) => {
                     const on = options[v.id] === val;
                     return (
@@ -257,7 +263,7 @@ function ProductDetail({ product }: { product: Product }) {
                         type="button"
                         aria-pressed={on}
                         onClick={() => setOptions({ ...options, [v.id]: val })}
-                        className={`h-11 truncate rounded-xl border px-2 text-[14px] font-bold transition ${on ? 'border-x-indigo bg-x-blue-50 text-x-indigo' : 'border-x-line text-x-ink-2 hover:border-x-faint'}`}
+                        className={`min-h-11 rounded-xl border px-2 py-1.5 leading-tight text-[14px] font-bold transition ${on ? 'border-x-indigo bg-x-blue-50 text-x-indigo' : 'border-x-line text-x-ink-2 hover:border-x-faint'}`}
                       >
                         <span dir="rtl">{val}</span>
                       </button>

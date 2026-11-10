@@ -105,18 +105,25 @@ export const SEED_PRODUCTS: Product[] = [
     ...base,
     id: 'p-viper',
     slug: 'viper',
-    name: 'VIPER',
-    subtitle: 'ידית מקצועית לניקוי ספות',
+    name: 'MINI VIPER',
+    subtitle: 'ידית קומפקטית לעבודות דיוק',
     description:
-      'ידית VIPER לניקוי ספות וריפודים מבית ANX3D: ראש שאיבה עם חלון שקוף, אחיזה מחוספסת, הדק להתזה וקו מים מובנה לאורך הידית.',
+      'MINI VIPER היא הידית הקטנה של ANX3D — וזה בדיוק הכוח שלה. ראש השאיבה הקומפקטי נכנס למקומות שידית רגילה לא מגיעה אליהם: קנטים ותפרים של ספות, כסאות ומושבים צרים, ריפודי רכב, ובכל עבודה שדורשת תשומת לב ודיוק. חלון שקוף בראש השאיבה מראה בכל רגע מה יוצא מהריפוד, ההדק מאפשר לשלוט בהתזה בלי להוריד את היד, וקו המים עובר לאורך הידית.',
     categories: ['handles'],
     price: 950,
     images: [1, 2, 3, 4].map((n) => real('anx-pro-handle', n)),
     colors: [{ ...COLORS.black }],
     video: { webm: '/video/viper-demo.webm', mp4: '/video/viper-demo.mp4', poster: '/video/viper-demo-poster.jpg' },
-    highlights: ['חלון שקוף בראש השאיבה', 'הדק להתזה תוך כדי עבודה', 'אחיזה מחוספסת', 'קו מים מובנה'],
+    highlights: [
+      'ידית קטנה במיוחד — מגיעה לכל מקום',
+      'קנטים ותפרים של ספות, כסאות ומושבים צרים',
+      'מתאימה לריפודי רכב',
+      'לעבודות שדורשות תשומת לב ודיוק',
+      'חלון שקוף בראש השאיבה',
+      'הדק להתזה תוך כדי עבודה וקו מים מובנה',
+    ],
     featured: true,
-    tags: ['viper', 'וייפר', 'ויפר', 'handle', 'ידית', 'שאיבה', 'הזרקה', 'ספות', 'ריפודים'],
+    tags: ['mini viper', 'mini', 'מיני', 'מיני וייפר', 'קטנה', 'רכב', 'כסאות', 'קנטים', 'viper', 'וייפר', 'ויפר', 'handle', 'ידית', 'שאיבה', 'הזרקה', 'ספות', 'ריפודים'],
     createdAt: created(0),
     sortOrder: 1.5,
   },
@@ -353,7 +360,7 @@ const DEMO_ADMIN: User = {
 };
 
 /** Bumped when the seed changes shape, so browsers drop the old demo catalogue. */
-export const DB_VERSION = 8;
+export const DB_VERSION = 9;
 
 export function buildSeedDB(): ShopDB {
   return {

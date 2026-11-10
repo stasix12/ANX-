@@ -98,6 +98,7 @@ export const SEED_PRODUCTS: Product[] = [
     compatibility: ['Sabrina — ידית שאיבה לניקוי ספות וריפודים'],
     featured: true,
     tags: ['anaconda', 'handle', 'ידית', 'שאיבה', 'הזרקה', 'ספות', 'ריפודים', 'sabrina', 'סברינה'],
+    madeInIsrael: true,
     createdAt: created(5),
     sortOrder: 1,
   },
@@ -126,6 +127,7 @@ export const SEED_PRODUCTS: Product[] = [
     ],
     featured: true,
     tags: ['mini viper', 'soft touch', 'סופט טאץ', 'טריס', 'ויסות שאיבה', 'mini', 'מיני', 'מיני וייפר', 'קטנה', 'רכב', 'כסאות', 'קנטים', 'viper', 'וייפר', 'ויפר', 'handle', 'ידית', 'שאיבה', 'הזרקה', 'ספות', 'ריפודים'],
+    madeInIsrael: true,
     createdAt: created(0),
     sortOrder: 1.5,
   },
@@ -162,6 +164,7 @@ export const SEED_PRODUCTS: Product[] = [
     ],
     featured: true,
     tags: ['big mamba', 'soft touch', 'סופט טאץ', 'טריס', 'ויסות שאיבה', 'mamba', 'ממבה', 'ביג ממבה', 'handle', 'ידית', 'רחב', 'שאיבה', 'הזרקה', 'ספות', 'ריפודים'],
+    madeInIsrael: true,
     createdAt: created(-1),
     sortOrder: 1.7,
   },
@@ -244,6 +247,7 @@ export const SEED_PRODUCTS: Product[] = [
     compatibility: ['Sabrina Mini (Santoemma)'],
     featured: true,
     tags: ['turbo x', 'turbo', 'טורבו', 'שדרוג', 'ערכה', 'משאבה', 'לחץ', 'sabrina', 'mini', 'סברינה', 'מיני', 'shurflo', 'פאנל', 'כפתורים'],
+    madeInIsrael: true,
     createdAt: created(-3),
     sortOrder: 1.9,
   },
@@ -467,6 +471,7 @@ export const SEED_PRODUCTS: Product[] = [
     ],
     compatibility: ['Sabrina — סט שאיבה והזרקה לניקוי ספות וריפודים'],
     tags: ['anaconda', 'set', 'סט', 'ערכה', 'צינור', 'ידית'],
+    madeInIsrael: true,
     createdAt: created(6),
     sortOrder: 8,
   },
@@ -536,7 +541,7 @@ const DEMO_ADMIN: User = {
 };
 
 /** Bumped when the seed changes shape, so browsers drop the old demo catalogue. */
-export const DB_VERSION = 20;
+export const DB_VERSION = 21;
 
 export function buildSeedDB(): ShopDB {
   return {

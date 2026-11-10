@@ -77,6 +77,8 @@ export interface Product {
   rating: number;
   reviewCount: number;
   featured: boolean;
+  /** Shows the "מיוצר בישראל" badge on the card and product page. */
+  madeInIsrael?: boolean;
   published: boolean;
   digital: boolean;
   material: string;

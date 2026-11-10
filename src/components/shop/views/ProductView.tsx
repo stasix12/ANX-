@@ -9,6 +9,7 @@ import { useShop } from '@/lib/shop/store';
 import type { Product } from '@/lib/shop/types';
 import { SampleRibbon, ShopFrame } from '../Chrome';
 import { IconBox, IconCart, IconChevron, IconSearch, IconShield, IconTruck } from '../icons';
+import { MadeInIsrael } from '../MadeInIsrael';
 import { addProductToCart, FavoriteButton, ProductGrid } from '../ProductCard';
 import { btn, EmptyState, Img, Price, QtyStepper, src, Stars, Swatch, toast } from '../ui';
 import { ShopFooter } from './HomeView';
@@ -220,6 +221,7 @@ function ProductDetail({ product }: { product: Product }) {
                 )}
               </div>
             </div>
+            {product.madeInIsrael && <MadeInIsrael className="mt-2" />}
             <div dir="ltr" className="mt-2 flex items-center justify-between">
               <Stars rating={product.rating} count={product.reviewCount} countLabel="ביקורות" size={19} />
               {available ? (

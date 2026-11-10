@@ -167,6 +167,43 @@ export const SEED_PRODUCTS: Product[] = [
   },
   {
     ...base,
+    id: 'p-sabrina-maxi-panel',
+    slug: 'sabrina-maxi-panel',
+    name: 'פאנל מסגרת לסברינה מקסי',
+    subtitle: 'לוח בקרה מודפס בעיצוב ANX3D',
+    description:
+      'פאנל חזית חלופי למכונת סברינה מקסי, בעיצוב ANX3D: לוח שחור עם לוגו ANX3D לבן ופתחי אוורור, שמחליף את הלוח המקורי באותן נקודות ברגים ובאותם מיקומים של המתגים והחיבורים. שני מתגי הפעלה מסומנים — התזה ושאיבה — שקע חשמל עם מכסה, מחבר מהיר מפליז לקו המים, ופתח לכבל החשמל עם אטם כבל מודפס.',
+    categories: ['parts'],
+    price: null,
+    images: [1, 2].map((n) => real('sabrina-maxi-panel', n)),
+    video: {
+      webm: '/video/sabrina-panel-demo.webm',
+      mp4: '/video/sabrina-panel-demo.mp4',
+      poster: '/video/sabrina-panel-demo-poster.jpg',
+    },
+    highlights: [
+      'מחליף את לוח החזית המקורי — אותם חורי ברגים ואותם מיקומים',
+      'שני מתגים עם סימון התזה ושאיבה',
+      'מקום לשקע חשמל ולמחבר מהיר לקו המים',
+      'פתח לכבל החשמל עם אטם כבל מודפס',
+      'לוגו ANX3D בולט ופתחי אוורור',
+      'הדפסה בשני צבעים — לוח שחור, אותיות וסמלים לבנים',
+    ],
+    specs: [
+      { label: 'מידות', value: '258 × 175 מ״מ' },
+      { label: 'עובי', value: '5 מ״מ' },
+      { label: 'התקנה', value: '6 ברגי M4 בחורי הלוח המקורי' },
+      { label: 'מתגים', value: '2 פתחים למתגי נדנדה, עם סמלי התזה ושאיבה' },
+      { label: 'פתחים', value: 'עגול 44 מ״מ ועגול 32 מ״מ לחיבורים' },
+      { label: 'כבל חשמל', value: 'פתח 16.4 מ״מ עם אטם כבל מודפס לכבל 7–9 מ״מ' },
+    ],
+    compatibility: ['Sabrina Maxi (Santoemma) — פאנל החזית התחתון'],
+    tags: ['sabrina', 'maxi', 'סברינה', 'מקסי', 'santoemma', 'פאנל', 'לוח', 'מסגרת', 'לוח בקרה', 'חלק חילוף', 'panel'],
+    createdAt: created(-2),
+    sortOrder: 11,
+  },
+  {
+    ...base,
     id: 'p-wand-of-troy',
     slug: 'wand-of-troy',
     name: 'Wand of Troy',
@@ -364,7 +401,7 @@ const DEMO_ADMIN: User = {
 };
 
 /** Bumped when the seed changes shape, so browsers drop the old demo catalogue. */
-export const DB_VERSION = 10;
+export const DB_VERSION = 11;
 
 export function buildSeedDB(): ShopDB {
   return {

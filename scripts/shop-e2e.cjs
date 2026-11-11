@@ -37,7 +37,7 @@ const assert = (c, m) => { if (!c) throw new Error('ASSERT: ' + m); console.log(
   await page.getByRole('navigation', { name: 'ניווט תחתון' }).getByRole('link', { name: 'קטגוריות' }).click();
   await page.waitForURL('**/shop/categories');
   await shot('02-categories');
-  assert((await page.locator('main ul[dir=ltr] > li').count()) === 6, 'six cleaning categories');
+  assert((await page.locator('main ul[dir=ltr] > li').count()) === 7, 'seven categories (six cleaning + courses)');
 
   console.log('3 catalog');
   await page.getByRole('link', { name: /^ידיות לניקוי ספות/ }).first().click();

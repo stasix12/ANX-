@@ -39,6 +39,7 @@ export const SEED_CATEGORIES: Category[] = [
   { slug: 'suction', name: 'אביזרי שאיבה', shortName: 'אביזרי שאיבה', icon: 'suction', image: img('cat-suction'), sortOrder: 4 },
   { slug: 'accessories', name: 'אביזרים משלימים', shortName: 'משלימים', icon: 'accessory', image: img('cat-accessories'), sortOrder: 5 },
   { slug: 'parts', name: 'חלקי חילוף', shortName: 'חלקי חילוף', icon: 'parts', image: img('cat-parts'), sortOrder: 6 },
+  { slug: 'courses', name: 'קורסים', shortName: 'קורסים', icon: 'course', image: '/products/course-stain-removal/1.webp', sortOrder: 7 },
 ];
 
 const created = (daysAgo: number) => new Date(Date.UTC(2026, 9, 1) - daysAgo * 86_400_000).toISOString();
@@ -344,6 +345,35 @@ export const SEED_PRODUCTS: Product[] = [
   },
   {
     ...base,
+    id: 'p-mattress-course',
+    slug: 'mattress-cleaning-course',
+    name: 'קורס ניקוי מזרנים',
+    subtitle: 'קורס וידאו — צפייה עם קוד גישה',
+    description:
+      'קורס וידאו לניקוי מזרנים מקצועי: תוך 20 דקות מזרן נראה כמו חדש — בלי אבקות קסמים ובוסטרים, עם 2 חומרים בלבד. אחרי הרכישה תקבלו קוד גישה אישי, ואיתו צופים בכל סרטוני הקורס באתר, מכל מכשיר ובכל זמן.',
+    categories: ['courses'],
+    price: 1480,
+    digital: true,
+    images: ['/products/course-stain-removal/1.webp'],
+    video: { webm: '/video/course-stain-removal.webm', mp4: '/video/course-stain-removal.mp4', poster: '/video/course-stain-removal-poster.jpg' },
+    highlights: [
+      'קורס וידאו — צופים מתי שנוח, מכל מכשיר',
+      'קוד גישה אישי נשלח אחרי הרכישה',
+      'מזרן כמו חדש תוך כ-20 דקות',
+      'בלי אבקות קסמים ובוסטרים — 2 חומרים בלבד',
+    ],
+    specs: [
+      { label: 'פורמט', value: 'סרטוני וידאו באתר' },
+      { label: 'גישה', value: 'קוד אישי שנשלח אחרי הרכישה' },
+    ],
+    usage: 'אחרי הרכישה נשלח אליכם קוד גישה. נכנסים לעמוד "כניסה לקורס" (/shop/course), מזינים את הקוד וצופים.',
+    featured: true,
+    tags: ['course', 'mattress', 'קורס', 'מזרן', 'מזרנים', 'ניקוי מזרנים', 'וידאו', 'הדרכה', 'כתמים'],
+    createdAt: created(-8),
+    sortOrder: 20,
+  },
+  {
+    ...base,
     id: 'p-wand-of-troy',
     slug: 'wand-of-troy',
     name: 'Wand of Troy',
@@ -542,7 +572,7 @@ const DEMO_ADMIN: User = {
 };
 
 /** Bumped when the seed changes shape, so browsers drop the old demo catalogue. */
-export const DB_VERSION = 22;
+export const DB_VERSION = 23;
 
 export function buildSeedDB(): ShopDB {
   return {

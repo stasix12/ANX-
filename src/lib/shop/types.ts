@@ -6,7 +6,7 @@
  * same shapes map 1:1 onto supabase/shop-schema.sql.
  */
 
-export type CategoryIcon = 'all' | 'handle' | 'wand' | 'adapter' | 'suction' | 'parts' | 'accessory';
+export type CategoryIcon = 'all' | 'handle' | 'wand' | 'adapter' | 'suction' | 'parts' | 'accessory' | 'course';
 
 export interface Category {
   slug: string;

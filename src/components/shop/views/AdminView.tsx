@@ -455,7 +455,7 @@ function ProductsTab() {
   );
 }
 
-const ICONS: CategoryIcon[] = ['handle', 'wand', 'adapter', 'suction', 'accessory', 'parts'];
+const ICONS: CategoryIcon[] = ['handle', 'wand', 'adapter', 'suction', 'accessory', 'parts', 'course'];
 
 function CategoriesTab() {
   const s = useShop();
@@ -721,7 +721,10 @@ export function AdminView() {
         <div className="mx-auto flex h-16 max-w-6xl items-center gap-4 px-4">
           <Logo className="text-[26px]" />
           <span className="rounded-full bg-x-blue-50 px-3 py-1 text-[12px] font-bold text-x-blue">ניהול חנות</span>
-          <Link href="/shop" className="ms-auto text-[14px] font-bold text-x-blue">
+          <Link href="/shop/admin/courses" className="ms-auto text-[14px] font-bold text-x-violet">
+            קורסים וקודים
+          </Link>
+          <Link href="/shop" className="text-[14px] font-bold text-x-blue">
             לחנות ←
           </Link>
         </div>

@@ -91,6 +91,16 @@ export function OrderSuccess({ id }: { id: string | null }) {
           קיבלנו את ההזמנה שלך ומתחילים בהכנה.
           <br />
           פרטי ההזמנה יישלחו למייל {order.email}.
+          {order.lines.some((l) => s.db.products.find((p) => p.id === l.productId)?.categories.includes('courses')) && (
+            <>
+              <br />
+              <b className="text-white">קוד הגישה לקורס יישלח אליכם בהקדם.</b> איתו נכנסים לקורס בעמוד{' '}
+              <Link href="/shop/course" className="font-bold text-[#9db4ff] underline">
+                כניסה לקורס
+              </Link>
+              .
+            </>
+          )}
         </p>
         <p className="mt-2 text-[12px] text-white/45">סה&quot;כ שולם: {ils(order.total)} · אסמכתא: {order.paymentRef}</p>
         <Link href={`/shop/track?id=${encodeURIComponent(order.id)}`} className={`${btn.primary} mt-8 h-14 w-full rounded-full from-[#8a4efc]! to-[#6c46fb]! text-[17px]`}>

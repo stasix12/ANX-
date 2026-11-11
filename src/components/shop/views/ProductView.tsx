@@ -238,7 +238,7 @@ function ProductDetail({ product }: { product: Product }) {
                       <path d="m5 12.5 4.5 4.5L19 7.5" />
                     </svg>
                   </span>
-                  {product.digital ? 'זמין להורדה' : product.stock === null ? 'זמין להזמנה' : product.stock <= 5 ? `במלאי · נותרו ${product.stock}` : 'במלאי'}
+                  {product.digital ? (product.categories.includes('courses') ? 'גישה מיידית עם קוד' : 'זמין להורדה') : product.stock === null ? 'זמין להזמנה' : product.stock <= 5 ? `במלאי · נותרו ${product.stock}` : 'במלאי'}
                 </span>
               ) : (
                 <span className="text-[15px] font-bold text-x-red">אזל מהמלאי</span>
@@ -308,6 +308,11 @@ function ProductDetail({ product }: { product: Product }) {
               >
                 לבירור מחיר והזמנה בוואטסאפ
               </a>
+            )}
+            {product.categories.includes('courses') && (
+              <Link href="/shop/course" className={`${btn.ghost} mt-3 h-12 w-full text-[15px]`}>
+                כבר רכשתם? כניסה לקורס עם הקוד
+              </Link>
             )}
 
             <ul dir="ltr" className="mt-6 grid grid-cols-3 divide-x divide-x-line border-t border-x-line pt-4">

@@ -111,12 +111,54 @@ export function statusLine(row: QueueRow, projectedAt?: string | null, now?: num
       // No "ב-" before the time: a Hebrew prefix glued to digits with a hyphen
       // is exactly the construction that flips order in a bidi run.
       return { text: row.published_at ? `פורסם ${formatInstantHe(row.published_at)}` : 'פורסם', cls: TONE_TEXT[STATUS_TONE.published] };
+    /*
+     * ─── AND A FAILURE SAYS WHEN, EXACTLY AS A PUBLICATION DOES ─────────
+     *
+     * "שכאן יראה לי גם את התאריך והשעה של הכשלון."
+     *
+     * `published` has carried its instant since the day it was written, and
+     * `failed` carried one word. On the history screen, which is the one
+     * place a person goes to ask "what happened and when", a column of
+     * identical red "נכשל" said nothing about order, nothing about whether
+     * two failures were a minute or a day apart, and nothing about whether
+     * the one he was looking at was from the round still running.
+     *
+     * `updated_at` AND NOT `scheduled_at`, which is the whole of
+     * worker/test/done-at.test.ts: a row that ended is stamped by the
+     * database trigger at the moment it ended, while the scheduled instant is
+     * when it was MEANT to happen. Printing the second over the first is what
+     * made a cancellation from hours earlier read as "just now", once every
+     * thirty seconds, for two days.
+     *
+     * The date is NOT added here. The caller owns that — it already prefixes
+     * `formatDayMonthHe` on any row that is not from today, and doing it in
+     * both places would print the day twice.
+     */
     case 'failed':
-      return { text: 'נכשל', cls: TONE_TEXT[STATUS_TONE.failed] };
+      return { text: row.updated_at ? `נכשל ${formatInstantHe(row.updated_at)}` : 'נכשל', cls: TONE_TEXT[STATUS_TONE.failed] };
+    /*
+     * THE CLOCK LEADS ON A SKIP, AND ONLY ON A SKIP. MEASURED, not chosen:
+     * at 360, 390 and 430 the skip line is the one that overflows — its
+     * reason is a whole sentence ("אותו תוכן כבר פורסם ליעד הזה ב-7
+     * הימים האחרונים") and it was already truncated before a time was
+     * put anywhere near it. Appended, the clock lands past the cut at every
+     * phone width: a row that LOOKS like it carries a time and does not.
+     *
+     * So it goes first, where four characters always survive. The reason is
+     * not lost — it is the first thing in the detail sheet, one tap away, in
+     * full. The other three lines are short and keep the natural order, which
+     * is why this is the only case that reads differently.
+     */
     case 'skipped':
-      return { text: row.skip_reason || 'דולג', cls: TONE_TEXT[STATUS_TONE.skipped] };
+      return {
+        text: `${row.updated_at ? `${formatInstantHe(row.updated_at)} · ` : ''}${row.skip_reason || 'דולג'}`,
+        cls: TONE_TEXT[STATUS_TONE.skipped],
+      };
     case 'needs_attention':
-      return { text: 'דורש טיפול שלכם', cls: TONE_TEXT[STATUS_TONE.needs_attention] };
+      return {
+        text: `דורש טיפול שלכם${row.updated_at ? ` · ${formatInstantHe(row.updated_at)}` : ''}`,
+        cls: TONE_TEXT[STATUS_TONE.needs_attention],
+      };
     case 'awaiting_confirmation':
       return { text: 'מוכן — ממתין לאישור שלכם', cls: TONE_TEXT[STATUS_TONE.awaiting_confirmation] };
     case 'paused':

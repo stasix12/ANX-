@@ -129,4 +129,52 @@ ok(
 const schema = readFileSync(new URL('../../supabase/social-schema.sql', import.meta.url), 'utf8');
 ok(/create trigger social_queue_set_updated_at/.test(schema), 'הטריגר קיים בסכימה');
 
+/* ───────── ארבעה: והשורה גם אומרת את הרגע הזה בקול ─────────
+ *
+ * "שכאן יראה לי גם את התאריך והשעה של הכשלון." 11.11.2026
+ *
+ * כל מה שלמעלה דאג לכך שהשורה תוצב במקום הנכון ברשימה — והשורה
+ * עצמה הדפיסה מילה אחת, "נכשל". במסך שכולו שורות אדומות זהות אי
+ * אפשר היה לדעת אם שתי תקלות רחוקות דקה או יום, ואם זו שלמעלה היא
+ * מהסבב שרץ עכשיו. 'published' נשא שעה מהיום שנכתב; השאר לא.
+ *
+ * והעמודה היא updated_at בדיוק מהסיבה שכל הקובץ הזה קיים: שעה
+ * מתוכננת על שורה שהסתיימה היא השקר שהתחיל את הכל.
+ */
+const line = item.slice(item.indexOf('export function statusLine'), item.indexOf('export function PublicationItem'));
+ok(line.length > 200, 'בונה השורה אותר');
+ok(
+  /case 'failed':[\s\S]{0,420}row\.updated_at \? `נכשל \$\{formatInstantHe\(row\.updated_at\)\}`/.test(line),
+  'שורה שנכשלה אומרת מתי היא נכשלה, בדיוק כמו ששורה שפורסמה אומרת מתי פורסמה',
+);
+for (const st of ['skipped', 'needs_attention']) {
+  const at = line.indexOf(`case '${st}':`);
+  ok(at > -1, `case ${st} קיים`);
+  ok(/formatInstantHe\(row\.updated_at\)/.test(line.slice(at, at + 420)), `גם ${st} נושאת שעה — כל שורה שהסתיימה עונה על "מתי"`);
+}
+/*
+ * ואף אחת מהן לא מדפיסה את השעה המתוכננת. זו המוטציה החמורה
+ * ביותר כאן: `at` מוגדר שורות ספורות מעל, הוא נראה נכון לחלוטין,
+ * והוא הדבר שהפך ביטול מלפני שעתיים לײביטול שקרה הרגע׳.
+ */
+for (const st of ['failed', 'skipped', 'needs_attention']) {
+  const at = line.indexOf(`case '${st}':`);
+  const body = line.slice(at, at + 420);
+  ok(!/formatInstantHe\(at\)/.test(body), `${st} לא מדפיסה את השעה שתוכננה — זה הבאג שכל הקובץ הזה נכתב עליו`);
+}
+/*
+ * ובדילוג השעה באה ראשונה. נמדד בדפדפן ב-360, 390 ו-430: שורת
+ * "דולג" היא היחידה שגולשת — הסיבה היא משפט שלם — ושעה שמודבקת
+ * בסוף נוחתת מעבר לחתך בכל רוחב של טלפון: שורה שנראית כאילו יש
+ * לה שעה ואין. הסיבה לא אבדה — היא הדבר הראשון בגיליון הפרטים.
+ */
+{
+  const at = line.indexOf("case 'skipped':");
+  const body = line.slice(at, at + 420);
+  ok(
+    body.indexOf('formatInstantHe(row.updated_at)') < body.indexOf('row.skip_reason ||'),
+    'בשורת דילוג השעה באה לפני הסיבה, כי הסיבה נחתכת בכל רוחב של טלפון',
+  );
+}
+
 console.log(`✓ done-at: ${checks} בדיקות עברו`);

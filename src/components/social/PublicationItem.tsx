@@ -5,7 +5,7 @@ import { getQueueItem, type QueueRow } from '@/lib/social/client';
 import { formatDayMonthHe, formatInstantHe, relativeHe, zonedDateISO } from '@/lib/social/time';
 import { CANCELLABLE_STATUSES } from '@/lib/social/status';
 import { QUEUE_STEP_LABEL, type QueueStep } from '@/lib/social/types';
-import { CalendarIcon, ClipboardListIcon, EyeIcon, RepeatIcon, SendIcon, UsersIcon, XCircleIcon } from '@/components/icons';
+import { CalendarIcon, ClipboardListIcon, EyeIcon, LogOutIcon, PauseIcon, RepeatIcon, SendIcon, UsersIcon, XCircleIcon } from '@/components/icons';
 import { Stamp } from './DateTime';
 import { ErrorDetail } from './ErrorDetail';
 import { TargetAvatar } from './TargetAvatar';
@@ -27,6 +27,29 @@ export interface PublicationActions {
   onConfirm?: (row: QueueRow) => void;
   onRunNow?: (row: QueueRow) => void;
   onScreenshot?: (row: QueueRow) => void;
+  /*
+   * ─── THE TWO THAT ARE ABOUT THE GROUP, NOT ABOUT THIS PUBLICATION ─────
+   *
+   * "תוסיף כאן אופציה מהירה לצאת מהקבוצות שכשלו ולא ניתן לפרסם בהן."
+   *
+   * He is reading a list of failures, and the thing worth doing from there is
+   * not about the row — it is about the group that keeps producing rows like
+   * it. Measured on his account 10.11: fifteen failures in one day, fourteen
+   * of them the same "לא מצאתי את תיבת כתבו משהו…", and all
+   * fifteen groups still switched ON, because composer.ts throws
+   * PublishError('composer') and only `cannot_post` retires a target. So the
+   * queue was going to spend tomorrow's attempts on them too.
+   *
+   * TWO ACTIONS AND NOT ONE, because they are not the same decision:
+   *   onStopTarget — the group stops receiving publications. Instant, and
+   *                  undone by switching it back on. No confirmation.
+   *   onLeaveGroup — the membership ends on Facebook. Plenty of these groups
+   *                  re-admit only through an admin, so this one is asked
+   *                  about first; the sheet below is where that happens, and
+   *                  this callback runs only once he has answered it.
+   */
+  onStopTarget?: (row: QueueRow) => void;
+  onLeaveGroup?: (row: QueueRow) => void;
 }
 
 /**
@@ -159,6 +182,16 @@ export function PublicationItem({
 }) {
   const [open, setOpen] = useState(false);
   /*
+   * THE ONE ACTION ON THIS ROW THAT CANNOT BE UNDONE FROM HERE.
+   *
+   * Leaving ends a membership, and plenty of his groups re-admit only through
+   * an admin — so it is asked about rather than done. The sheet lives in this
+   * component and not in each screen that renders it, because the question is
+   * the same wherever the row appears and a parent that forgot to ask would
+   * be a parent that leaves a group on one tap.
+   */
+  const [leaving, setLeaving] = useState(false);
+  /*
    * One second, and only while this row is actually publishing — the same
    * beat and the same visibility guard every other counter in the product
    * uses. A row in any other status starts no interval at all.
@@ -245,6 +278,23 @@ export function PublicationItem({
       ? { label: 'נסה שוב', icon: <RepeatIcon className={icon} />, onSelect: () => actions.onRetry?.(row) }
       : null,
     /*
+     * ─── AND THE TWO THAT END THE PROBLEM RATHER THAN RETRYING IT ────────
+     *
+     * Offered on exactly the statuses "נסה שוב" is offered on, which is the
+     * set he is looking at when he wants them: a row that went wrong. On a
+     * published row the group is not the subject, and the menu he reads
+     * before every post stays short.
+     *
+     * The order is deliberate — retry, then stop, then leave: least final
+     * first, and the irreversible one last and marked.
+     */
+    actions.onStopTarget && row.target?.id && (row.status === 'failed' || row.status === 'skipped' || row.status === 'needs_attention')
+      ? { label: 'הפסק לנסות בקבוצה הזו', icon: <PauseIcon className={icon} />, onSelect: () => actions.onStopTarget?.(row) }
+      : null,
+    actions.onLeaveGroup && row.target?.url && (row.status === 'failed' || row.status === 'skipped' || row.status === 'needs_attention')
+      ? { label: 'צא מהקבוצה בפייסבוק', icon: <LogOutIcon className={icon} />, onSelect: () => setLeaving(true), danger: true }
+      : null,
+    /*
      * "הרץ עכשיו" is offered when the row is more than a minute away — which
      * has to be measured on the instant it will REALLY go out. On the raw
      * column it is false for every row whose stamp has passed but whose
@@ -284,6 +334,59 @@ export function PublicationItem({
         <StatusPill status={row.status} />
       )}
       <OverflowMenu label={`פעולות עבור ${row.target?.name ?? 'הפרסום'}`} actions={menu} />
+
+      <Sheet
+        open={leaving}
+        onClose={() => setLeaving(false)}
+        placement="center"
+        icon={<LogOutIcon className="h-4.5 w-4.5" />}
+        title="לצאת מהקבוצה בפייסבוק?"
+      >
+        <div className="space-y-3">
+          <p dir="auto" className="text-sm font-bold text-mist-100">
+            {row.target?.name ?? 'הקבוצה'}
+          </p>
+          {/* WHAT IT ACTUALLY DOES, IN THE ORDER IT HAPPENS, and the cost
+              named rather than implied. "בחלק מהקבוצות" is the honest
+              shape of it: we cannot know from here which ones gate re-entry
+              on an admin, so the sentence says that instead of promising. */}
+          <ul className="space-y-1.5 text-sm text-mist-300">
+            <li>התוכנה תפתח את הקבוצה במחשב שלכם ותלחץ “עזיבת הקבוצה”.</li>
+            <li>אחרי שפייסבוק תאשר שיצאתם — הקבוצה תכובה ולא ייכנסו אליה פרסומים חדשים.</li>
+            <li className="font-bold text-warning-400">בחלק מהקבוצות חזרה דורשת אישור מנהל מחדש. אי אפשר לבטל את זה מהתוכנה.</li>
+          </ul>
+          {/* The softer action, offered HERE and not only in the menu: it is
+              the thing most of these rows actually need, and a person who
+              opened this sheet is one tap from the irreversible one. */}
+          <div className="flex flex-wrap gap-2 pt-1">
+            <Button
+              variant="danger"
+              className="grow"
+              onClick={() => {
+                setLeaving(false);
+                actions.onLeaveGroup?.(row);
+              }}
+            >
+              צא מהקבוצה
+            </Button>
+            <Button variant="secondary" onClick={() => setLeaving(false)}>
+              ביטול
+            </Button>
+          </div>
+          {actions.onStopTarget && row.target?.id && (
+            <Button
+              variant="ghost"
+              className="w-full"
+              onClick={() => {
+                setLeaving(false);
+                actions.onStopTarget?.(row);
+              }}
+            >
+              רק הפסק לנסות — בלי לצאת מהקבוצה
+            </Button>
+          )}
+        </div>
+      </Sheet>
 
       <Sheet open={open} onClose={() => setOpen(false)} title={row.target?.name ?? 'פרסום'}>
         <div className="space-y-3">

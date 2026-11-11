@@ -16,7 +16,19 @@ import {
   inputClass,
   useToast,
 } from '@/components/social/ui';
-import { cancelQueueItem, listCampaigns, listQueue, queueGates, retryQueueItem, screenshotUrl, type QueueRow } from '@/lib/social/client';
+import {
+  cancelQueueItem,
+  leaveGroupOnFacebook,
+  listCampaigns,
+  listQueue,
+  listWorkers,
+  pauseTargets,
+  queueGates,
+  retryQueueItem,
+  screenshotUrl,
+  waitForWorkerCommand,
+  type QueueRow,
+} from '@/lib/social/client';
 import { projectQueue } from '@/lib/social/projection';
 import { counted, startOfZonedDay, zonedToUtc } from '@/lib/social/time';
 import { AUTOMATIC_WAITING_STATUSES, IN_FLIGHT_STATUSES, NEEDS_HUMAN_STATUSES } from '@/lib/social/status';
@@ -153,6 +165,8 @@ function HistoryScreen() {
   const [limit, setLimit] = useState(PAGE_SIZE);
   const [campaigns, setCampaigns] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
+  /* The row whose leave is in flight — the machine can take half a minute. */
+  const [busyLeave, setBusyLeave] = useState<string | null>(null);
   const toast = useToast();
 
   const load = useCallback(async () => {
@@ -261,10 +275,66 @@ function HistoryScreen() {
     await load();
   }
 
+  /*
+   * ─── THE GROUP, NOT THE ROW ────────────────────────────────────
+   *
+   * "תוסיף כאן אופציה מהירה לצאת מהקבוצות שכשלו ולא ניתן לפרסם בהן."
+   *
+   * `pauseTargets` is the whole of the first one and it already existed: it
+   * switches the group off AND cancels the publications already waiting for
+   * it, which is the difference between "stop trying" and "stop trying after
+   * the fourteen already in the queue have each burned an attempt".
+   */
+  const stopTarget = (r: QueueRow) => {
+    const id = r.target?.id;
+    if (!id) return;
+    void act(async () => {
+      await pauseTargets([id]);
+      return true;
+    }, `הקבוצה "${r.target?.name ?? ''}" כובתה — לא ייכנסו אליה פרסומים חדשים.`);
+  };
+
+  /*
+   * AND THE SECOND ONE HAPPENS ON HIS PC, SO THE SCREEN WAITS FOR THE ANSWER.
+   *
+   * The command only queues work; the leaving is a browser on his machine
+   * pressing Facebook's own button. Announcing success on the insert would be
+   * a toast about something that has not happened yet — and on THIS action,
+   * which ends a membership, the gap between "asked" and "done" is the whole
+   * question. So it waits, and reports what the machine said, including when
+   * the machine said it could not.
+   *
+   * A null answer is "not finished", never "failed": the command is still in
+   * the queue and the computer will run it when it gets to it.
+   */
+  const leaveGroup = (r: QueueRow) => {
+    const url = r.target?.url;
+    if (!url) return;
+    void (async () => {
+      setBusyLeave(r.id);
+      try {
+        const workers = await listWorkers().catch(() => []);
+        const online = workers.find((w) => w.online) ?? workers[0] ?? null;
+        const { id } = await leaveGroupOnFacebook(online?.id ?? null, url);
+        toast('הבקשה נשלחה למחשב — מחכים שיצא מהקבוצה…', 'info');
+        const done = await waitForWorkerCommand(id);
+        if (!done) toast('הבקשה עדיין בתור במחשב. כשהיא תרוץ הקבוצה תכובה לבד.', 'info');
+        else toast(done.result || (done.status === 'done' ? 'יצאנו מהקבוצה.' : 'היציאה לא התבצעה.'), done.status === 'done' ? 'success' : 'error');
+      } catch (err) {
+        toast(friendlyMessage(err, 'לא הצלחנו לשלוח את הבקשה למחשב.'), 'error');
+      } finally {
+        setBusyLeave(null);
+        await load();
+      }
+    })();
+  };
+
   const actions = {
     onRetry: (r: QueueRow) => act(() => retryQueueItem(r.id), 'הוחזר לתור.'),
     onCancel: (r: QueueRow) => act(() => cancelQueueItem(r.id), 'בוטל.'),
     onScreenshot: (r: QueueRow) => r.screenshot_path && screenshotUrl(r.screenshot_path).then((u) => u && window.open(u, '_blank', 'noreferrer')),
+    onStopTarget: stopTarget,
+    onLeaveGroup: leaveGroup,
   };
 
   return (
@@ -377,7 +447,7 @@ function HistoryScreen() {
             <>
               <ul className="divide-y divide-ink-700">
                 {page.map((r) => (
-                  <PublicationItem key={r.id} row={r} projectedAt={projected.get(r.id)} actions={actions} showDate />
+                  <PublicationItem key={r.id} row={r} projectedAt={projected.get(r.id)} actions={actions} busy={busyLeave === r.id} showDate />
                 ))}
               </ul>
               {filtered.length > page.length && (

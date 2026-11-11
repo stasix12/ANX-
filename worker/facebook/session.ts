@@ -7,6 +7,7 @@ import { readProfiles, switchProfile, type FacebookProfile } from './profiles';
 import { searchGroups, type SearchOutcome } from './discover';
 import { readMyGroups, type MyGroupsOutcome } from './mygroups';
 import { joinGroups, type JoinResult } from './join';
+import { leaveOneGroup, type LeaveResult } from './leave';
 import { env } from '../env';
 import { CHECKPOINT_PATHS, LOGIN_PATHS, fb, patterns } from './selectors';
 
@@ -432,6 +433,35 @@ export class BrowserSession {
       }
       const run = await joinGroups(page, urls, hooks);
       return { ...run, problem: '' };
+    } finally {
+      await page.close().catch(() => undefined);
+    }
+  }
+
+  /**
+   * LEAVE ONE GROUP, BECAUSE HE ASKED FOR THAT GROUP.
+   *
+   * The session's half of ./leave.ts: the profile check, one page, and
+   * closing it however it ends. Deliberately NOT a list like joinGroups —
+   * leaving is a decision taken per group while looking at that group's
+   * failure, and a list here would be a list of irreversible things pressed
+   * without him seeing any of them.
+   *
+   * THE SAME THREE REFUSALS AS EVERY OTHER BROWSER ERRAND, and they matter
+   * more here than anywhere: a security check or a signed-out session on a
+   * page that presses "leave" is how the wrong thing gets clicked. Each one
+   * ends the run before the browser is pointed at the group at all.
+   */
+  async leaveGroup(headless: boolean, url: string): Promise<{ result: LeaveResult | null; problem: string }> {
+    if (!this.hasProfile()) return { result: null, problem: '\u05d0\u05d9\u05df \u05e2\u05d3\u05d9\u05d9\u05df \u05e4\u05e8\u05d5\u05e4\u05d9\u05dc \u05d3\u05e4\u05d3\u05e4\u05df \u2014 \u05e6\u05e8\u05d9\u05da \u05e7\u05d5\u05d3\u05dd \u05dc\u05d4\u05ea\u05d7\u05d1\u05e8 \u05dc\u05e4\u05d9\u05d9\u05e1\u05d1\u05d5\u05e7.' };
+    const page = await this.newPage(headless, '\u05d9\u05e6\u05d9\u05d0\u05d4 \u05de\u05e7\u05d1\u05d5\u05e6\u05d4');
+    try {
+      const kind = await classifyPage(page);
+      if (kind === 'checkpoint') return { result: null, problem: 'Facebook \u05de\u05e6\u05d9\u05d2 \u05d1\u05d3\u05d9\u05e7\u05ea \u05d0\u05d1\u05d8\u05d7\u05d4 \u2014 \u05e4\u05ea\u05d7\u05d5 \u05d0\u05ea \u05d4\u05d3\u05e4\u05d3\u05e4\u05df \u05d5\u05d8\u05e4\u05dc\u05d5 \u05d1\u05d4.' };
+      if (kind === 'login' || !(await this.hasLoginCookie())) {
+        return { result: null, problem: '\u05dc\u05d0 \u05de\u05d7\u05d5\u05d1\u05e8 \u05dc\u05e4\u05d9\u05d9\u05e1\u05d1\u05d5\u05e7 \u2014 \u05dc\u05d7\u05e6\u05d5 "\u05d4\u05ea\u05d7\u05d1\u05e8 \u05dc\u05e4\u05d9\u05d9\u05e1\u05d1\u05d5\u05e7".' };
+      }
+      return { result: await leaveOneGroup(page, url), problem: '' };
     } finally {
       await page.close().catch(() => undefined);
     }

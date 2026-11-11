@@ -422,6 +422,26 @@ export async function startJoinGroups(workerId: string | null, urls: string[]): 
 }
 
 /**
+ * OUT OF ONE GROUP, BY ITS ADDRESS AND NOT BY ITS ID.
+ *
+ * "תוסיף כאן אופציה מהירה לצאת מהקבוצות שכשלו ולא ניתן לפרסם בהן."
+ *
+ * THE ADDRESS IS THE PAYLOAD BECAUSE THE WORKER HAS TO CHECK IT. An id would
+ * travel from this browser to a branch that opens a page in his live Facebook
+ * session and presses a button that ends a membership; the worker re-parses
+ * this address with parseGroupUrl and finds the row itself, inside its own
+ * tenant, so nothing this file sends can name a group the worker would not
+ * have found on its own.
+ *
+ * IT ONLY QUEUES. The leaving happens on his PC, in the browser that is
+ * already signed in, and the answer comes back on the command row — which is
+ * why the screen that calls this waits for it rather than announcing success.
+ */
+export async function leaveGroupOnFacebook(workerId: string | null, url: string): Promise<{ id: string }> {
+  return sendWorkerCommand(workerId, 'leave', { url });
+}
+
+/**
  * Everything that scan has ever found — AND ONLY WHAT IT CONFIRMED.
  *
  * The bucket alone is not enough. It was, and the owner watched ninety-three

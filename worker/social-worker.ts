@@ -2070,7 +2070,7 @@ async function runCommands(state: WorkerState, headless: boolean, browser: Brows
     .or(`worker_id.eq.${state.id},worker_id.is.null`)
     .order('created_at')
     .limit(5);
-  for (const cmd of (data ?? []) as (WorkerCommand & { payload?: { user?: string; pass?: string; name?: string; query?: string; source?: string ; urls?: unknown[] } })[]) {
+  for (const cmd of (data ?? []) as (WorkerCommand & { payload?: { user?: string; pass?: string; name?: string; query?: string; source?: string ; urls?: unknown[]; url?: string } })[]) {
     /*
      * CLAIMING A COMMAND ALSO EMPTIES IT.
      *
@@ -2429,6 +2429,70 @@ async function runCommands(state: WorkerState, headless: boolean, browser: Brows
                       : '';
             result = `הצטרפנו ל-${joined}, ${pending} ממתינות לאישור מנהל${why}`;
             ok = run.stoppedBy !== 'blocked';
+          }
+        }
+      } else if (cmd.command === 'leave') {
+        /*
+         * ─── OUT OF A GROUP THAT WILL NOT TAKE A POST ────────────────────
+         *
+         * "תוסיף כאן אופציה מהירה לצאת מהקבוצות שכשלו ולא ניתן לפרסם בהן."
+         *
+         * Measured on his account 10.11: fifteen failures in a day, fourteen
+         * of them the same "לא מצאתי את תיבת כתבו משהו…", and all
+         * fifteen groups still switched ON — composer.ts throws
+         * PublishError('composer') and only `cannot_post` retires a target.
+         *
+         * ONE GROUP, AND ITS ADDRESS IS CHECKED HERE RATHER THAN TRUSTED.
+         * The same rule the join branch follows and for a sharper reason:
+         * this opens a page in a browser carrying his live session and
+         * presses a button that ENDS A MEMBERSHIP. "Whatever the payload
+         * said" is not an address, and an id from the dashboard is not a
+         * group — the row is found by the address, inside this worker's own
+         * tenant, so a payload cannot name somebody else's group.
+         */
+        const group = parseGroupUrl(String(cmd.payload?.url ?? ''));
+        if (!group) {
+          ok = false;
+          result = 'לא הגיעה כתובת קבוצה תקינה.';
+        } else {
+          const db = await workerDb();
+          const found = await db.from('social_targets').select('id, name, enabled').eq('url', group.url).limit(1);
+          const target = (found.data?.[0] as { id: string; name: string; enabled: boolean } | undefined) ?? null;
+          const name = target?.name ?? group.url;
+          const run = await session.leaveGroup(headless, group.url);
+          if (run.problem || !run.result) {
+            ok = false;
+            result = run.problem || 'היציאה לא התבצעה.';
+          } else {
+            const { outcome, detail } = run.result;
+            /*
+             * THE GROUP IS SWITCHED OFF ONLY ON AN ANSWER THE PAGE GAVE.
+             *
+             * `left` and `not-member` are both "it is not ours any more" — he
+             * may have left by hand, or a previous run may have worked and
+             * failed to report, and in both cases the state he asked for is
+             * the state we are in. Every other outcome leaves the group ON:
+             * switching it off on a click nobody confirmed would hide a
+             * working group behind a failure that never happened.
+             */
+            if ((outcome === 'left' || outcome === 'not-member') && target) {
+              await db
+                .from('social_targets')
+                .update({
+                  enabled: false,
+                  last_status: 'left',
+                  last_error:
+                    outcome === 'left'
+                      ? 'יצאתם מהקבוצה מתוך התוכנה. הקבוצה כובתה ולא ייכנסו אליה פרסומים חדשים.'
+                      : 'לא הייתם חברים בקבוצה הזו. הקבוצה כובתה ולא ייכנסו אליה פרסומים חדשים.',
+                })
+                .eq('id', target.id);
+              await logActivity('warn', 'target_left', `כובתה הקבוצה "${name}" — ${detail}`, { targetId: target.id });
+            }
+            ok = outcome === 'left' || outcome === 'not-member';
+            result = ok
+              ? `${detail} הקבוצה "${name}" כובתה ולא ייכנסו אליה פרסומים חדשים.`
+              : `${detail} הקבוצה "${name}" לא שונתה.`;
           }
         }
       } else if (cmd.command === 'resume') {

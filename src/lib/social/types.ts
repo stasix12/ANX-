@@ -563,7 +563,17 @@ export interface DiscoverySearchRow {
   last_found: number;
 }
 
-export type WorkerCommandName = 'login' | 'check' | 'logout' | 'resume' | 'verify' | 'profiles' | 'switch' | 'discover' | 'join';
+/*
+ * `leave` IS THE ONLY ONE OF THESE THAT TAKES SOMETHING AWAY FROM HIM.
+ *
+ * "תוסיף כאן אופציה מהירה לצאת מהקבוצות שכשלו ולא ניתן לפרסם בהן."
+ *
+ * Every other command here is a read, a reconnect or an addition; this one
+ * ends a membership, and plenty of these groups re-admit only through an
+ * admin. So it carries ONE group per command and the dashboard asks before
+ * it queues one — see PublicationItem.tsx — rather than offering a sweep.
+ */
+export type WorkerCommandName = 'login' | 'check' | 'logout' | 'resume' | 'verify' | 'profiles' | 'switch' | 'discover' | 'join' | 'leave';
 
 export interface WorkerCommand {
   id: string;

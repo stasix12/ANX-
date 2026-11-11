@@ -726,7 +726,45 @@
  *
  * התזמון, סדר התור, מנגנון הפרסום וההגדרות הקיימות לא נגעו.
  */
-export const WORKER_VERSION = '4.59.0';
+/*
+ * ─── 4.59.0 → 4.60.0 — DOES THIS HAVE TO REACH THE PC? YES, AND IT IS THE
+ *     FIRST COMMAND IN THIS PRODUCT THAT TAKES SOMETHING AWAY ────────────
+ *
+ * "תוסיף כאן אופציה מהירה לצאת מהקבוצות שכשלו ולא ניתן לפרסם בהן."
+ *
+ * Measured on his account on 10.11: fifteen failures in one day, fourteen of
+ * them the same "לא מצאתי את תיבת כתבו משהו…", and ALL FIFTEEN
+ * groups still switched on — composer.ts throws PublishError('composer') and
+ * only `cannot_post` retires a target, so tomorrow's attempts were going to
+ * the same fifteen.
+ *
+ * The in-app half of his answer — "הפסק לנסות בקבוצה הזו" — is
+ * pauseTargets() and needs no release. THIS half is a browser on his machine
+ * pressing Facebook's own "עזיבת הקבוצה", so it cannot be anywhere else.
+ *
+ * WHAT MAKES IT SAFE, because leaving cannot be undone from the app and
+ * plenty of these groups re-admit only through an admin:
+ *   • the dashboard ASKS first, naming that cost, and the menu item only
+ *     opens the question — one tap can never end a membership;
+ *   • the worker re-parses the ADDRESS and finds the row itself, inside its
+ *     own tenant. No id from the dashboard decides which group is left;
+ *   • a press is not an outcome. The page is loaded again and "left" is
+ *     claimed only where Facebook then offers the way back in;
+ *   • and the group is switched off only on an answer the page gave — never
+ *     on a click nobody confirmed.
+ *
+ * worker/test/leave.test.ts drives all of it in a real browser, including the
+ * case that found a genuine bug while it was being written: Facebook keeps
+ * the menu's items in the DOM and merely hidden, so reading labels without a
+ * visibility filter clicks a hidden control and reports a failure on a group
+ * it never tried to leave.
+ *
+ * CHECKED AGAINST THE RELEASE LIST: v4.59.0 was published today at 06:48 and
+ * both machines are already running it, so 4.60.0 is free.
+ *
+ * התזמון, סדר התור, מנגנון הפרסום וההגדרות הקיימות לא נגעו.
+ */
+export const WORKER_VERSION = '4.60.0';
 
 /**
  * A FINGERPRINT OF EVERYTHING THE INSTALLER CARRIES.
@@ -1446,4 +1484,4 @@ export const WORKER_VERSION = '4.59.0';
  * is asked to update anything for a window that only draws what is already in
  * social_activity_log.
  */
-export const WORKER_FINGERPRINT = '067dfb77dad5ae04';
+export const WORKER_FINGERPRINT = '9a89b50598b633c1';

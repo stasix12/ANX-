@@ -67,6 +67,21 @@ const RULES: Rule[] = [
   { match: /duplicate key|already exists|unique constraint/i, text: 'הפריט הזה כבר קיים במערכת.' },
   { match: /foreign key|violates foreign key constraint/i, text: 'הפריט מקושר לנתונים אחרים ולכן לא ניתן לשמור את השינוי.' },
   { match: /not-null|null value in column/i, text: 'חסר שדה חובה. מלאו את כל השדות ונסו שוב.' },
+  /*
+   * A COMMAND THE DATABASE HAS NOT BEEN TOLD ABOUT, named before the generic
+   * check-constraint line below can swallow it as "אחד הערכים … אינו
+   * תקין" — which is true, useless, and names no field he could check.
+   *
+   * It has a history. The CHECK on social_worker_commands.command lists every
+   * command by name, and v21 shipped two without touching it: the button was
+   * refused by the database before the machine ever heard of it — pressed,
+   * nothing happened, and the reason invisible. The answer is never "check
+   * the fields"; it is one file, run once.
+   */
+  {
+    match: /social_worker_commands_command_check/i,
+    text: `הפעולה הזו חדשה והמסד עדיין לא מכיר אותה. צריך להריץ פעם אחת את ${LATEST_SCHEMA_FILE} ב-SQL Editor של Supabase.`,
+  },
   { match: /check constraint|invalid input syntax|out of range/i, text: 'אחד הערכים שהוזנו אינו תקין. בדקו את השדות ונסו שוב.' },
 
   // Missing schema — the owner has not run the SQL migration yet.

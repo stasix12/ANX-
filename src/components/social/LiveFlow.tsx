@@ -4,6 +4,8 @@ import { useEffect, useRef, useState } from 'react';
 import { ANX_FACES, POSE_H, POSE_W } from './anxPoses';
 import type { SceneMode } from './sceneState';
 import { QUEUE_STEP_LABEL, type QueueStep } from '@/lib/social/types';
+import { CycleCard } from './CycleCard';
+import type { PublishCycle } from '@/lib/social/publish-cycle';
 
 /**
  * ─── ANX LIVE FLOW ────────────────────────────────────────────────────────
@@ -273,11 +275,15 @@ const TONE: Record<SceneMode, { line: string; tone: 'good' | 'warn' | 'bad' | 'm
   offline: { line: 'המחשב לא מחובר', tone: 'bad' },
 };
 
+
 export function LiveFlow({
   mode,
   headline,
   now,
   rows,
+  cycle = null,
+  onCycleToggle,
+  cycleBusy = false,
 }: {
   mode: SceneMode;
   /** "פרסום אחד ממתין לכם" — counted off the real queue by the screen. */
@@ -285,6 +291,19 @@ export function LiveFlow({
   /** The publication going out right now, or null when none is. */
   now: { name: string; step: QueueStep | null; cover: string | null; image?: string | null } | null;
   rows: readonly FlowRow[];
+  /*
+   * THE 100-PUBLICATION CYCLE, OR null.
+   *
+   * null on every caller that has not been given one — the campaign screen,
+   * the tests that render this component on its own — and on any database
+   * where v41 has not been run. The card is drawn only when the mechanism is
+   * BOTH present and switched on, so nothing about this screen changes for an
+   * installation that has never heard of it.
+   */
+  cycle?: PublishCycle | null;
+  /** Turning the mechanism on or off. Absent on callers that only display. */
+  onCycleToggle?: (on: boolean) => void;
+  cycleBusy?: boolean;
 }) {
   const at = STATION_OF[mode];
   const state = TONE[mode];
@@ -408,6 +427,20 @@ export function LiveFlow({
           </div>
         </div>
       )}
+
+      {/* ── 5b: the publishing cycle ─────────────────────────────────────
+          "הפסקה אוטומטית אחרי 100 פרסומים" — his reference image puts this
+          BETWEEN the stage rail above and the queue below, and that is also
+          where it belongs: it is the answer to "why is the queue not moving",
+          read in the same glance as the queue it is holding.
+
+          ITS OWN CLASS NAMESPACE (anxc-*) and not the flow's. today-count.test
+          asserts that `anxf-fill` is absent from this component when nothing
+          is in flight, and a meter borrowing that class would break a green
+          suite to save a line of CSS. The shell below copies .anxf-qcard's
+          radius, border, background and shadow by VALUE, so the two cards are
+          the same object to the eye and independent to the tests. */}
+      {cycle && <CycleCard cycle={cycle} onToggle={onCycleToggle} busy={cycleBusy} />}
 
       {/* ── 6: the queue ──────────────────────────────────────────────── */}
       {rows.length > 0 && (

@@ -32,6 +32,7 @@ import { PostCover } from './PostCover';
 import { stageElapsed } from './PublicationItem';
 import { TargetAvatar } from './TargetAvatar';
 import { Button, ButtonLink, CARD, ProgressBar, TONE_FILL, TONE_TEXT, TONE_TINT, type Tone } from './ui';
+import type { PublishCycle } from '@/lib/social/publish-cycle';
 import { LiveFlow, type FlowRow } from './LiveFlow';
 import { sceneModeFor, type SceneMode } from './sceneState';
 import { SYSTEM_STATE_TONE, type SystemState } from './systemState';
@@ -1060,6 +1061,9 @@ export function LiveQueueHero({
   inFlight = 0,
   inFlightRows = [],
   flowRows = [],
+  cycle = null,
+  onCycleToggle,
+  cycleBusy = false,
   workerOnline,
   publishingBlocked = false,
   intervention = null,
@@ -1158,6 +1162,16 @@ export function LiveQueueHero({
    * panel draws rows, it does not decide which rows exist.
    */
   flowRows?: readonly FlowRow[];
+  /*
+   * THE 100-PUBLICATION CYCLE. Passed down untouched — this component does
+   * no arithmetic on it and draws none of it; LiveFlow owns the card. It is
+   * threaded rather than read here because the dashboard already reads it
+   * once per poll, and a second read would be a second opinion about the
+   * number that decides whether the account keeps publishing.
+   */
+  cycle?: PublishCycle | null;
+  onCycleToggle?: (on: boolean) => void;
+  cycleBusy?: boolean;
   /** The four figures under it, counted in the database by that same screen. */
   /** Rows a worker is holding right now (summary.inFlight). */
   inFlight?: number;
@@ -1436,6 +1450,11 @@ export function LiveQueueHero({
            queued, and drawing it with a spinner would say a dead worker is
            working. It goes back to being the next one up, which it is. */
         rows={working ? flowRows : flowRows.map((r) => (r.state === 'live' ? { ...r, state: 'next' as const, note: null } : r))}
+        /* The 100-publication cycle, straight through. null on an installation
+           where v41 has not been run, and the card then does not draw at all. */
+        cycle={cycle}
+        onCycleToggle={onCycleToggle}
+        cycleBusy={cycleBusy}
       />
 
       {ceilingReached && (

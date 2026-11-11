@@ -76,6 +76,23 @@ const SYSTEM_BY_DESIGN = new Set([
    * this whole fix exists to end.
    */
   'attention_expired',
+  /*
+   * THE 100-PUBLICATION PAUSE BEGINNING. Same family as the two lines above:
+   * nothing published and nothing failed — the mechanism the owner asked for
+   * did exactly what he asked. It is written because without it the queue
+   * stands for eight hours and the only honest answer to "למה לא מפרסם"
+   * would be a number on a card nobody was looking at.
+   */
+  'cycle_rest',
+  /*
+   * AND THE SWITCH ITSELF, BOTH WAYS. The owner pressing it is deliberate, so
+   * it is system news rather than a failure — but it must be in the feed:
+   * switching the mechanism OFF releases a pause that is running, and without
+   * a line in the log there is no way to answer afterwards why publishing
+   * came back in the middle of an eight-hour hold.
+   */
+  'cycle_enabled',
+  'cycle_disabled',
   'metrics_columns_missing',
   /*
    * A read the publish engine needed came back as an error, so it refused to
@@ -173,6 +190,21 @@ function sources(dir: string, out: string[] = []): string[] {
 
 const WRITE = /log(?:Client)?Activity\(\s*(?:'[a-z]+'|[a-zA-Z.]+\s*\?\s*'[a-z]+'\s*:\s*'[a-z]+')\s*,\s*'([a-z0-9_]+)'/g;
 /*
+ * ─── 11.11.2026 · AND AN EVENT THAT IS ITSELF A TERNARY ──────────────────
+ *
+ * WRITE allows a ternary in the LEVEL position and only a literal in the
+ * EVENT position. The publish-cycle switch writes
+ *
+ *     logClientActivity('info', on ? 'cycle_enabled' : 'cycle_disabled', …)
+ *
+ * which matched nothing: BOTH events were invisible to this walk, the suite
+ * passed, and two kinds would have reached the owner's feed with no title and
+ * no classification. That is the exact failure the planner note above
+ * describes, arriving a second time through a different door — so the door is
+ * closed rather than the one call rewritten.
+ */
+const WRITE_PICK = /log(?:Client)?Activity\(\s*(?:'[a-z]+'|[a-zA-Z.]+\s*\?\s*'[a-z]+'\s*:\s*'[a-z]+')\s*,\s*[a-zA-Z.?![\]]+\s*\?\s*'([a-z0-9_]+)'\s*:\s*'([a-z0-9_]+)'/g;
+/*
  * AND THE PLANNER, WHICH THIS WALK COULD NOT SEE.
  *
  * The regex above matches logActivity( and logClientActivity(. plan.ts writes
@@ -189,11 +221,19 @@ for (const file of [...sources('src/lib/social'), ...sources('worker'), ...sourc
   if (file.includes('/test/')) continue;
   const src = readFileSync(file, 'utf8');
   for (const m of src.matchAll(WRITE)) emitted.add(m[1]);
+  for (const m of src.matchAll(WRITE_PICK)) {
+    emitted.add(m[1]);
+    emitted.add(m[2]);
+  }
   for (const m of src.matchAll(NOTE)) emitted.add(m[1]);
 }
 
 ok(emitted.size > 15, `the walk found the writers (${emitted.size} events)`);
 ok(emitted.has('published') && emitted.has('publish_failed'), 'the walk found the two events that matter most');
+ok(
+  emitted.has('cycle_enabled') && emitted.has('cycle_disabled'),
+  "and an event written as a ternary — logClientActivity('info', on ? 'a' : 'b', …) — which the walk could not see at all until 11.11",
+);
 ok(
   emitted.has('plan_failed') && emitted.has('drip_planned'),
   "and the PLANNER's events too — it writes through note() rather than logActivity(), and was invisible to this walk until a round that never published went unclassified",

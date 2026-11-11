@@ -49,6 +49,7 @@ import { BrowserSession, SessionError, recentPageOpens } from './facebook/sessio
 import { JOIN_RUN_CAP, type JoinResult } from './facebook/join';
 import { NO_ACCOUNT, queueScope } from '@/lib/social/account-scope';
 import { captureScreenshot } from './screenshots';
+import { cycleTick, cycleResting, type PublishCycle } from '@/lib/social/publish-cycle';
 
 /**
  * Local browser worker — `npm run social-worker`.
@@ -177,6 +178,21 @@ interface WorkerState {
    */
   attentionSeen: string;
   attentionAt: number;
+  /*
+   * ─── THE 100-PUBLICATION CYCLE, AS THIS PROCESS LAST SAW IT ───────────
+   *
+   * The truth is a row in social_publish_cycle; this is the last answer the
+   * database gave, kept so the gate can hold on a tick whose read failed.
+   *
+   * THAT IS THE WHOLE REASON IT IS CACHED. A dropped connection must not read
+   * as "nothing is holding" — that would turn one bad read into a hundred
+   * publications past a ceiling that exists to stop his account being limited.
+   * A failed read keeps the last known hold; only a successful read can lift
+   * one. `cycleReadAt` is how old the answer is, for the log line alone.
+   */
+  cycle: PublishCycle | null;
+  cycleReadAt: number;
+  cycleNoticeFor: string;
   /**
    * SOMETHING HE SHOULD KNOW — which is NOT the same as a reason to stop.
    *
@@ -462,6 +478,9 @@ async function main(): Promise<void> {
     freezeHold: false,
     attentionSeen: '',
     attentionAt: 0,
+    cycle: null,
+    cycleReadAt: 0,
+    cycleNoticeFor: '',
     notice: '',
     currentJobs: new Set<string>(),
     lanes: [],
@@ -1220,6 +1239,48 @@ async function tick(state: WorkerState): Promise<void> {
    * tick now falls through to the chores, which decide for themselves whether
    * they fit in the wait.
    */
+  /*
+   * ─── THE 100-PUBLICATION CYCLE, ASKED ONCE A TICK ───────────────────
+   *
+   * "כל 100 פרסומים מוצלחים בקבוצות פייסבוק תתחיל הפסקה של 8 שעות."
+   *
+   * A READ, never a count: `cycleTick(db, false)` asks the row what it says
+   * and advances nothing. The counting happens in exactly one place — beside
+   * the write that records a publication — so the number can only ever be
+   * moved by a publication that really landed.
+   *
+   * A FAILED READ KEEPS THE LAST ANSWER. `state.cycle` is only replaced when
+   * the database answers; a dropped connection on a home line must not read
+   * as "nothing is holding", because that turns one bad second into a hundred
+   * publications past the ceiling. Null until the first successful read, which
+   * is also the state on an installation where v41 has not been run — and
+   * there the engine behaves exactly as it did before this feature existed.
+   */
+  const cycleNow = await cycleTick(db, false);
+  if (cycleNow) {
+    state.cycle = cycleNow;
+    state.cycleReadAt = Date.now();
+  }
+  const holdingForCycle = cycleResting(state.cycle);
+  /*
+   * ONE LINE PER PAUSE, NOT ONE PER TICK. Latched on the instant itself, so a
+   * second pause five hours later says so again and the same pause never
+   * repeats. This is the lesson the removed rest left behind in the comment
+   * below: "eighty identical rows in the log the owner reads to find out
+   * whether anything is broken".
+   */
+  if (holdingForCycle && state.cycleNoticeFor !== state.cycle?.restUntil) {
+    state.cycleNoticeFor = state.cycle?.restUntil ?? '';
+    await logActivity(
+      'info',
+      'cycle_rest',
+      `הושלמו ${state.cycle?.limit ?? 100} פרסומים — המערכת בהפסקה ותחזור לפרסם אוטומטית. התור נשמר במלואו.`,
+      { until: state.cycle?.restUntil ?? null, roundsInWindow: state.cycle?.roundsInWindow ?? 0 },
+    );
+    console.log(`[worker] ⏸ מחזור פרסום הושלם — הפסקה עד ${state.cycle?.restUntil}.`);
+  }
+  if (!holdingForCycle) state.cycleNoticeFor = '';
+
   const holdingForGap = Boolean(due?.length) && !gate.open && gate.waitMs > PREP_LEAD_MS;
   /*
    * ONCE PER WAIT, and the wait is whichever of the two is holding the queue.
@@ -1253,7 +1314,18 @@ async function tick(state: WorkerState): Promise<void> {
    * It also preserves what the comment pipeline depends on: one browser, one
    * thing at a time, and CHORE_NEEDS_MS not widened by a millisecond.
    */
-  if ((!due?.length || holdingForGap) && state.lanes.every((l) => l.done)) {
+  /*
+   * AND THE REST ENTERS THIS BRANCH RATHER THAN RETURNING ABOVE IT.
+   *
+   * A plain `return idle(...)` at the top of the tick would switch the idle
+   * chores off for eight hours at a stretch — and one of those chores is
+   * verifySubmitted, the sweep that confirms a parked publication. The
+   * mechanism would have stopped the very thing that tells it a publication
+   * succeeded. So the pause looks to this branch exactly like "nothing is
+   * due": the browser is free, the chores decide for themselves whether they
+   * fit, and the publishing half below never starts a lane.
+   */
+  if ((!due?.length || holdingForGap || holdingForCycle) && state.lanes.every((l) => l.done)) {
     /*
      * IDLE CHORES — the work that uses the browser when no post is due.
      *
@@ -1358,6 +1430,16 @@ async function tick(state: WorkerState): Promise<void> {
     if (choreFits(await roomForChores(db, state, gate), CHORE_NEEDS_MS.restart)) await restartIfUpdated(state);
     return;
   }
+
+  /*
+   * NOTHING NEW IS CLAIMED WHILE THE CYCLE RESTS.
+   *
+   * Reached only when a lane is still in flight — the branch above returns in
+   * every other case — and a lane already publishing is deliberately allowed
+   * to finish: aborting a post mid-flight is how the same thing gets posted
+   * twice. It just may not be followed by another.
+   */
+  if (holdingForCycle) return;
 
   // Verify the login before the first job of a batch (and at most every 10 min).
   if (!(await sessionReady(state, headless))) return;
@@ -3361,6 +3443,32 @@ async function runJobInner(state: WorkerState, item: QueueItem, jobEnv: JobEnv):
     await logActivity('error', 'publish_unrecorded', `פורסם ל-"${tt.name}" אבל לא הצלחתי לרשום את התוצאה. הפרסום קיים בפייסבוק — סמנו את השורה ידנית.`, { queueId: item.id });
     console.error(`[worker] ⚠ פורסם ל-"${tt.name}" אבל רישום התוצאה נכשל — השורה נשארת "מפרסם" ודורשת בדיקה ידנית.`);
     return;
+  }
+
+  /*
+   * ─── AND THE CYCLE COUNTS IT ───────────────────────────────────
+   *
+   * HERE, AND NOWHERE ELSE. Below `if (!recorded) return`, so the cursor is
+   * advanced by a publication the DATABASE accepted — not by one the composer
+   * believed. A post that went out and whose row would not save leaves the
+   * queue row on 'publishing' for a human (see above) and does not count:
+   * the owner is told about it by name, and a counter that moved on an
+   * unrecorded publication would be a number nobody could reconcile.
+   *
+   * A post waiting in a group admin's approval queue DOES count — his
+   * decision on 11.11, and the right one: Facebook saw the action, and what
+   * Facebook saw is the whole subject of the ceiling.
+   *
+   * The answer is kept so the gate above holds from the very next tick
+   * instead of waiting for its own read, and `crossed` is what makes the
+   * "הושלמו 100 פרסומים" line fire once per pause rather than once per
+   * publication. A failed call changes nothing: the publication stands, and
+   * the next tick's read picks the number up.
+   */
+  const counted = await cycleTick(db, true);
+  if (counted) {
+    state.cycle = counted;
+    state.cycleReadAt = Date.now();
   }
 
   const targetPatch: Record<string, unknown> = { last_published_at: new Date().toISOString(), last_status: result.pendingApproval ? 'pending_approval' : 'published', last_error: '' };

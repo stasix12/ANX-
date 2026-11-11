@@ -3,6 +3,7 @@
 import { supabase } from '@/lib/supabase';
 import { campaignState, type CampaignQueueRow, type CampaignState } from './campaign';
 import { detectCity } from './cities';
+import { cycleTick, type PublishCycle } from './publish-cycle';
 import { addDaysISO, counted, startOfZonedDay, zonedDateISO, zonedHM, zonedToUtc } from './time';
 import { DEFAULT_CAMPAIGN_REPEAT, MAX_GAP_SECONDS, MIN_GAP_SECONDS, MIN_REPEAT_HOURS, gapMinutesFor, dayRelativeHe, repeatWindowSentence, gapChoiceLabel, readRounds, readSchedule, readRepeat, repeatColumns, roundsColumn, roundsWindowFix, weeklyPlanFor, type RoundsVerdict, type CampaignRepeat, type CampaignRound, type CampaignSchedule, type RoundFields, type ScheduleFields } from './campaign-schedule';
 import { projectQueue, roundAnchor, spacingFrom, windowedCascade, type AccountSpacing, type CampaignGate } from './projection';
@@ -439,6 +440,62 @@ export async function startJoinGroups(workerId: string | null, urls: string[]): 
  */
 export async function leaveGroupOnFacebook(workerId: string | null, url: string): Promise<{ id: string }> {
   return sendWorkerCommand(workerId, 'leave', { url });
+}
+
+/**
+ * ─── THE PUBLISHING CYCLE, FOR THE SCREEN ───────────────────────────
+ *
+ * A READ, through the same function the engine counts with, so the card and
+ * the worker can never compute the state two different ways. `p_count=false`
+ * is what makes it a read: it advances nothing, which matters because this
+ * runs on every dashboard poll and a counter that moved when somebody looked
+ * at it would climb while nothing published.
+ *
+ * null when v41 has not been run, and the card simply does not draw.
+ */
+export async function readPublishCycle(): Promise<PublishCycle | null> {
+  return cycleTick(db(), false);
+}
+
+/**
+ * The switch on the card.
+ *
+ * TURNING IT OFF RELEASES A PAUSE THAT IS ALREADY RUNNING — his decision on
+ * 11.11, and the right one: a switch that leaves the queue held for another
+ * seven hours is a switch somebody presses twice and then reports as broken.
+ * The brief asked for the policy to be stated rather than assumed
+ * ("כיבוי המנגנון — התנהגות לפי מדיניות הכיבוי שהוגדרה"), and this is it.
+ *
+ * TURNING IT ON STARTS A FRESH ROUND rather than resuming a stale count from
+ * whenever it was last off. A number the owner never chose is not a ceiling
+ * he agreed to.
+ */
+export async function setPublishCycleEnabled(on: boolean): Promise<void> {
+  const patch = on
+    ? { enabled: true, cycle_count: 0, rounds_in_window: 0, rest_until: null, window_started_at: new Date().toISOString(), cycle_started_at: new Date().toISOString() }
+    : { enabled: false, rest_until: null };
+  /*
+   * UPSERT, because the row is created on demand by the counter function and a
+   * dashboard that pressed the switch before anything published would
+   * otherwise have nothing to update.
+   *
+   * AND IT SENDS NO tenant_id. "אסור לסמוך על ID שנשלח מה-Frontend בלבד" —
+   * the business is stamped by social_publish_cycle_stamp_tenant, the same
+   * BEFORE INSERT trigger every other table here carries. That trigger was
+   * MISSING from the first version of v41 (the v16 loop that installs it runs
+   * over a list this table is not on), so this very call would have failed on
+   * the primary key the first time it was pressed. Both the stamp and this
+   * exact upsert — column list without tenant_id, conflict inferred after the
+   * trigger — are now asserted in worker/test/cycle-db.test.ts §11.
+   */
+  unwrap(await db().from('social_publish_cycle').upsert(patch as never, { onConflict: 'tenant_id' }));
+  await logClientActivity(
+    'info',
+    on ? 'cycle_enabled' : 'cycle_disabled',
+    on
+      ? 'מנגנון ההפסקה הופעל — הספירה מתחילה מחדש מאפס.'
+      : 'מנגנון ההפסקה כובה — הפסקה שהייתה בתוקף בוטלה והפרסום חוזר מיד.',
+  );
 }
 
 /**
@@ -3556,6 +3613,20 @@ export async function markManualPublished(id: string, permalink: string): Promis
     error: null,
     method: 'manual',
   });
+  /*
+   * AND IT COUNTS TOWARD THE 100, which is the owner's own decision on 11.11:
+   * "פרסומים שסומנו ידנית — כן, נספר". It is the same account and the same
+   * quota, and Facebook has no idea which of our two hands posted it. A
+   * mechanism that only counted the engine's publications would quietly let
+   * the day's real total run past the ceiling it exists to hold.
+   *
+   * AFTER THE WRITE, NEVER BEFORE — updateQueueItem throws when the row did
+   * not save, so a failed mark cannot advance the cursor. And the tick is
+   * allowed to fail silently: it returns null rather than throwing, so a
+   * database without v41, or one blink of a phone's signal, costs the count
+   * and never the mark the owner just made.
+   */
+  await cycleTick(db(), true);
 }
 
 export async function cancelAllScheduled(): Promise<number> {

@@ -2530,3 +2530,233 @@ body:has(.social-theme) .site-backdrop {
      nothing stands behind. */
   .anxf-fill-live { width: 100%; opacity: 0.5; }
 }
+
+/* ─── הפסקה אוטומטית אחרי 100 פרסומים ─────────────────────────────────────
+ *
+ * ITS OWN NAMESPACE, NOT THE FLOW'S. worker/test/today-count.test.ts asserts
+ * that `anxf-fill` is absent from this screen when nothing is in flight, so a
+ * meter that borrowed the flow's bar classes would break a green suite to
+ * save a few lines here. The shell copies .anxf-qcard's radius, border,
+ * background and shadow BY VALUE, which is what makes the two cards read as
+ * one object while staying independent to the tests.
+ *
+ * HORIZONTAL, AS THE REFERENCE DRAWS IT — shield, meter, divider, words,
+ * switch — and it WRAPS rather than scrolls. The layout guard on this project
+ * fails a sideways scroll, and a three-column row at 360px would be one.
+ *
+ * Every colour is a token from the .social-theme block, so the card follows
+ * the light/dark switch with everything else and contrast.test.ts keeps
+ * measuring the same pairs.
+ */
+.anxc-card {
+  border-radius: var(--radius-tile);
+  background: var(--color-ink-850);
+  border: 1px solid var(--color-ink-700);
+  box-shadow: 0 2px 6px rgba(40, 20, 80, 0.03), 0 10px 26px rgba(40, 20, 80, 0.06);
+  padding: 9px 10px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 9px;
+}
+.anxc-badge {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--color-brand-400) 12%, transparent);
+  color: var(--color-brand-500);
+}
+.anxc-badge svg { width: 20px; height: 20px; }
+
+/* ── the meter. min-width:0 so the bar can shrink instead of pushing. ── */
+.anxc-meter { flex: 1 1 128px; min-width: 0; }
+.anxc-mtitle {
+  font-size: clamp(9.5px, 2.7vw, 11px);
+  font-weight: 700;
+  color: var(--color-mist-500);
+  line-height: 1.2;
+}
+/* Tabular digits: 9/100 and 99/100 must not move the row under them. */
+.anxc-count {
+  font-size: clamp(16px, 4.8vw, 20px);
+  font-weight: 800;
+  color: var(--color-brand-500);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.15;
+}
+.anxc-label {
+  font-size: clamp(9.5px, 2.7vw, 11px);
+  font-weight: 600;
+  color: var(--color-mist-500);
+  line-height: 1.2;
+}
+.anxc-track {
+  display: block;
+  margin-top: 5px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--color-ink-800);
+  overflow: hidden;
+}
+.anxc-bar {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--color-brand-400), var(--color-brand-500));
+  transition: width 420ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+/* The divider disappears when the row wraps, because a vertical rule between
+   two stacked blocks is a line pointing nowhere. */
+.anxc-div {
+  flex: none;
+  width: 1px;
+  align-self: stretch;
+  min-height: 34px;
+  background: var(--color-ink-700);
+}
+.anxc-words { flex: 1 1 164px; min-width: 0; }
+.anxc-head {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: clamp(12px, 3.5vw, 13.5px);
+  font-weight: 800;
+  color: var(--color-mist-100);
+  line-height: 1.25;
+}
+.anxc-head svg { flex: none; width: 15px; height: 15px; color: var(--color-brand-400); }
+.anxc-sub {
+  margin-top: 2px;
+  font-size: clamp(10px, 2.9vw, 11.5px);
+  font-weight: 600;
+  color: var(--color-mist-500);
+  line-height: 1.35;
+}
+.anxc-off {
+  font-size: clamp(10.5px, 3vw, 12px);
+  font-weight: 700;
+  color: var(--color-mist-500);
+}
+
+/* ── the switch, and the words under it ───────────────────────────────── */
+.anxc-swwrap {
+  flex: none;
+  display: grid;
+  /* ONE COLUMN, AND minmax(0, …) SO ITS CONTENT CANNOT SET ITS WIDTH. The
+     layout guard asks every grid in this file for this and is right to: a
+     grid column defaults to max-content, so the label under the switch would
+     widen the card from the inside and carry the meter off the screen. */
+  grid-template-columns: minmax(0, 1fr);
+  justify-items: center;
+  gap: 1px;
+}
+.anxc-switch {
+  flex: none;
+  display: grid;
+  place-items: center;
+  /* 56×44: the real box, not a pseudo-element stretched over a smaller one.
+     This control decides whether the account publishes for the next eight
+     hours, so it carries the full 44px floor rather than the 40px minimum. */
+  width: 56px;
+  height: 44px;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+}
+.anxc-switch:disabled { opacity: 0.55; cursor: default; }
+.anxc-track-sw {
+  position: relative;
+  display: block;
+  width: 50px;
+  height: 29px;
+  border-radius: 999px;
+  background: var(--color-ink-600);
+  transition: background 220ms ease;
+}
+.anxc-switch[data-on='yes'] .anxc-track-sw { background: var(--color-brand-500); }
+.anxc-knob {
+  position: absolute;
+  top: 3px;
+  inset-inline-end: 3px;
+  width: 23px;
+  height: 23px;
+  border-radius: 999px;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(16, 24, 40, 0.28);
+  transition: inset-inline-end 220ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.anxc-switch[data-on='yes'] .anxc-knob { inset-inline-end: 24px; }
+.anxc-swlabel {
+  font-size: clamp(9px, 2.6vw, 10.5px);
+  font-weight: 700;
+  color: var(--color-mist-500);
+  white-space: nowrap;
+}
+
+/* ── and the hold, as its own band under the card ─────────────────────── */
+.anxc-rest {
+  margin-top: 7px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 8px 10px;
+  border-radius: var(--radius-tile);
+  /* THE DEEP END OF THE ACCENT IS A TOKEN, not a hex. The first version
+     mixed in a literal navy and live-flow.test.ts threw it out — it reads the
+     comments too, which is right: a hex anywhere in this block is a colour
+     a theme change leaves behind. brand-700 is that same depth, declared
+     once in the palette. */
+  background: linear-gradient(90deg, var(--color-brand-500), var(--color-brand-700));
+  box-shadow: 0 8px 22px -12px color-mix(in srgb, var(--color-brand-500) 70%, transparent);
+  color: #fff;
+}
+.anxc-pause {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.18);
+  color: #fff;
+}
+.anxc-pause svg { width: 17px; height: 17px; }
+.anxc-restwords {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  flex: 1 1 auto;
+  font-size: clamp(10px, 2.9vw, 11.5px);
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.86);
+  line-height: 1.3;
+}
+.anxc-restwords strong { color: #fff; font-weight: 800; font-size: clamp(11px, 3.2vw, 12.5px); }
+.anxc-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.6);
+}
+/* Tabular digits are not optional on a countdown: without them every second
+   re-measures the chip and the whole band jitters. */
+.anxc-clock {
+  flex: none;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.16);
+  font-size: clamp(13px, 3.9vw, 15px);
+  font-weight: 800;
+  color: #fff;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.01em;
+}
+@media (prefers-reduced-motion: reduce) {
+  .anxc-bar, .anxc-track-sw, .anxc-knob { transition: none; }
+}

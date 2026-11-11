@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityFeed } from '@/components/social/ActivityFeed';
 import { CardSwiper } from '@/components/social/CardSwiper';
 import { LiveCampaignHero, LiveQueueHero, type SystemState } from '@/components/social/LiveCampaignHero';
+import type { PublishCycle } from '@/lib/social/publish-cycle';
 import { ActivityDetailSheet } from '@/components/social/ActivityDetailSheet';
 import { QueueTunerSheet } from '@/components/social/QueueTunerSheet';
 import { SetupChecklist } from '@/components/social/SetupChecklist';
@@ -55,7 +56,10 @@ import {
   waitForWorkerCommand,
   type CommentTotals,
   type QueueRow,
-  type TimelineRow,} from '@/lib/social/client';
+  type TimelineRow,
+  readPublishCycle,
+  setPublishCycleEnabled,
+} from '@/lib/social/client';
 import { cancellableRows, percentFinished, type CampaignState } from '@/lib/social/campaign';
 import { MIN_REPEAT_HOURS, readRepeat, readSchedule, scheduleColumns, type CampaignRepeat, type CampaignSchedule, type ScheduleFields, readRounds, repeatFloorFrom, roundsColumn, roundsSavedMessage, type CampaignRound,} from '@/lib/social/campaign-schedule';
 import { accountGapLabel } from '@/lib/social/rules';
@@ -200,6 +204,16 @@ interface DashboardData {
    * make it happen. It is the same read BrowserStatusCard already does, from
    * the same table — not a second source of truth.
    */
+  /*
+   * THE 100-PUBLICATION CYCLE, or null where v41 has not been run.
+   *
+   * NOT CARRIED IN THE localStorage SNAPSHOT'S SPIRIT. The dashboard first
+   * paints from a cached copy (see dashboardSeed), which can be hours old —
+   * so a countdown rendered from it would start at a number that expired
+   * overnight. The card is drawn from this field as the poll refreshes it,
+   * and the instant it counts to is the database's, re-read every poll.
+   */
+  cycle: PublishCycle | null;
   workerOnline: boolean;
   /**
    * A worker is alive but Facebook has asked for a person in its Chrome
@@ -393,7 +407,7 @@ export default function SocialDashboard() {
        * IS on screen, it still reads every tick.
        */
       const needTargets = !setupDone.current;
-      const [campaigns, states, queue, today, failures, weekPublished, weekComments, limits, control, targets, manual, waitingForYou, log, upcoming, inFlightRows, doneToday, workers, comments, commentsWaiting, totals, commentsToday, commentsDone, commentsAttention, browser, lastPublished, waitingToday] = await Promise.all([
+      const [campaigns, states, queue, today, failures, weekPublished, weekComments, limits, control, targets, manual, waitingForYou, log, upcoming, inFlightRows, doneToday, workers, comments, commentsWaiting, totals, commentsToday, commentsDone, commentsAttention, browser, lastPublished, waitingToday, cycle] = await Promise.all([
         campaignsPromise,
         statesPromise,
         queueSummary(),
@@ -471,7 +485,17 @@ export default function SocialDashboard() {
          * tomorrow's, and this morning's publications are no longer counted
          * by countPublishedSince.
          */
-        countWaitingWithin(zonedToUtc(addDaysISO(zonedDateISO(now), 1), '00:00').toISOString())
+        countWaitingWithin(zonedToUtc(addDaysISO(zonedDateISO(now), 1), '00:00').toISOString()),
+        /*
+         * THE PUBLISHING CYCLE. In this array rather than a read of its own,
+         * so it arrives in the same round trip as everything else on the card
+         * and cannot be a poll out of step with the queue it is holding.
+         *
+         * It resolves to null on a database where v41 has not been run — see
+         * readPublishCycle — and the card then does not draw at all, which is
+         * what makes shipping this screen before the SQL harmless.
+         */
+        readPublishCycle(),
       ]);
       if (queue.summary.total > 0) setupDone.current = true;
             const next: DashboardData = {
@@ -516,6 +540,9 @@ export default function SocialDashboard() {
         log,
         campaigns,
         states,
+        /* One read per poll, through the same function the engine counts
+           with, asking rather than counting — see readPublishCycle. */
+        cycle,
         workerOnline: workers.some((w) => w.online),
         workerNeedsAuth: workers.some((w) => w.online && (w.status === 'needs_attention' || w.browser_state === 'needs_auth')),
         /* The live worker's account first; failing that, the most recent one
@@ -1900,6 +1927,13 @@ export default function SocialDashboard() {
               a morning with an empty queue the screen carried no system state
               at all. */}
           <LiveQueueHero
+            cycle={data.cycle}
+            onCycleToggle={(on) =>
+              act('cycle', async () => {
+                await setPublishCycleEnabled(on);
+              }, on ? 'מנגנון ההפסקה הופעל.' : 'מנגנון ההפסקה כובה — הפרסום חוזר מיד.')
+            }
+            cycleBusy={busy === 'cycle'}
             systemState={systemState}
             publishedToday={data.today}
             dailyTarget={data.limits.maxPerDay}

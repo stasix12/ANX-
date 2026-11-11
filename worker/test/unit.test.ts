@@ -3333,10 +3333,28 @@ const scenario: { step: string; line: string }[] = [];
     /const laneLimit = laneCountFor\(\{ want: concurrency, gapMs: gate\.gapMs, holdCapMs: PREP_HOLD_CAP_MS, serial \}\);/.test(pcWorker),
     'the lane count is bounded by the composer\u2019s hold cap — a long gap collapses to one lane with nobody having to remember',
   );
-  assert.ok(
-    /if \(\(!due\?\.length \|\| holdingForGap\) && state\.lanes\.every\(\(l\) => l\.done\)\) \{/.test(pcWorker),
-    'and no idle chore may take the one browser while a lane is publishing',
-  );
+  /*
+   * ─── 11.11.2026 · THE REASONS TO HOLD GREW, THE PROPERTY DID NOT ───────
+   *
+   * This pinned the condition verbatim and failed the moment the
+   * 100-publication pause added `holdingForCycle` to it — correctly, because
+   * a condition this load-bearing should not change unnoticed. But the
+   * property it is here to defend is the RIGHT-hand side: a chore may not
+   * take the single browser while a lane is still publishing. The left side
+   * is a list of reasons to be idle, and that list is expected to grow.
+   *
+   * So it is now asserted in two halves: the lane guard exactly, and every
+   * known reason present in the same condition. Deleting `state.lanes.every`
+   * still fails here, which is the regression this has always been about.
+   */
+  const choreGate = /if \(\(([^)]*(?:\([^)]*\))?[^)]*)\) && state\.lanes\.every\(\(l\) => l\.done\)\) \{/.exec(pcWorker);
+  assert.ok(choreGate, 'and no idle chore may take the one browser while a lane is publishing');
+  for (const reason of ['!due?.length', 'holdingForGap', 'holdingForCycle']) {
+    assert.ok(
+      (choreGate?.[1] ?? '').includes(reason),
+      `and the idle branch is reached for ${reason} — a hold that returned above it would switch off verifySubmitted, the sweep that confirms a parked publication`,
+    );
+  }
   /* The lanes are tracked, never awaited: awaiting them inside the tick would
      re-couple them at the tick boundary, which is requirement 7 undone. */
   assert.ok(!/await Promise\.(all|allSettled)\([^)]*lane/.test(pcWorker), 'the tick must not await the lanes');

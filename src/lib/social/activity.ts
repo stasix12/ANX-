@@ -126,6 +126,20 @@ const KIND: Record<string, ActivityKind> = {
    * שהפריסה הבאה של פייסבוק תיפתר בלי לשאול אותו מה הוא ראה.
    */
   leave_failed: 'failure',
+  /*
+   * מחזור של 100 פרסומים הושלם והמערכת יצאה להפסקה. 'system' ולא
+   * 'failure': שום דבר לא נכשל — זה המנגנון עושה בדיוק את מה שהוא נבנה
+   * לעשות. חייב להיכתב בכל זאת, מאותה סיבה כמו rate_limit_cleared: בלעדיו
+   * התור עומד שמונה שעות והבעלים מחפש ביומן למה.
+   */
+  cycle_rest: 'system',
+  /*
+   * הבעלים הדליק או כיבה את מנגנון ההמתנה. 'system' ולא 'failure': זאת
+   * פעולה מכוונת שלו, אבל היא חייבת להישאר ביומן — כיבוי משחרר הפסקה שרצה,
+   * ובלי שורה ביומן אין שום דרך להסביר אחר כך למה הפרסום חזר באמצע הפסקה.
+   */
+  cycle_enabled: 'system',
+  cycle_disabled: 'system',
   /* The backlog outgrew one pass's window. A warning and not quiet system
      news: while it holds, publications parked today may not be looked at. */
   verify_window_full: 'failure',

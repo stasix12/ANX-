@@ -764,7 +764,45 @@
  *
  * התזמון, סדר התור, מנגנון הפרסום וההגדרות הקיימות לא נגעו.
  */
-export const WORKER_VERSION = '4.60.0';
+/*
+ * ─── 4.60.0 → 4.61.0 — THE LEAVE BUTTON, FIXED BY THE FIRST PERSON WHO
+ *     PRESSED IT ────────────────────────────────────────────────
+ *
+ * He pressed it on 11.11, on "דירות להשכרה שכונות טובות באר שבע",
+ * and got back: "לא נמצא כפתור יציאה בעמוד הקבוצה. הקבוצה לא שונתה."
+ *
+ * THE SAFETY HALF WORKED EXACTLY AS BUILT — no control found, nothing
+ * pressed, nothing claimed, and the group left switched ON. That sentence is
+ * the design holding.
+ *
+ * THE FINDING HALF DID NOT. 4.60.0 looked for the overflow "…", and on a
+ * group you have JOINED Facebook does not draw one: the header carries a
+ * button that says הצטרפת / Joined / Вы участник, and THAT opens the menu
+ * holding "עזיבת הקבוצה". So on every group this feature exists for, the
+ * menu was never opened at all. Three changes, and the third is the one that
+ * matters most for next time:
+ *
+ *   1. the joined button is an OPENER (never a verdict — `not-member` is
+ *      still decided by JOIN_LABEL alone);
+ *   2. EVERY opener is tried, not the first that matches, with Escape between
+ *      them, because one wrong guess used to end the attempt and a menu left
+ *      open covers the next control;
+ *   3. A DEAD END NOW SAYS WHAT IT SAW. The labels the page really offered
+ *      come back with the refusal, and a screenshot is filed with it. Working
+ *      out this bug took a round trip through the owner, and that is the part
+ *      that must not repeat: the next layout Facebook ships should be
+ *      diagnosable from his log without asking him what was on his screen.
+ *
+ * worker/test/leave.test.ts reproduces his page — no "…" anywhere, a decoy
+ * opener before the real one, an overlay that covers the page until Escape.
+ * Four mutations, four failures, and the first of them is literally 4.60.0.
+ *
+ * CHECKED AGAINST THE RELEASE LIST: v4.60.0 was published today, so 4.61.0
+ * is free.
+ *
+ * התזמון, סדר התור, מנגנון הפרסום וההגדרות הקיימות לא נגעו.
+ */
+export const WORKER_VERSION = '4.61.0';
 
 /**
  * A FINGERPRINT OF EVERYTHING THE INSTALLER CARRIES.
@@ -1484,4 +1522,4 @@ export const WORKER_VERSION = '4.60.0';
  * is asked to update anything for a window that only draws what is already in
  * social_activity_log.
  */
-export const WORKER_FINGERPRINT = '9a89b50598b633c1';
+export const WORKER_FINGERPRINT = '738b6daf43d5a01a';

@@ -2459,7 +2459,7 @@ async function runCommands(state: WorkerState, headless: boolean, browser: Brows
           const found = await db.from('social_targets').select('id, name, enabled').eq('url', group.url).limit(1);
           const target = (found.data?.[0] as { id: string; name: string; enabled: boolean } | undefined) ?? null;
           const name = target?.name ?? group.url;
-          const run = await session.leaveGroup(headless, group.url);
+          const run = await session.leaveGroup(headless, group.url, cmd.id);
           if (run.problem || !run.result) {
             ok = false;
             result = run.problem || 'היציאה לא התבצעה.';
@@ -2492,7 +2492,18 @@ async function runCommands(state: WorkerState, headless: boolean, browser: Brows
             ok = outcome === 'left' || outcome === 'not-member';
             result = ok
               ? `${detail} הקבוצה "${name}" כובתה ולא ייכנסו אליה פרסומים חדשים.`
-              : `${detail} הקבוצה "${name}" לא שונתה.`;
+              : `${detail} הקבוצה "${name}" לא שונתה.${run.shot ? ' צילום מסך של העמוד נשמר.' : ''}`;
+            if (!ok) {
+              /* The page, the labels it offered and the picture — in the log
+                 the owner reads, so the next layout Facebook ships can be
+                 covered without asking him what he saw. */
+              await logActivity('warn', 'leave_failed', `היציאה מהקבוצה "${name}" לא הושלמה — ${detail}`, {
+                targetId: target?.id ?? null,
+                targetUrl: group.url,
+                screenshot: run.shot ?? null,
+                outcome,
+              });
+            }
           }
         }
       } else if (cmd.command === 'resume') {

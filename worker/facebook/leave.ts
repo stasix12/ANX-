@@ -98,9 +98,39 @@ const JOIN_LABEL = new RegExp(
  * the name is all there is to match on.
  */
 const MORE_LABEL = new RegExp(
-  ['^\\s*עוד\\s*$', '^\\s*אפשרויות נוספות', '^\\s*פעולות נוספות', '^\\s*more options', '^\\s*see more options', '^\\s*ещё\\s*$', '^\\s*другие действия'].join(
-    '|',
-  ),
+  [
+    '^\\s*עוד\\s*$',
+    '^\\s*אפשרויות נוספות',
+    '^\\s*פעולות נוספות',
+    '^\\s*more options',
+    '^\\s*see more options',
+    '^\\s*ещё\\s*$',
+    '^\\s*другие действия',
+    /*
+     * ─── AND THE ONE THAT ACTUALLY HOLDS IT ───────────────────────
+     *
+     * MEASURED ON HIS OWN ACCOUNT, 11.11: "לא נמצא כפתור יציאה בעמוד
+     * הקבוצה" on a group he is a member of.
+     *
+     * On a group you have JOINED, Facebook does not draw a "…" at all. The
+     * header carries a button that says הצטרפת / Joined / Вы участник,
+     * and THAT is what opens the menu holding "עזיבת הקבוצה". The first
+     * version looked only for the overflow mark, so on every group he is
+     * actually in — which is every group this feature exists for — the menu
+     * was never opened and the control was never found.
+     *
+     * It is listed as an OPENER and never as a verdict: `not-member` is still
+     * decided by JOIN_LABEL alone, so a page that offers "הצטרפת" is read
+     * as "a member, menu behind this" and not as anything about membership.
+     */
+    '^\\s*הצטרפת',
+    '^\\s*חבר בקבוצה',
+    '^\\s*חברה בקבוצה',
+    '^\\s*joined\\s*$',
+    '^\\s*member\\s*$',
+    '^\\s*вы участник',
+    '^\\s*участник\\s*$',
+  ].join('|'),
   'i',
 );
 
@@ -196,16 +226,51 @@ export async function leaveOneGroup(page: Page, url: string): Promise<LeaveResul
    * opening it does not reveal the control, the answer is "no-button" rather
    * than a hunt through whatever else the menu holds.
    */
-  if (!leave) {
-    const more = buttons.find((b) => MORE_LABEL.test(b.label));
-    if (more) {
-      await more.click().catch(() => undefined);
-      await page.waitForTimeout(SETTLE_MS);
-      buttons = await controls(page);
-      leave = buttons.find((b) => LEAVE_LABEL.test(b.label));
-    }
+  /*
+   * EVERY OPENER, NOT THE FIRST ONE THAT MATCHES.
+   *
+   * The header can carry more than one of these — a "הצטרפת" beside a
+   * "…" — and only one of them holds the leave control. Taking `.find()` and
+   * stopping was the whole of the 11.11 failure in a second form: even with
+   * the right label listed, one wrong guess ended the attempt.
+   *
+   * Escape between tries, because Facebook's menus are overlays: one left
+   * open covers the next control and every later click lands on the backdrop.
+   * Capped at four so a page of look-alike buttons cannot turn one command
+   * into a minute of clicking.
+   */
+  const openers = buttons.filter((b) => MORE_LABEL.test(b.label)).slice(0, 4);
+  for (const opener of openers) {
+    if (leave) break;
+    await opener.click().catch(() => undefined);
+    await page.waitForTimeout(SETTLE_MS);
+    buttons = await controls(page);
+    leave = buttons.find((b) => LEAVE_LABEL.test(b.label));
+    if (!leave) await page.keyboard.press('Escape').catch(() => undefined);
   }
-  if (!leave) return say('no-button', 'לא נמצא כפתור יציאה בעמוד הקבוצה.');
+
+  if (!leave) {
+    /*
+     * ─── AND A DEAD END SAYS WHAT IT SAW ───────────────────────────
+     *
+     * "לא נמצא כפתור יציאה" is true and useless on its own: it names
+     * nothing anybody can act on, and the one person who could extend the
+     * patterns cannot see the page. On 11.11 that sentence was the entire
+     * report, and working out that the menu hides behind "הצטרפת" took a
+     * round trip through the owner.
+     *
+     * So the labels the page really offered go back with it. They are the
+     * owner's own screen read out loud, which is exactly what is needed to
+     * add the next language or the next Facebook layout — and they cost
+     * nothing, because they were already read.
+     */
+    const seen = buttons
+      .map((b) => b.label)
+      .filter((l) => l.length <= 28)
+      .slice(0, 10)
+      .join(' · ');
+    return say('no-button', `לא נמצא כפתור יציאה בעמוד הקבוצה.${seen ? ` מה שהיה בעמוד: ${seen}` : ''}`);
+  }
 
   await leave.click().catch(() => undefined);
 

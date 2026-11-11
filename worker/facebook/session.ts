@@ -8,6 +8,7 @@ import { searchGroups, type SearchOutcome } from './discover';
 import { readMyGroups, type MyGroupsOutcome } from './mygroups';
 import { joinGroups, type JoinResult } from './join';
 import { leaveOneGroup, type LeaveResult } from './leave';
+import { captureScreenshot } from '../screenshots';
 import { env } from '../env';
 import { CHECKPOINT_PATHS, LOGIN_PATHS, fb, patterns } from './selectors';
 
@@ -452,7 +453,7 @@ export class BrowserSession {
    * page that presses "leave" is how the wrong thing gets clicked. Each one
    * ends the run before the browser is pointed at the group at all.
    */
-  async leaveGroup(headless: boolean, url: string): Promise<{ result: LeaveResult | null; problem: string }> {
+  async leaveGroup(headless: boolean, url: string, shotId?: string): Promise<{ result: LeaveResult | null; problem: string; shot?: string | null }> {
     if (!this.hasProfile()) return { result: null, problem: '\u05d0\u05d9\u05df \u05e2\u05d3\u05d9\u05d9\u05df \u05e4\u05e8\u05d5\u05e4\u05d9\u05dc \u05d3\u05e4\u05d3\u05e4\u05df \u2014 \u05e6\u05e8\u05d9\u05da \u05e7\u05d5\u05d3\u05dd \u05dc\u05d4\u05ea\u05d7\u05d1\u05e8 \u05dc\u05e4\u05d9\u05d9\u05e1\u05d1\u05d5\u05e7.' };
     const page = await this.newPage(headless, '\u05d9\u05e6\u05d9\u05d0\u05d4 \u05de\u05e7\u05d1\u05d5\u05e6\u05d4');
     try {
@@ -461,7 +462,22 @@ export class BrowserSession {
       if (kind === 'login' || !(await this.hasLoginCookie())) {
         return { result: null, problem: '\u05dc\u05d0 \u05de\u05d7\u05d5\u05d1\u05e8 \u05dc\u05e4\u05d9\u05d9\u05e1\u05d1\u05d5\u05e7 \u2014 \u05dc\u05d7\u05e6\u05d5 "\u05d4\u05ea\u05d7\u05d1\u05e8 \u05dc\u05e4\u05d9\u05d9\u05e1\u05d1\u05d5\u05e7".' };
       }
-      return { result: await leaveOneGroup(page, url), problem: '' };
+      const result = await leaveOneGroup(page, url);
+      /*
+       * A PICTURE OF THE PAGE WHEN IT DID NOT WORK.
+       *
+       * On 11.11 the whole report was "\u05dc\u05d0 \u05e0\u05de\u05e6\u05d0 \u05db\u05e4\u05ea\u05d5\u05e8 \u05d9\u05e6\u05d9\u05d0\u05d4", and the
+       * reason \u2014 that on a joined group the menu hides behind "\u05d4\u05e6\u05d8\u05e8\u05e4\u05ea"
+       * rather than a "\u2026" \u2014 could only be worked out by asking the owner what
+       * he saw. The page is already open and the browser is already here, so
+       * the picture costs one shot and ends that round trip.
+       *
+       * ONLY ON A FAILURE. A successful exit has nothing to look at, and a
+       * screenshot of every leave would fill his storage with group headers.
+       */
+      const failed = result.outcome !== 'left' && result.outcome !== 'not-member';
+      const shot = failed && shotId ? await captureScreenshot(page, shotId, `leave_${result.outcome}`) : null;
+      return { result, problem: '', shot };
     } finally {
       await page.close().catch(() => undefined);
     }

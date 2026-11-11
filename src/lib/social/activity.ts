@@ -119,6 +119,13 @@ const KIND: Record<string, ActivityKind> = {
    * כמה שהיא — failure, ולא השורה הזו.
    */
   attention_expired: 'system',
+  /*
+   * היציאה מקבוצה שהבעלים ביקש לא הושלמה. 'failure' ולא 'system':
+   * הוא לחץ, אישר במסך שאומר שאי אפשר לבטל, וכלום לא קרה. השורה
+   * נושאת את צילום המסך ואת הכפתורים שהעמוד באמת הציע, כדי
+   * שהפריסה הבאה של פייסבוק תיפתר בלי לשאול אותו מה הוא ראה.
+   */
+  leave_failed: 'failure',
   /* The backlog outgrew one pass's window. A warning and not quiet system
      news: while it holds, publications parked today may not be looked at. */
   verify_window_full: 'failure',

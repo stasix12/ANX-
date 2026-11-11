@@ -82,7 +82,56 @@ const group = (opts: { inMenu?: boolean; confirm?: boolean; after: string }) =>
   }
 </script>`);
 
+/*
+ * HIS OWN PAGE, 11.11 — the shape that produced "לא נמצא כפתור יציאה"
+ * on a group he is a member of. There is NO "…" anywhere: the header carries
+ * a "הצטרפת" button, and that is what opens the menu. The first version
+ * looked only for the overflow mark, so on every group this feature exists
+ * for, the menu was never opened at all.
+ *
+ * AND A DECOY BEFORE IT, which is the second half of the same bug: `.find()`
+ * took the first matching opener and stopped, so one wrong guess ended the
+ * attempt even once the right label was listed.
+ */
+const joinedShaped = PAGE(`<h1>דירות להשכרה שכונות טובות באר שבע</h1>
+<div role="button" id="decoy" aria-label="עוד">עוד</div>
+<div role="button" id="joined" aria-label="הצטרפת">הצטרפת</div>
+<div id="menu" hidden><div role="menuitem" id="leave" aria-label="עזיבת הקבוצה">עזיבת הקבוצה</div></div>
+<script>
+  var left = sessionStorage.getItem('left') === '1';
+  if (left) {
+    document.getElementById('joined').remove();
+    document.getElementById('menu').remove();
+    document.body.innerHTML += '<div role="button" aria-label="הצטרפות לקבוצה">הצטרפות לקבוצה</div>';
+  } else {
+    /* The decoy opens an overlay that reveals NOTHING and, like Facebook's
+       own menus, covers the page until Escape closes it. */
+    document.getElementById('decoy').addEventListener('click', function () {
+      var o = document.createElement('div');
+      o.id = 'overlay'; o.setAttribute('role','dialog');
+      o.style.cssText = 'position:fixed;inset:0;background:#fff;z-index:9';
+      document.body.appendChild(o);
+    });
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape') { var o = document.getElementById('overlay'); if (o) o.remove(); }
+    });
+    document.getElementById('joined').addEventListener('click', function () {
+      document.getElementById('menu').hidden = false;
+    });
+    document.getElementById('leave').addEventListener('click', function () {
+      var d = document.createElement('div');
+      d.setAttribute('role','dialog');
+      d.innerHTML = '<div role="button" aria-label="ביטול">ביטול</div>' +
+                    '<div role="button" id="yes" aria-label="עזיבת הקבוצה">עזיבת הקבוצה</div>';
+      document.body.appendChild(d);
+      document.getElementById('yes').addEventListener('click', function () { sessionStorage.setItem('left','1'); });
+    });
+  }
+</script>`);
+
 const PAGES: Record<string, string> = {
+  /* THE 11.11 CASE. */
+  joinedbtn: joinedShaped,
   /* The ordinary case: "…" → "עזיבת הקבוצה" → confirm → we are out. */
   ok: group({ inMenu: true, after: '1' }),
   /* Same, but the control is on the page itself rather than in the menu. */
@@ -124,7 +173,7 @@ async function browserPass(): Promise<void> {
       );
       const r = await leaveOneGroup(page, at(key));
 
-      if (key === 'ok' || key === 'direct') {
+      if (key === 'ok' || key === 'direct' || key === 'joinedbtn') {
         eq(r.outcome, 'left', `${key}: a confirmed exit is reported as one`);
       } else if (key === 'silent') {
         /* THE ONE THAT MATTERS MOST. */
@@ -133,6 +182,21 @@ async function browserPass(): Promise<void> {
         eq(r.outcome, 'not-member', 'notmember: a group we are not in is recognised, not pressed');
       } else if (key === 'none' || key === 'sidebar') {
         eq(r.outcome, 'no-button', `${key}: no leave control means no-button, never a guess`);
+        /*
+         * AND IT SAYS WHAT IT SAW. On 11.11 the whole report was "לא נמצא
+         * כפתור יציאה", and the reason — the menu hiding behind
+         * "הצטרפת" — could only be found by asking the owner what was on
+         * his screen. The labels cost nothing: they were already read.
+         */
+        if (key === 'sidebar') {
+          is(/מה שהיה בעמוד/.test(r.detail), 'sidebar: a dead end reports the labels the page offered');
+          /* The reader prefers aria-label over the visible text, so this is
+             what the page really offered. The long one beside it is over the
+             40-character cap and is correctly absent: that cap is what stops
+             a paragraph containing the words from being treated as a button. */
+          is(r.detail.includes('מידע על עזיבת קבוצות'), `sidebar: the labels reported are the page's own — got: ${r.detail}`);
+          is(!r.detail.includes('בכל רגע מתוך ההגדרות'), 'sidebar: and prose too long to be a button never reaches the report');
+        }
       } else if (key === 'blocked') {
         eq(r.outcome, 'unavailable', 'blocked: Facebook limiting us stops the run before anything is pressed');
       }

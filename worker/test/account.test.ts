@@ -149,7 +149,31 @@ async function main() {
   const browser = await chromium.launch({
     headless: true,
     ...(executablePath ? { executablePath } : { channel: process.env.SOCIAL_BROWSER_CHANNEL as 'chrome' | undefined }),
-    args: ['--no-sandbox'],
+    /*
+     * ─── HERMETIC, AND IT HAS TO BE SAID OUT LOUD ──────────────────────
+     *
+     * `page.route` covers the requests the PAGE makes. The full Chrome
+     * build's BROWSER PROCESS also fetches the document origin's icon by
+     * itself — https://www.facebook.com/favicon.ico, since no fixture here
+     * carries a <link rel="icon"> — and that request is not intercepted, is
+     * sent with this context's cookies, and on a CI runner it reaches the
+     * REAL site. Facebook answers a `c_user` with no `xs` by deleting it,
+     * so the fixture's own planted cookie vanishes from the context store a
+     * second or two after a navigation, asynchronously.
+     *
+     * THAT ASYNCHRONY IS THE WHOLE MYSTERY. Runs 109-119 used one identical
+     * chromium build on byte-identical code and produced three different
+     * jar timelines and four PASSES. A browser version rule does not race;
+     * a network round trip does. Reproduced here on Chromium 141 against a
+     * stand-in host that invalidates a stale c_user: the request escapes
+     * page.route, carries `c_user=...`, and the jar empties ~2.5-3s later.
+     *
+     * EXCLUDE 127.0.0.1 keeps ownersLayout's real avatar server reachable —
+     * measured: the plain `MAP * ~NOTFOUND` makes a browser navigation to
+     * 127.0.0.1 fail with ERR_NAME_NOT_RESOLVED, and that server is real on
+     * purpose (see the note above ownersLayout).
+     */
+    args: ['--no-sandbox', '--host-resolver-rules=MAP * ~NOTFOUND, EXCLUDE 127.0.0.1'],
   });
   const context = await browser.newContext({ locale: 'he-IL' });
   await context.addCookies([{ name: 'c_user', value: ID, domain: '.facebook.com', path: '/' }]);
@@ -159,18 +183,18 @@ async function main() {
 
   /*
    * ─────────────────────────────────────────────────────────────────────────
-   * A JAR TIMELINE, because the only machine that can answer is CI.
+   * A JAR TIMELINE — the instrumentation that found the leak, kept.
    *
-   * The assertion at the end of this file has never passed in CI and passes
-   * here every time. CI's answer, asked for in the last run and given on
-   * 06/11: `cookies now: []` — that build ends this file with the facebook.com
-   * jar EMPTY, while the FIRST read in the same run found `c_user` and
-   * returned a profile. So something between the two empties it, and a single
-   * reading at the end cannot say which step.
+   * It was added because the assertion at the foot of this file was red in
+   * CI and green here, and a single reading at the end could not say which
+   * step emptied the jar. It answered: the loss lands on a navigation, and
+   * it lands LATE — which is what ruled out a browser-version rule and
+   * pointed at a network round trip. The launch args above say the rest.
    *
-   * This marks the jar after every step between them. It reads cookies and
-   * nothing else — no product behaviour depends on it — and it costs one
-   * line of output only when something really is missing.
+   * It stays because it is what will catch the next leak, and because a
+   * fixed run should prove itself by SAYING the jar held rather than by
+   * going quiet. It reads cookies and nothing else — no product behaviour
+   * depends on it.
    */
   const marks: string[] = [];
   const mark = async (label: string): Promise<void> => {
@@ -247,30 +271,30 @@ async function main() {
   await mark('after-second-goto');
   const unproven = await readAccountProfile(page);
   /*
-   * THIS LINE CARRIES ITS OWN POST-MORTEM, and here is why.
+   * THIS LINE CARRIED ITS OWN POST-MORTEM FOR FOUR ROUNDS, AND THE
+   * POST-MORTEM WAS WRONG THREE TIMES OVER. The answer is kept here.
    *
-   * It is green on the Chromium this machine has (141) and red on the one CI
-   * installs with playwright 1.49 (131) — the only failure in the whole
-   * suite that tells the two apart. readAccountProfile has exactly one path
-   * that returns null: no `c_user` cookie. The cookie is added to the
-   * CONTEXT at the top of this file and nothing here removes it, so either
-   * that browser drops it somewhere in between or the read of it fails —
-   * and a bare "still a signed-in session" cannot say which.
+   * IT WAS NEVER A CHROMIUM VERSION. Runs 109-119 used the identical
+   * chromium-1148 build on byte-identical code and produced three different
+   * jar timelines and four PASSES. A browser rule does not race. What
+   * really differed was the binary FLAVOUR — CI's own `find | sort | head`
+   * picks the full Chrome, findChromium()'s reverse sort picks the headless
+   * shell, and only the full build's browser process fetches the origin's
+   * favicon — and whether the runner can reach facebook.com at all.
    *
-   * The 131 build cannot be run here to find out: its download is refused by
-   * this environment's network policy (tried, 2026-11-06). So the assertion
-   * asks the question itself and CI answers it on the next run.
+   * IT WAS NEVER THE GUARD IN account.ts EITHER. readAccountProfile is not
+   * called between the marks that bracket the loss, and when it is next
+   * called it returns null before ever reaching captureAvatar — so the
+   * guard never got a chance to run.
    *
-   * IT ANSWERED: `cookies now: []`. The jar is empty by the time this line
-   * runs, and the first read in the same run had `c_user` — so one of the
-   * steps in between takes it away, and the guard in account.ts that puts it
-   * back is not putting it back. The timeline above (`mark(...)`) narrows it
-   * to a step; this message carries it, so the next run names the culprit
-   * instead of repeating what is already known.
+   * IT WAS THIS FIXTURE LEAKING TO THE REAL INTERNET. See the launch args.
    */
   const jar = await page.context().cookies('https://www.facebook.com').catch((e) => `read failed: ${e}`);
   await mark('at-the-end');
-  if (marks.some((m) => m.endsWith('EMPTY') || m.includes('threw'))) console.log(`  (jar timeline: ${marks.join(' | ')})`);
+  /* UNCONDITIONAL. It used to print only when something had already gone
+     EMPTY, so a fixed run proved itself by silence — which proves nothing.
+     One line, and the next CI run states positively that the jar held. */
+  console.log(`  (jar timeline: ${marks.join(' | ')})`);
   assert.ok(
     unproven,
     'still a signed-in session — ' +

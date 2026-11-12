@@ -2496,6 +2496,18 @@ async function runCommands(state: WorkerState, headless: boolean, browser: Brows
         } else {
           let joined = 0;
           let pending = 0;
+          /*
+           * EVERY OUTCOME, NOT JUST THE TWO THAT READ AS SUCCESS.
+           *
+           * Measured on his own account tonight, 12.11: he pressed הצטרף
+           * twice, each on one group, and both came back `already` — he was
+           * in them. The sentence he got was "הצטרפנו ל-0, 0 ממתינות לאישור
+           * מנהל", which is true and reads as a total failure. It counted
+           * `joined` and `pending` and silently dropped the other five
+           * outcomes, so a run where nothing was WRONG reported nothing at
+           * all.
+           */
+          const tally = new Map<JoinResult['outcome'], number>();
           /* The live position, for the screen he is watching. It can be
              switched off by a missing column and cannot fail the run. */
           const progress = makeProgressReporter(cmd.id, urls.length);
@@ -2510,6 +2522,7 @@ async function runCommands(state: WorkerState, headless: boolean, browser: Brows
             onEach: async (r) => {
               if (r.outcome === 'joined') joined += 1;
               if (r.outcome === 'pending') pending += 1;
+              tally.set(r.outcome, (tally.get(r.outcome) ?? 0) + 1);
               progress.finished(r);
               await recordJoinOutcome(r);
             },
@@ -2540,7 +2553,24 @@ async function runCommands(state: WorkerState, headless: boolean, browser: Brows
                     : run.stoppedBy === 'stopped'
                       ? ' — נעצר.'
                       : '';
-            result = `הצטרפנו ל-${joined}, ${pending} ממתינות לאישור מנהל${why}`;
+            /*
+             * THE SENTENCE SAYS WHAT HAPPENED TO EVERY GROUP, in the order a
+             * person cares about, and names only the outcomes that actually
+             * occurred — so a clean run of three stays one short line.
+             */
+            const said: [JoinResult['outcome'], (n: number) => string][] = [
+              ['joined', (n) => `הצטרפנו ל-${n}`],
+              ['pending', (n) => `${n} ממתינות לאישור מנהל`],
+              ['already', (n) => `ב-${n} כבר היית חבר`],
+              ['questions', (n) => `${n} שואלות שאלות הצטרפות — צריך לענות ידנית`],
+              ['no-button', (n) => `ב-${n} לא נמצא כפתור הצטרפות`],
+              ['unavailable', (n) => `${n} לא נפתחו`],
+              ['blocked', (n) => `${n} נחסמו על ידי פייסבוק`],
+            ];
+            const parts = said.filter(([o]) => (tally.get(o) ?? 0) > 0).map(([o, say]) => say(tally.get(o) ?? 0));
+            /* A run that reached no group at all still says something: the
+               old sentence at least always printed two numbers. */
+            result = `${parts.length ? parts.join(', ') : 'לא נבדקה אף קבוצה'}${why}`;
             ok = run.stoppedBy !== 'blocked';
           }
         }

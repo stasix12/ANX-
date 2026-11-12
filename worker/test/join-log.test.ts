@@ -268,4 +268,29 @@ const base: JoinProgress = {
   is(!/stage: 'waiting'.*gap/s.test(worker.slice(worker.indexOf('onWait'), worker.indexOf('onWait') + 400)), 'and never as a stage');
 }
 
+/* ───────── the sentence the run ends with, after it ran ──────────────── */
+{
+  const worker = readFileSync(new URL('../social-worker.ts', import.meta.url), 'utf8');
+
+  /*
+   * ─── A RUN WHERE NOTHING WENT WRONG MUST NOT READ AS A FAILURE ───────
+   *
+   * Measured on his own account, 12.11 22:18 and 22:46: he pressed הצטרף
+   * twice, one group each, and both came back `already` — he was in them.
+   * What the screen told him was "הצטרפנו ל-0, 0 ממתינות לאישור מנהל".
+   * True, and it reads as a total failure, because the sentence counted
+   * `joined` and `pending` and silently dropped the other five outcomes.
+   *
+   * So the summary now names every outcome that occurred and only those.
+   */
+  const block = worker.slice(worker.indexOf('const said: [JoinResult'), worker.indexOf('const said: [JoinResult') + 1400);
+  is(block.length > 100, 'the run summary builds its sentence from a list of outcomes');
+  for (const outcome of ['joined', 'pending', 'already', 'questions', 'no-button', 'unavailable', 'blocked']) {
+    is(block.includes(`'${outcome}'`), `the summary can report ${outcome} — every outcome joinOneGroup returns has a phrase`);
+  }
+  is(/כבר היית חבר/.test(block), 'including the one that read as a failure twice tonight');
+  is(/filter\(\(\[o\]\) => \(tally\.get\(o\) \?\? 0\) > 0\)/.test(block), 'and names only the outcomes that actually happened, so a clean run stays one short line');
+  is(/לא נבדקה אף קבוצה/.test(block), 'and a run that reached no group at all still says so rather than printing nothing');
+}
+
 console.log(`join log OK — ${checks} assertions`);

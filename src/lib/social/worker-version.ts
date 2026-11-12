@@ -915,6 +915,14 @@
  * which is the whole point of a fingerprint that is not allowed to drift.
  * Checked against the release list the same minute: v4.65.0 is the newest
  * published tag, so 4.66.0 is free.
+ *
+ * AND ONCE MORE, for the run summary. He pressed הצטרף twice tonight, one
+ * group each, and both came back `already` — he was in them. The sentence he
+ * got was "הצטרפנו ל-0, 0 ממתינות לאישור מנהל": true, and it reads as a
+ * total failure, because it counted two outcomes and dropped the other five.
+ * It now names every outcome that occurred. 4.66.0 has not been published
+ * yet — it is still the next free number — so this rides with it rather than
+ * taking one of its own.
  */
 export const WORKER_VERSION = '4.66.0';
 
@@ -1667,4 +1675,4 @@ export const WORKER_VERSION = '4.66.0';
  * worker/facebook/join.ts and written by worker/social-worker.ts, both of
  * which run only on his PC. Numbers under WORKER_VERSION above.
  */
-export const WORKER_FINGERPRINT = 'b7036de834e6ff7c';
+export const WORKER_FINGERPRINT = 'd0e3f9957d4b0168';

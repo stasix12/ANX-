@@ -873,7 +873,42 @@
  *   request.newContext      1      page.context().request  0
  *   maxRedirects: 0         1      captureAvatar           6  (the control)
  */
-export const WORKER_VERSION = '4.65.0';
+/*
+ * 4.65.0 → 4.66.0. DOES THIS HAVE TO REACH THE PC? YES — IT IS THE SOURCE.
+ *
+ *   "אני תמיד רוצה שיהיה איזה שהוא אינדיקטור שאני ידע את ההתקדמות שלו ולא
+ *    שהוא נתקע."
+ *
+ * The discovery screen's join log draws four steps per group. Three of them
+ * — מאתר את הקבוצה, שולח בקשת הצטרפות, ממתין לתשובה — exist nowhere in the
+ * product until this version: they are reported from worker/facebook/join.ts,
+ * each beside the statement it describes, and written onto the command row by
+ * makeProgressReporter here. The fourth, סיום, is the outcome and has always
+ * been a real `group_join` row.
+ *
+ * SO AN OLDER WORKER DEGRADES, IT DOES NOT BREAK. On 4.65.0 and below nothing
+ * writes `progress`, the column stays null, and the screen shows the run strip
+ * and every finished group's real outcome from the activity log — just no
+ * stepper. That is the floor the whole feature was built on, for the same
+ * reason v40 and v41 taught: the migration and the PC update are the two
+ * steps that do not always happen on time.
+ *
+ * THE JOIN MECHANISM IS UNTOUCHED, and the reporting is shaped so it cannot
+ * touch it: the hooks return void, so nothing can await them inside the three
+ * seconds Facebook is given to answer a click — a longer wait is a DIFFERENT
+ * classification, not a later one. GAP_MIN_MS, GAP_JITTER_MS, JOIN_RUN_CAP,
+ * every exit path and the attempt accounting are byte-identical.
+ *
+ * MEASURED against a bundle built from this tree (node scripts/build-app.mjs,
+ * then grep -oF … | wc -l over dist/app/worker.cjs):
+ *
+ *   makeProgressReporter       4      onStage                    4
+ *   commands_progress_missing  1      gapUntil                   5
+ *   "sent"                     5      locating                   1
+ *   joinCardView               0      JOIN_STEPS                 0   (drawn by
+ *                                     the dashboard, tree-shaken out — correct)
+ */
+export const WORKER_VERSION = '4.66.0';
 
 /**
  * A FINGERPRINT OF EVERYTHING THE INSTALLER CARRIES.
@@ -1618,4 +1653,10 @@ export const WORKER_VERSION = '4.65.0';
  * worker/facebook/account.ts, which runs only on his PC. Numbers under
  * WORKER_VERSION above.
  */
-export const WORKER_FINGERPRINT = '5eb1dbe78a516cc5';
+/*
+ * ─── 12.11.2026 — 4.66.0: the join run says where it is ──────────────────
+ * Fingerprint and version move together: the three stages are emitted from
+ * worker/facebook/join.ts and written by worker/social-worker.ts, both of
+ * which run only on his PC. Numbers under WORKER_VERSION above.
+ */
+export const WORKER_FINGERPRINT = 'e4dbf0504ddde994';

@@ -38,22 +38,14 @@ import { classifyPage } from './session';
  */
 
 /** What became of one group. */
-export type JoinOutcome =
-  /** The button turned into "הצטרפת" — we are in. */
-  | 'joined'
-  /** Sent, and an admin has to approve it. Not a membership yet. */
-  | 'pending'
-  /** Already a member before we arrived. */
-  | 'already'
-  /** The group asks questions. Only he can answer them. */
-  | 'questions'
-  /** No join control on the page at all — closed group, removed, or a layout
-      this reader does not know. Reported, never guessed at. */
-  | 'no-button'
-  /** Facebook said no to US, not to this group. The run stops. */
-  | 'blocked'
-  /** The page did not load, or a security check appeared. The run stops. */
-  | 'unavailable';
+/*
+ * THE SEVEN OUTCOMES NOW LIVE IN src/lib/social/types.ts, and are re-exported
+ * from here so every existing caller is untouched. They moved because the
+ * discovery screen draws each one, and a union defined twice is a union that
+ * drifts: an outcome added here and not there would simply never be drawn.
+ */
+export type { JoinOutcome } from '@/lib/social/types';
+import type { JoinOutcome, JoinStage } from '@/lib/social/types';
 
 export interface JoinResult {
   url: string;
@@ -145,8 +137,27 @@ async function pageText(page: Page): Promise<string> {
  * One group. Opens it, decides what the page is offering, and presses at most
  * one button.
  */
-export async function joinOneGroup(page: Page, url: string): Promise<JoinResult> {
+export async function joinOneGroup(page: Page, url: string, report?: (stage: JoinStage) => void): Promise<JoinResult> {
   const say = (outcome: JoinOutcome, detail = ''): JoinResult => ({ url, outcome, detail });
+  /*
+   * ─── SAYING WHERE WE ARE MAY NOT CHANGE WHAT WE DO ────────────────────
+   *
+   * Synchronous, never awaited, and unable to throw out of here. A reporter
+   * that returned a promise would let one slow write to Supabase lengthen
+   * the three seconds Facebook is given to answer the click below — and a
+   * longer wait is a DIFFERENT ANSWER, not merely a later one: a page that
+   * has not settled reads `pending`, the same page a moment later reads
+   * `joined`. The pacing that protects his account, the run cap and every
+   * exit path below are untouched.
+   */
+  const stage = (s: JoinStage): void => {
+    try {
+      report?.(s);
+    } catch {
+      /* A report is never worth a run. */
+    }
+  };
+  stage('locating');
   try {
     await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60_000 });
   } catch {
@@ -174,6 +185,14 @@ export async function joinOneGroup(page: Page, url: string): Promise<JoinResult>
   } catch {
     return say('no-button', 'כפתור ההצטרפות לא נלחץ.');
   }
+  /* AFTER the click resolved, never before: every return above this line is a
+     group we did not press, and the screen draws those two steps as skipped
+     rather than as done. Measured on his own history, that is 60 of 88. */
+  stage('sent');
+  /* And the three seconds below are the answer being waited for — the only
+     waiting in this function. The minute-to-two between GROUPS is further
+     down, is not a stage, and must never be drawn as one. */
+  stage('waiting');
   await page.waitForTimeout(3_000);
 
   const after = await pageText(page);
@@ -229,6 +248,14 @@ export async function joinGroups(
   hooks: {
     onEach: (result: JoinResult) => Promise<void>;
     onWait?: (msLeft: number) => Promise<void>;
+    /*
+     * WHERE THE RUN IS, as it moves — and deliberately the only SYNCHRONOUS
+     * hook here. `onEach` and `onWait` are awaited because what they do must
+     * have happened before the next group; a progress report has not earned
+     * that, and awaiting one would put a network write inside the timing that
+     * decides how a page is classified.
+     */
+    onStage?: (index: number, url: string, stage: JoinStage) => void;
     stopped?: () => boolean;
     /*
      * THE GAP, OVERRIDDEN — and the only caller that may is the test.
@@ -269,7 +296,7 @@ export async function joinGroups(
   for (let i = 0; i < urls.length; i += 1) {
     if (hooks.stopped?.()) return { results, stoppedBy: 'stopped' };
     if (attempts >= JOIN_RUN_CAP) return { results, stoppedBy: 'cap' };
-    const result = await joinOneGroup(page, urls[i]);
+    const result = await joinOneGroup(page, urls[i], hooks.onStage && ((s) => hooks.onStage?.(i, urls[i], s)));
     results.push(result);
     await hooks.onEach(result);
 

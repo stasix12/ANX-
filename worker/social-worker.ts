@@ -23,6 +23,7 @@ import {
   parseGroupUrl,
   type BrowserSettings,
   type ControlSettings,
+  type JoinStage,
   type LimitsSettings,
   type MediaItem,
   type Post,
@@ -2495,6 +2496,10 @@ async function runCommands(state: WorkerState, headless: boolean, browser: Brows
         } else {
           let joined = 0;
           let pending = 0;
+          /* The live position, for the screen he is watching. It can be
+             switched off by a missing column and cannot fail the run. */
+          const progress = makeProgressReporter(cmd.id, urls.length);
+          progress.run();
           const run = await session.joinGroups(headless, urls, {
             /*
              * WRITTEN DOWN AS IT HAPPENS. A run that is stopped halfway — by
@@ -2505,15 +2510,22 @@ async function runCommands(state: WorkerState, headless: boolean, browser: Brows
             onEach: async (r) => {
               if (r.outcome === 'joined') joined += 1;
               if (r.outcome === 'pending') pending += 1;
+              progress.finished(r);
               await recordJoinOutcome(r);
             },
+            onStage: (index, url, stage) => progress.stage(index, url, stage),
             /* The gap is longer than the ninety seconds after which the
                dashboard calls this machine offline. Keep saying we are here. */
-            onWait: async () => {
+            onWait: async (msLeft) => {
+              /* The pause between groups, named as what it is. It is not a
+                 stage: the answer already arrived, and this minute or two is
+                 the pacing that keeps Facebook from blocking the account. */
+              progress.gap(msLeft);
               await heartbeat(state, 'online');
             },
             stopped: () => stopping,
           });
+          progress.done();
           if (run.problem) {
             ok = false;
             result = run.problem;
@@ -5406,6 +5418,123 @@ async function restartIfUpdated(state: WorkerState): Promise<void> {
  * reads and claim the command anyway. A missing column must not stop the
  * product working; it must only stop it being tidy.
  */
+/**
+ * ─── WHERE A JOIN RUN IS, WRITTEN DOWN AS IT MOVES ───────────────────────
+ *
+ * "אני תמיד רוצה שיהיה איזה שהוא אינדיקטור שאני ידע את ההתקדמות שלו ולא
+ *  שהוא נתקע." The discovery screen used to press "הצטרף ל-N" and then show
+ * one spinner for up to half an hour while this machine opened group after
+ * group, pausing a minute or two between each on purpose. Nothing on that
+ * screen could tell a run that was pacing itself from a run that had died.
+ *
+ * THREE PROPERTIES, AND EACH ONE IS A BUG THIS WOULD OTHERWISE HAVE.
+ *
+ * It must not be able to END A RUN. `await hooks.onEach(result)` in
+ * worker/facebook/join.ts is bare, and the only try/catch above it is the
+ * command-level one — which would finish the whole command as `failed`
+ * because a progress write failed. So every entry point here is synchronous,
+ * returns void, and does its work in a detached promise that catches
+ * everything.
+ *
+ * It must not FLOOD. The writes are single-flight and coalescing: while one
+ * is in the air the newest state replaces the pending one, so a fifteen-group
+ * run is a few dozen updates to ONE row rather than one per event.
+ *
+ * And on a database that never ran the migration it must SAY SO ONCE AND
+ * STOP — the same bargain claimCommand strikes below, for the same reason:
+ * a missing column must not stop the product working, only stop it being
+ * tidy. The screen keeps showing the outcomes either way; it just loses the
+ * four steps.
+ */
+function makeProgressReporter(commandId: string, total: number) {
+  const startedAt = new Date().toISOString();
+  let blob: Record<string, unknown> = {
+    v: 1,
+    total,
+    done: 0,
+    joined: 0,
+    pending: 0,
+    index: 0,
+    url: '',
+    stage: null,
+    clicked: false,
+    outcome: '',
+    gapUntil: null,
+    at: startedAt,
+    startedAt,
+  };
+  let inFlight = false;
+  let dirty = false;
+  let off = false;
+  let gapArmed = false;
+
+  const flush = (): void => {
+    if (off || inFlight || !dirty) return;
+    inFlight = true;
+    dirty = false;
+    const snapshot = { ...blob };
+    void (async () => {
+      try {
+        const db = await workerDb();
+        const { error } = await db.from('social_worker_commands').update({ progress: snapshot }).eq('id', commandId);
+        if (error && /progress/i.test(error.message)) {
+          off = true;
+          console.error('[worker] ✗ אין עמודת progress — שלבי ההצטרפות לא יוצגו. הריצו את social-latest.sql ב-Supabase.');
+          await logActivity(
+            'warn',
+            'commands_progress_missing',
+            'צריך להריץ את social-latest.sql ב-Supabase. בלעדיו מסך גילוי הקבוצות מראה את תוצאות ההצטרפות אבל לא את השלבים בזמן אמת. ההצטרפות עצמה עובדת כרגיל.',
+            { detail: error.message },
+          );
+        } else if (error) {
+          console.error('[worker] דיווח התקדמות נכשל:', error.message);
+        }
+      } catch (err) {
+        console.error('[worker] דיווח התקדמות נכשל:', err instanceof Error ? err.message : err);
+      } finally {
+        inFlight = false;
+        flush();
+      }
+    })();
+  };
+
+  const set = (patch: Record<string, unknown>): void => {
+    blob = { ...blob, ...patch, at: new Date().toISOString() };
+    dirty = true;
+    flush();
+  };
+
+  return {
+    /** Picked up. The browser is opening and no group is on screen yet. */
+    run: (): void => set({ stage: null }),
+    stage: (index: number, url: string, stage: JoinStage): void => {
+      gapArmed = false;
+      /* `clicked` latches on 'sent' and resets on the next group's
+         'locating', because it is the one thing the outcome cannot tell the
+         screen: `pending` is returned both before a click and after one. */
+      set({ index, url, stage, clicked: stage === 'sent' || stage === 'waiting', outcome: '', gapUntil: null });
+    },
+    finished: (r: JoinResult): void =>
+      set({
+        stage: 'done',
+        url: r.url,
+        outcome: r.outcome,
+        done: (blob.done as number) + 1,
+        joined: (blob.joined as number) + (r.outcome === 'joined' ? 1 : 0),
+        pending: (blob.pending as number) + (r.outcome === 'pending' ? 1 : 0),
+        gapUntil: null,
+      }),
+    /** Once per gap, from the real remaining time join.ts hands onWait. */
+    gap: (msLeft: number): void => {
+      if (gapArmed) return;
+      gapArmed = true;
+      set({ gapUntil: new Date(Date.now() + msLeft).toISOString() });
+    },
+    /** The run is over: nothing may still read as live on a finished row. */
+    done: (): void => set({ stage: null, url: '', gapUntil: null }),
+  };
+}
+
 async function claimCommand(id: string, workerId: string, patch: Record<string, unknown>): Promise<boolean> {
   const db = await workerDb();
   const attempt = async (withPayload: boolean) =>

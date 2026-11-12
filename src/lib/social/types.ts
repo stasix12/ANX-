@@ -529,6 +529,41 @@ export interface SocialWorker {
 }
 
 /**
+ * EVERY WAY AN ATTEMPT TO JOIN ONE GROUP CAN END.
+ *
+ * Defined here rather than in worker/facebook/join.ts — which is where it was
+ * born and still re-exports it from — because the discovery screen now draws
+ * each outcome, and two copies of a seven-member union is a drift waiting to
+ * happen: a new outcome added on the worker side would simply never be drawn,
+ * silently, which is the failure mode this whole screen exists to end.
+ */
+export type JoinOutcome =
+  /** The button turned into "הצטרפת" — we are in. */
+  | 'joined'
+  /** Sent, and an admin has to approve it. Not a membership yet. */
+  | 'pending'
+  /** Already a member before we arrived. */
+  | 'already'
+  /** The group asks questions. Only he can answer them. */
+  | 'questions'
+  /** No join control on the page at all. Reported, never guessed at. */
+  | 'no-button'
+  /** Facebook said no to US, not to this group. The run stops. */
+  | 'blocked'
+  /** The page did not load, or a security check appeared. The run stops. */
+  | 'unavailable';
+
+/**
+ * THE THREE STAGES THE WORKER REPORTS WHILE IT IS INSIDE ONE GROUP.
+ *
+ * Each is emitted beside the statement it describes in worker/facebook/join.ts
+ * and nowhere else. "סיום", the stepper's fourth step, is deliberately NOT one
+ * of these: it is not a stage, it is the outcome, and it arrives as a real
+ * `group_join` row in the activity log whether or not the live channel works.
+ */
+export type JoinStage = 'locating' | 'sent' | 'waiting';
+
+/**
  * A group גילוי קבוצות turned up, as the database holds it.
  *
  * `membership` and `privacy` are what the SEARCH RESULT said, which is not

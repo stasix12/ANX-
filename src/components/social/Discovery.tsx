@@ -4,6 +4,7 @@ import { useEffect, useRef } from 'react';
 import { TargetAvatar } from '@/components/social/TargetAvatar';
 import { Badge, Button, ButtonLink, CARD_ELEVATED, Card, inputClass } from '@/components/social/ui';
 import { MEMBERSHIP_SHORT, PRIVACY_LABEL, membersText, normalizeQuery, type Membership } from '@/lib/social/discovery';
+import { JOIN_STEPS, type JoinCardView } from '@/lib/social/join-run';
 import type { DiscoveredGroupRow } from '@/lib/social/types';
 import { CheckIcon, ChevronDownIcon, ClockIcon, CloseIcon, GlobeIcon, MoreIcon, PlusIcon, SearchIcon, SparklesIcon, StarIcon, TargetIcon, UsersIcon } from '@/components/icons';
 
@@ -95,6 +96,8 @@ export function GroupRow({
   already,
   busy,
   exact = false,
+  run = null,
+  ended = null,
   fallbackImage = null,
   onToggle,
   onAdopt,
@@ -118,6 +121,26 @@ export function GroupRow({
    * אשקלון, so it is a property of the search and not of the group.
    */
   exact?: boolean;
+  /**
+   * WHERE THE JOIN RUN IS, when it is on THIS group — and null on every other
+   * row, including the ones it has already finished.
+   *
+   * "להציג את הלוג בתוך כרטיס הקבוצה הפעילה." One card at a time carries the
+   * stepper, which is also the only honest arrangement: the worker reports
+   * the stage of the group it is inside, and a finished group's stage history
+   * is not kept anywhere. What a finished group keeps is its OUTCOME, which
+   * is a real row in the activity log and is drawn as a chip on its row.
+   */
+  run?: JoinCardView | null;
+  /**
+   * How THIS group ended, once the run has finished with it.
+   *
+   * Drawn on every row the run has already passed, not only the active one,
+   * because that is the answer he came for — and it comes from the
+   * `group_join` row the worker writes the moment the outcome is known, so
+   * it is on screen before the list is re-read and survives a refresh.
+   */
+  ended?: { tone: 'good' | 'warn' | 'bad'; said: string } | null;
   /**
    * The picture the PUBLISHING LIST already holds for this same group.
    *
@@ -197,6 +220,56 @@ export function GroupRow({
             </p>
           )}
 
+          {/*
+            ─── THE LIVE LOG, IN THE CARD OF THE GROUP BEING WORKED ON ────
+
+            It REPLACES the badge row rather than sitting under it, which is
+            what the reference draws and also what keeps the card from
+            growing twice: while a run is on this group the badges say
+            nothing the stepper is not saying better.
+
+            Every value here is handed in. This component computes none of
+            it — joinCardView does, in a pure module a test can drive — so
+            what the screen shows and what the run reported cannot drift.
+          */}
+          {run ? (
+            <div className="anxj">
+              <p className="anxj-title">
+                <span>הצטרפות לקבוצה...</span>
+                <UsersIcon aria-hidden className="h-3.5 w-3.5" />
+              </p>
+              <div className="anxj-bar">
+                {/* dir="ltr" on the number for the reason the campaign meter
+                    carries it: a percentage in an RTL line renders its sign
+                    and digits in the wrong order. */}
+                <span className="anxj-pct" dir="ltr">
+                  {run.percent}%
+                </span>
+                <span className="anxj-track">
+                  <span className="anxj-fill" style={{ inlineSize: `${run.percent}%` }} />
+                </span>
+              </div>
+              <div className="anxj-steps">
+                {JOIN_STEPS.map((label, i) => {
+                  const state = run.steps[i] ?? 'todo';
+                  /* The last node takes the outcome's colour once this group
+                     has ended — green only for a membership we really have.
+                     A request waiting for an admin is amber, because a green
+                     tick there would be "הצלחה לפני קבלת אישור אמיתי". */
+                  const ending = i === JOIN_STEPS.length - 1 && run.tone ? ` is-${run.tone}` : '';
+                  return (
+                    <div key={label} className={`anxj-step is-${state}${ending}`}>
+                      <span className="anxj-dot">
+                        {state === 'current' ? <MoreIcon aria-hidden /> : state === 'skipped' ? null : <CheckIcon aria-hidden />}
+                      </span>
+                      <span className="anxj-label">{label}</span>
+                    </div>
+                  );
+                })}
+              </div>
+              {run.said && <p className="anxj-said">{run.said}</p>}
+            </div>
+          ) : (
           <div className="mt-1 flex flex-wrap items-center gap-1">
             {row.membership !== 'unknown' && (
               <Badge tone={MEMBERSHIP_TONE[row.membership]}>{MEMBERSHIP_SHORT[row.membership]}</Badge>
@@ -216,6 +289,22 @@ export function GroupRow({
               <span className="inline-flex items-center gap-1 rounded-full bg-success-400/10 px-1.5 py-0.5 text-[11px] font-bold text-success-400">
                 <CheckIcon aria-hidden className="h-3 w-3" />
                 כבר במערכת
+              </span>
+            )}
+            {/* What the run made of this group. Amber for a request waiting on
+                an admin — that is not a membership, and a green tick there
+                would be a success claimed before anyone approved it. */}
+            {ended && (
+              <span
+                className={`inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[11px] font-bold ${
+                  ended.tone === 'good'
+                    ? 'bg-success-400/10 text-success-400'
+                    : ended.tone === 'warn'
+                      ? 'bg-warning-400/10 text-warning-400'
+                      : 'bg-error-400/10 text-error-400'
+                }`}
+              >
+                {ended.said}
               </span>
             )}
             {/*
@@ -240,6 +329,7 @@ export function GroupRow({
               </a>
             )}
           </div>
+          )}
         </div>
 
         {/* ─── the far side (LEFT in RTL): pick it, then act on it ───

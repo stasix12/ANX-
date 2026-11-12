@@ -8,6 +8,7 @@ import { addDaysISO, counted, startOfZonedDay, zonedDateISO, zonedHM, zonedToUtc
 import { DEFAULT_CAMPAIGN_REPEAT, MAX_GAP_SECONDS, MIN_GAP_SECONDS, MIN_REPEAT_HOURS, gapMinutesFor, dayRelativeHe, repeatWindowSentence, gapChoiceLabel, readRounds, readSchedule, readRepeat, repeatColumns, roundsColumn, roundsWindowFix, weeklyPlanFor, type RoundsVerdict, type CampaignRepeat, type CampaignRound, type CampaignSchedule, type RoundFields, type ScheduleFields } from './campaign-schedule';
 import { projectQueue, roundAnchor, spacingFrom, windowedCascade, type AccountSpacing, type CampaignGate } from './projection';
 import { JOINED_QUERY, normalizeQuery } from './discovery';
+import type { JoinProgress } from './join-run';
 import { dedupeKey, renderPostText } from './compose';
 import { friendlyError, friendlyMessage } from './errors';
 import { queueIdOf } from './activity';
@@ -3597,6 +3598,73 @@ export async function waitForWorkerCommand(id: string, waitMs = COMMAND_WAIT_MS)
     if (cmd?.status === 'done' || cmd?.status === 'failed') return cmd;
   }
   return null;
+}
+
+/*
+ * ─── WHERE A JOIN RUN IS, READ BY THE SCREEN THAT STARTED IT ─────────────
+ *
+ * `progress` is DELIBERATELY NOT IN COMMAND_COLUMNS, and that is the single
+ * most important line in this block. Eight consumers share that constant —
+ * the login flow, the profile switcher, discovery, the scan, leave, and both
+ * recent-command lists that the PC-status card renders on every /social
+ * screen. On a database that has not run social-latest.sql, naming an
+ * unknown column there would make EVERY one of those selects fail: commands
+ * would run to their full timeout because waitForWorkerCommand swallows a
+ * failed poll, and the status card would throw on every screen. One unrun
+ * migration would take the product out. So this reader names its own columns
+ * and degrades by itself.
+ */
+let joinProgressColumnMissing = false;
+
+export interface JoinRunRow {
+  id: string;
+  status: WorkerCommand['status'];
+  result: string | null;
+  progress: JoinProgress | null;
+}
+
+/**
+ * The command row, with the live position when the database has it.
+ *
+ * Returns `progress: null` — never throws — when the column is not there, and
+ * remembers that for the rest of the session so the second poll does not pay
+ * for the same refusal. The screen then draws what it can read from the
+ * activity log instead, which is the outcomes and the count.
+ */
+export async function readJoinRun(id: string): Promise<JoinRunRow | null> {
+  const columns = joinProgressColumnMissing ? 'id, status, result' : 'id, status, result, progress';
+  const { data, error } = await db().from('social_worker_commands').select(columns).eq('id', id).maybeSingle();
+  if (error) {
+    if (!joinProgressColumnMissing && /progress/i.test(error.message)) {
+      joinProgressColumnMissing = true;
+      return readJoinRun(id);
+    }
+    throw error;
+  }
+  const row = data as unknown as { id: string; status: WorkerCommand['status']; result: string | null; progress?: unknown } | null;
+  if (!row) return null;
+  return { id: row.id, status: row.status, result: row.result, progress: (row.progress as JoinProgress | null) ?? null };
+}
+
+/**
+ * Every group this run has finished, from the rows the worker has always
+ * written — one per group, the moment its outcome is known.
+ *
+ * THIS IS THE FLOOR UNDER THE WHOLE FEATURE, and it needs no migration and no
+ * worker update. Correlating by time is sound here rather than lucky: all 88
+ * group_join rows in this account's history fall inside a join command's own
+ * window, with no orphans, because nothing else writes that event.
+ */
+export async function listJoinOutcomes(sinceIso: string): Promise<ActivityEntry[]> {
+  return unwrap<ActivityEntry[]>(
+    await db()
+      .from('social_activity_log')
+      .select('id, at, level, event, message, meta')
+      .eq('event', 'group_join')
+      .gte('at', sinceIso)
+      .order('at', { ascending: true })
+      .limit(200),
+  );
 }
 
 export async function listRecentCommands(limit = 5): Promise<WorkerCommand[]> {

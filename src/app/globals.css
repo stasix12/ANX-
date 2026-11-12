@@ -3027,3 +3027,194 @@ body:has(.social-theme) .site-backdrop {
 }
 .anxt-back svg { flex: none; width: 16px; height: 16px; }
 .anxt-back:disabled { opacity: 0.55; }
+
+/* ─── לוג ההצטרפות, בתוך כרטיס הקבוצה הפעילה ──────────────────────────────
+ *
+ * "אני תמיד רוצה שיהיה איזה שהוא אינדיקטור שאני ידע את ההתקדמות שלו ולא
+ *  שהוא נתקע."
+ *
+ * ITS OWN NAMESPACE, FOR THE REASON CycleCard TOOK ONE. The flow's station
+ * rail (.anxf-*) already draws four steps, and reusing it was the obvious
+ * move until the markup was read: its lit station carries scale(1.06), a
+ * 2.6s infinite keyframe and an ::after caret hung below the node. Inside a
+ * 358px card that caret overflows and the pulse is exactly the "אנימציות
+ * גימיקיות" the brief forbids. So the radii, borders and weights are copied
+ * BY VALUE and the two stay independent — which also keeps today-count's
+ * assertion that .anxf-fill is absent from this screen true.
+ *
+ * EVERY COLOUR IS A TOKEN FROM .social-theme, so this follows the light and
+ * dark switch with everything else, and contrast.test.ts keeps watching it.
+ * Only steps that exist: mist-100/300/500 and brand-300/400/500 are real,
+ * while mist-200 and mist-400 are a Tailwind ramp that resolves to a
+ * theme-blind grey — which is how a filter once rendered at 1.25:1.
+ */
+.anxj {
+  margin-top: 0.4rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+/* The one line that names what is happening, centred as the reference draws
+   it. `...` is part of the sentence, not an ellipsis class: the group is
+   being joined right now and the three dots say so. */
+.anxj-title {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.3rem;
+  font-size: 12.5px;
+  font-weight: 800;
+  line-height: 1.1;
+  color: var(--color-mist-100);
+}
+.anxj-title svg {
+  color: var(--color-brand-300);
+  flex: 0 0 auto;
+}
+
+/* THE BAR. In RTL the percentage sits at the START — the right — and the
+   track fills the rest leftwards, which is the direction the reference
+   draws the fill growing. */
+.anxj-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+.anxj-pct {
+  font-size: 12px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-mist-100);
+  flex: 0 0 auto;
+  min-width: 2.4rem;
+}
+.anxj-track {
+  position: relative;
+  flex: 1 1 auto;
+  height: 8px;
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--color-mist-500) 26%, transparent);
+  overflow: hidden;
+}
+.anxj-fill {
+  position: absolute;
+  inset-block: 0;
+  /* inset-inline-start, so it grows from the right in RTL and from the left
+     wherever this is ever rendered LTR. */
+  inset-inline-start: 0;
+  border-radius: 999px;
+  background: var(--color-brand-300);
+  transition: inline-size 240ms ease;
+}
+
+/* THE FOUR STEPS. A grid rather than a flex with spacers, so every node owns
+   an equal column and the labels under them cannot drag the nodes out of
+   true at 360px. */
+.anxj-steps {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  align-items: start;
+  margin-top: 0.1rem;
+}
+.anxj-step {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.2rem;
+  min-width: 0;
+}
+/* The connector, drawn from each node toward the NEXT one — which in RTL is
+   to its left, so it hangs off the inline-end side. The last step has none. */
+.anxj-step::before {
+  content: '';
+  position: absolute;
+  top: 8px;
+  inset-inline-end: 50%;
+  inline-size: 100%;
+  block-size: 2px;
+  background: color-mix(in oklab, var(--color-mist-500) 26%, transparent);
+}
+.anxj-step:first-child::before {
+  content: none;
+}
+.anxj-dot {
+  position: relative;
+  z-index: 1;
+  inline-size: 17px;
+  block-size: 17px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  background: color-mix(in oklab, var(--color-mist-500) 32%, transparent);
+  color: var(--color-on-state);
+  flex: 0 0 auto;
+}
+.anxj-dot svg {
+  inline-size: 10px;
+  block-size: 10px;
+}
+.anxj-label {
+  font-size: 9.5px;
+  line-height: 1.15;
+  text-align: center;
+  color: var(--color-mist-500);
+  min-width: 0;
+}
+
+/* DONE — a step the run really passed. */
+.anxj-step.is-done .anxj-dot {
+  background: var(--color-brand-400);
+  color: var(--color-on-brand);
+}
+/* CURRENT — a ring and three dots, no pulse and no scale. */
+.anxj-step.is-current .anxj-dot {
+  background: transparent;
+  border: 2px solid var(--color-brand-400);
+  color: var(--color-brand-400);
+}
+.anxj-step.is-current .anxj-label {
+  color: var(--color-brand-300);
+  font-weight: 800;
+}
+/*
+ * SKIPPED — and this state is the whole honesty of the stepper.
+ *
+ * Measured on this owner's own 88 join outcomes: 46 were 'no-button' and 14
+ * 'already', and both of those return from joinOneGroup BEFORE the button is
+ * pressed. Two thirds of real groups therefore never send a request and
+ * never wait for an answer. Drawing those two steps as done would be the
+ * screen narrating an action the machine did not take, so they are drawn as
+ * passed-over: hollow, dimmer than "not yet", and no tick.
+ */
+.anxj-step.is-skipped .anxj-dot {
+  background: transparent;
+  border: 1px dashed color-mix(in oklab, var(--color-mist-500) 46%, transparent);
+  color: transparent;
+}
+.anxj-step.is-skipped .anxj-label {
+  opacity: 0.55;
+}
+/* THE ENDING, on the last step only, once this group has an outcome. */
+.anxj-step.is-good .anxj-dot {
+  background: var(--color-success-400);
+  color: var(--color-on-state);
+}
+.anxj-step.is-warn .anxj-dot {
+  background: var(--color-warning-400);
+  color: var(--color-on-state);
+}
+.anxj-step.is-bad .anxj-dot {
+  background: var(--color-error-400);
+  color: var(--color-on-state);
+}
+
+/* The sentence under the steps once the group ends, and the gap countdown
+   between groups. One quiet line, never a second card. */
+.anxj-said {
+  font-size: 11px;
+  line-height: 1.25;
+  text-align: center;
+  color: var(--color-mist-300);
+}

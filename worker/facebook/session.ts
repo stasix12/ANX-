@@ -7,6 +7,7 @@ import { readProfiles, switchProfile, type FacebookProfile } from './profiles';
 import { searchGroups, type SearchOutcome } from './discover';
 import { readMyGroups, type MyGroupsOutcome } from './mygroups';
 import { joinGroups, type JoinResult } from './join';
+import type { JoinStage } from '@/lib/social/types';
 import { leaveOneGroup, type LeaveResult } from './leave';
 import { captureScreenshot } from '../screenshots';
 import { env } from '../env';
@@ -425,6 +426,10 @@ export class BrowserSession {
     hooks: {
       onEach: (result: JoinResult) => Promise<void>;
       onWait?: (msLeft: number) => Promise<void>;
+      /* Passed straight through to joinGroups. Synchronous on purpose — see
+         the note on the hook there: a progress report may not be awaited
+         inside the timing that decides how a page is classified. */
+      onStage?: (index: number, url: string, stage: JoinStage) => void;
       stopped?: () => boolean;
     },
   ): Promise<{ results: JoinResult[]; stoppedBy: '' | 'blocked' | 'unavailable' | 'cap' | 'stopped'; problem: string }> {

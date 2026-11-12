@@ -25,6 +25,8 @@ import {
   listTargetPictures,
   listWorkers,
   startDiscovery,
+  listJoinOutcomes,
+  readJoinRun,
   startJoinGroups,
   startJoinedScan,
   watchSearch,
@@ -46,9 +48,18 @@ import {
   type DiscoveryFilter,
   type DiscoverySort,
 } from '@/lib/social/discovery';
+import {
+  JOIN_ENDING,
+  joinCardView,
+  joinProgressUsable,
+  joinRunLine,
+  joinRunPercent,
+  type JoinCardView,
+  type JoinProgress,
+} from '@/lib/social/join-run';
 import { friendlyMessage } from '@/lib/social/errors';
 import { relativeHe } from '@/lib/social/time';
-import type { DiscoveredGroupRow, DiscoverySearchRow } from '@/lib/social/types';
+import type { DiscoveredGroupRow, DiscoverySearchRow, WorkerCommand } from '@/lib/social/types';
 import { CloseIcon, EyeIcon, SearchIcon, UsersIcon } from '@/components/icons';
 
 /**
@@ -114,6 +125,59 @@ const JOIN_WAIT_MS = 30 * 60_000;
  */
 const SCAN_WAIT_MS = 10 * 60_000;
 
+/*
+ * ─── WHAT THIS BROWSER REMEMBERS ABOUT A RUN IT STARTED ───────────────────
+ *
+ * "לבדוק שהלוג נשמר גם לאחר רענון המסך."
+ *
+ * The denominator of "2 מתוך 6" is not in the database and cannot be: the
+ * worker EMPTIES a command's payload in the same statement that claims the
+ * row, deliberately, so that a login command cannot leave a password sitting
+ * in a table. Verified against production — 0 of 222 command rows kept one.
+ *
+ * So the list of addresses this screen sent is remembered here, by the
+ * browser that sent it, and the progress blob's own `total` is preferred
+ * over it whenever the worker is new enough to write one. If neither is
+ * there the run strip says "N טופלו" and no total, which is the honest
+ * answer rather than a made-up denominator.
+ *
+ * It is a convenience, never a source of truth: every outcome on screen
+ * comes from the database.
+ */
+const RUN_KEY = 'anx.discover.join';
+const RUN_MEMORY_MS = 60 * 60_000;
+
+interface RememberedRun {
+  id: string;
+  at: string;
+  total: number;
+}
+
+function rememberRun(run: RememberedRun | null): void {
+  try {
+    if (run) window.localStorage.setItem(RUN_KEY, JSON.stringify(run));
+    else window.localStorage.removeItem(RUN_KEY);
+  } catch {
+    /* Private mode, blocked storage, a full quota: the run still works, it
+       just loses its denominator after a refresh. */
+  }
+}
+
+function recallRun(now: number): RememberedRun | null {
+  try {
+    const raw = window.localStorage.getItem(RUN_KEY);
+    if (!raw) return null;
+    const run = JSON.parse(raw) as RememberedRun;
+    if (!run?.id || !Number.isFinite(Date.parse(run.at ?? ''))) return null;
+    /* An hour is longer than any run this cap allows and short enough that a
+       stale key cannot haunt tomorrow's screen. */
+    if (now - Date.parse(run.at) > RUN_MEMORY_MS) return null;
+    return run;
+  } catch {
+    return null;
+  }
+}
+
 export default function DiscoverPage() {
   const [text, setText] = useState('');
   /** The phrase the rows on screen belong to. Not the same as `text`, which
@@ -133,6 +197,22 @@ export default function DiscoverPage() {
    * can answer and is kept apart from the search results on screen.
    */
   const [joined, setJoined] = useState<DiscoveredGroupRow[] | null>(null);
+  /*
+   * THE RUN ON SCREEN. Null when nothing is joining.
+   *
+   * `byUrl` is the floor and `progress` is the luxury: the outcomes come from
+   * the activity rows the worker has written since long before this feature,
+   * so they survive a refresh, an old worker and a database that never ran
+   * the migration. The stepper needs `progress`, and simply does not appear
+   * without it.
+   */
+  const [joinRun, setJoinRun] = useState<{
+    id: string;
+    at: string;
+    total: number | null;
+    byUrl: Record<string, string>;
+    progress: JoinProgress | null;
+  } | null>(null);
   /* Pictures the publishing list already holds, keyed by the group's Facebook
      id — the fallback behind every row that has none of its own. */
   const [targetPics, setTargetPics] = useState<Map<string, string>>(new Map());
@@ -292,6 +372,20 @@ export default function DiscoverPage() {
   /* Over every row of this search, not over `shown`: the sentence under the
      heading explains the whole result, and it must not change every time he
      taps a membership chip. */
+  /*
+   * What the run made of one group, if anything yet. Reads the outcomes the
+   * worker wrote, never the progress blob — so it is right on a database
+   * without the migration and on a PC running an older worker.
+   */
+  const endedFor = useCallback(
+    (url: string): { tone: 'good' | 'warn' | 'bad'; said: string } | null => {
+      const outcome = joinRun?.byUrl[url];
+      if (!outcome) return null;
+      return JOIN_ENDING[outcome as keyof typeof JOIN_ENDING] ?? null;
+    },
+    [joinRun],
+  );
+
   const exactTotal = useMemo(() => countExact((rows ?? []).filter((r) => !r.hidden), phrase), [rows, phrase]);
   const fresh = useMemo(
     () => newSince((rows ?? []).filter((r) => !r.hidden), activeSearch?.previous_run_at ?? null),
@@ -595,6 +689,87 @@ export default function DiscoverPage() {
   );
   const alreadyMine = pickedRows.filter((r) => r.membership === 'member').length;
 
+  /*
+   * ─── WATCHING A RUN, FROM WHEREVER IT IS ─────────────────────────────
+   *
+   * One loop, used both by the press that starts a run and by a reload that
+   * finds one still going. It reads the command row (for the live stage, when
+   * the database has the column) and the activity rows (for the outcomes,
+   * always) on the same beat, and it stops when the command stops.
+   *
+   * THE OUTCOMES ARE THE FLOOR AND THEY ARE NEVER SKIPPED. Even on a database
+   * with no `progress` column and a PC running last week's worker, every
+   * group that finishes appears here with its real result the moment the
+   * worker writes it — which is what makes "N מתוך M טופלו" true rather than
+   * animated.
+   */
+  const watchRun = useCallback(
+    async (id: string, at: string, total: number | null): Promise<WorkerCommand | null> => {
+      const until = Date.now() + JOIN_WAIT_MS;
+      let last: WorkerCommand | null = null;
+      while (Date.now() < until) {
+        await new Promise((done) => setTimeout(done, 4_000));
+        const [row, outcomes] = await Promise.all([
+          readJoinRun(id).catch(() => null),
+          listJoinOutcomes(at).catch(() => [] as Awaited<ReturnType<typeof listJoinOutcomes>>),
+        ]);
+        const byUrl: Record<string, string> = {};
+        for (const e of outcomes) {
+          const url = typeof e.meta?.url === 'string' ? e.meta.url : '';
+          const outcome = typeof e.meta?.outcome === 'string' ? e.meta.outcome : '';
+          if (url && outcome) byUrl[url] = outcome;
+        }
+        const progress = joinProgressUsable(row?.progress ?? null, Date.now()) ? (row?.progress ?? null) : null;
+        setJoinRun({ id, at, total: progress?.total ?? total, byUrl, progress });
+        if (row?.status === 'done' || row?.status === 'failed') {
+          last = { id, status: row.status, result: row.result } as WorkerCommand;
+          break;
+        }
+      }
+      return last;
+    },
+    [],
+  );
+
+  /*
+   * A RUN THAT WAS ALREADY GOING WHEN THIS SCREEN OPENED.
+   *
+   * He refreshes mid-run — the brief asks for exactly this — or comes back to
+   * the tab. The id is the only thing the browser kept; everything drawn from
+   * it is re-read from the database.
+   */
+  useEffect(() => {
+    const remembered = recallRun(Date.now());
+    if (!remembered) return;
+    let gone = false;
+    void (async () => {
+      const row = await readJoinRun(remembered.id).catch(() => null);
+      if (gone || !row || row.status === 'done' || row.status === 'failed') {
+        if (row?.status === 'done' || row?.status === 'failed') rememberRun(null);
+        return;
+      }
+      setBusyId('join');
+      try {
+        await watchRun(remembered.id, remembered.at, remembered.total);
+        const [found, mine] = await Promise.all([active ? listDiscovered(active) : Promise.resolve(null), listJoined()]);
+        if (gone) return;
+        if (found) setRows(found);
+        setJoined(mine);
+      } finally {
+        if (!gone) {
+          rememberRun(null);
+          setBusyId(null);
+        }
+      }
+    })();
+    return () => {
+      gone = true;
+    };
+    /* On mount only: a run is picked up once, not re-picked-up whenever the
+       phrase on screen changes under it. */
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   async function joinPicked() {
     if (!joinOrder.length || busyId === 'join') return;
     if (workerOnline === false) {
@@ -617,9 +792,15 @@ export default function DiscoverPage() {
     });
     if (!ok) return;
     setBusyId('join');
+    const startedAt = new Date().toISOString();
     try {
       const { id } = await startJoinGroups(workerId, joinOrder.map((r) => r.url));
-      const done = await waitForWorkerCommand(id, JOIN_WAIT_MS);
+      /* Remembered BEFORE the wait, so a refresh one second later still finds
+         it — and remembered with the count, which is the one thing the
+         database cannot tell us afterwards. */
+      rememberRun({ id, at: startedAt, total: joinOrder.length });
+      setJoinRun({ id, at: startedAt, total: joinOrder.length, byUrl: {}, progress: null });
+      const done = await watchRun(id, startedAt, joinOrder.length);
       const [found, mine] = await Promise.all([active ? listDiscovered(active) : Promise.resolve(null), listJoined()]);
       if (found) setRows(found);
       setJoined(mine);
@@ -630,6 +811,8 @@ export default function DiscoverPage() {
     } catch (err) {
       toast(friendlyMessage(err, 'ההצטרפות נכשלה.'), 'error');
     } finally {
+      rememberRun(null);
+      setJoinRun(null);
       setBusyId(null);
     }
   }
@@ -786,6 +969,11 @@ export default function DiscoverPage() {
                 already={inSystem.has(row.external_id) || !!row.target_id}
                 busy={busyId === row.id}
                 exact={!!phrase && nameMatches(row.name, phrase)}
+                /* The stepper rides on ONE card — the group the worker is
+                   inside right now — and every card it has finished shows
+                   what it made of it. */
+                run={joinRun?.progress && joinRun.progress.url === row.url ? joinCardView(joinRun.progress) : null}
+                ended={endedFor(row.url)}
                 fallbackImage={targetPics.get(row.external_id) ?? null}
                 onToggle={() => toggle(row.id)}
                 onAdopt={() => adopt(row)}
@@ -844,11 +1032,55 @@ export default function DiscoverPage() {
           The same position the groups and library selection bars use, down to
           the expression: above the tab bar, clear of the home indicator, and
           `data-overlay` so the page's entrance transform does not drag it. */}
-      {picked.size > 0 && (
+      {(picked.size > 0 || joinRun) && (
         <div data-overlay className="fixed inset-x-0 bottom-[calc(4.5rem+var(--safe-b))] z-40 px-3 md:bottom-4">
+          {/*
+            ─── HOW FAR THE RUN HAS GOT, COUNTED ──────────────────────────
+
+            "יש להציג פס התקדמות המתבסס על מספר הקבוצות שטופלו בפועל. אין
+             להמציא אחוזים לפי זמן שעבר."
+
+            So the number here is the number of groups that really finished —
+            one `group_join` row each, written by the worker the moment it
+            knew — and the bar is that count over the run's size. When the
+            size is not known (an old worker, and a refresh that lost what
+            this browser remembered) the sentence says "N טופלו" and there is
+            no bar, because a bar needs a denominator and inventing one is
+            the thing this strip exists not to do.
+          */}
+          {joinRun && (
+            <div className="mx-auto mb-1.5 max-w-3xl rounded-card border border-brand-400/25 bg-ink-900/95 px-3 py-2 shadow-[0_8px_28px_-10px_rgba(46,16,101,0.5)] backdrop-blur">
+              <div className="flex items-center justify-between gap-2">
+                <p className="truncate text-[12.5px] font-extrabold text-mist-100">
+                  הצטרפות לקבוצות — {joinRunLine(Object.keys(joinRun.byUrl).length, joinRun.total)}
+                </p>
+                {joinRun.progress?.gapUntil && (
+                  /* The pause between groups, named for what it is. It is not
+                     a stage and is never drawn as one: the answer already
+                     arrived, and this minute or two is the pacing that keeps
+                     Facebook from blocking the account. */
+                  <span className="shrink-0 text-[11px] text-mist-500">הפסקה לפני הקבוצה הבאה</span>
+                )}
+              </div>
+              {joinRunPercent(Object.keys(joinRun.byUrl).length, joinRun.total) !== null && (
+                <span className="anxj-track mt-1.5 block">
+                  <span
+                    className="anxj-fill"
+                    style={{ inlineSize: `${joinRunPercent(Object.keys(joinRun.byUrl).length, joinRun.total)}%` }}
+                  />
+                </span>
+              )}
+            </div>
+          )}
           {/* Same two controls, same handlers, same count. The brief's skin:
               a purple gradient bar with softer top corners, lifted off the
-              list rather than sitting in it. */}
+              list rather than sitting in it.
+
+              GUARDED ON ITS OWN COUNT, not on the strip's: a run picked up
+              after a refresh has an empty selection, and this bar would
+              otherwise sit under the progress saying "נבחרו 0" with a button
+              offering to join nothing. */}
+          {picked.size > 0 && (
           <div className="mx-auto flex max-w-3xl items-center justify-between gap-2 rounded-sheet bg-gradient-to-l from-brand-600 to-brand-500 px-2.5 py-2.5 shadow-[0_8px_28px_-6px_rgba(46,16,101,0.45)]">
             <div className="flex min-w-0 items-center gap-1.5">
               <button
@@ -896,6 +1128,7 @@ export default function DiscoverPage() {
               </Button>
             </div>
           </div>
+          )}
         </div>
       )}
 

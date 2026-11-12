@@ -86,6 +86,21 @@ function builtCss(): string | null {
    row at 390 and 430 went 102 → 98. Ceiling is the measured maximum plus
    four, as always in this file. */
 const MAX_ROW = 123;
+/*
+ * THE ONE CARD THAT CARRIES THE LIVE JOIN LOG. Measured, at the three widths:
+ *
+ *   live, waiting for the answer      360: 186   390: 172   430: 172
+ *   ended with no join button         360: 218   390: 191   430: 191
+ *
+ * The worst is the second at 360: a name long enough to wrap onto two lines,
+ * the three-line band under it, and the sentence saying how that group ended.
+ * Ceiling is the measured maximum plus four, as everywhere in this file.
+ *
+ * It is roughly two ordinary rows, and that is the deal: ONE card in the list
+ * grows while the machine is inside that group, and shrinks back the moment
+ * it moves on. The alternative the brief rules out is a separate window.
+ */
+const MAX_RUN_ROW = 222;
 
 async function main(): Promise<void> {
   const css = builtCss();
@@ -246,6 +261,60 @@ async function main(): Promise<void> {
                * screen. So it is found by the words a person reads, measured,
                * and checked against which rows were told they are exact.
                */
+              /*
+               * ─── THE LIVE JOIN LOG, AS PAINTED ────────────────────────
+               *
+               * Measured rather than read off the markup, because the two
+               * things that have actually gone wrong on this screen were
+               * both invisible to a class-name check: a chip whose colour
+               * token did not exist rendered completely EMPTY, and a prop
+               * that was threaded but never read rendered nothing at all.
+               */
+              band: (() => {
+                const band = r.querySelector('.anxj');
+                if (!band) return null;
+                const fill = band.querySelector('.anxj-fill') as HTMLElement | null;
+                const track = band.querySelector('.anxj-track') as HTMLElement | null;
+                const steps = [...band.querySelectorAll('.anxj-step')];
+                const bb = band.getBoundingClientRect();
+                return {
+                  steps: steps.length,
+                  states: steps.map((el) => (el.className.match(/is-[a-z]+/g) || []).join(' ')),
+                  labels: steps.map((el) => (el.querySelector('.anxj-label')?.textContent || '').trim()),
+                  /* A tick on every step that claims to have happened, and
+                     NOTHING on one the run skipped. */
+                  marks: steps.map((el) => Boolean(el.querySelector('.anxj-dot svg'))),
+                  /*
+                   * A dot is painted either as a filled disc or as a ring,
+                   * so "has colour" is background OR border — and the value
+                   * may come back as rgb(), rgba() or oklab(), because a
+                   * color-mix() resolves to oklab. What must never happen is
+                   * BOTH being transparent, which is what an undefined token
+                   * produces: CSS drops the declaration in silence.
+                   */
+                  /* NO NAMED ARROW IN HERE. tsx's esbuild keeps function
+                     names by wrapping them in a `__name` helper that is not
+                     shipped to the page, so `const clear = (v) => …` dies
+                     with "__name is not defined" before its first statement
+                     — the exact hazard account.test.ts exists to reproduce.
+                     Everything below is inline on purpose. */
+                  dotPaint: steps.map((el) => {
+                    const cs = getComputedStyle(el.querySelector('.anxj-dot') as Element);
+                    const bg = cs.backgroundColor;
+                    const border = cs.borderTopColor;
+                    const width = cs.borderTopWidth;
+                    const bgClear = !bg || bg === 'rgba(0, 0, 0, 0)' || bg === 'transparent';
+                    const borderClear = !border || border === 'rgba(0, 0, 0, 0)' || border === 'transparent';
+                    return { bg, border, width, painted: !bgClear || (!borderClear && parseFloat(width) > 0) };
+                  }),
+                  /* The fill as a FRACTION of the track, which is the only
+                     thing a reader can actually see. */
+                  filled: fill && track ? Math.round((fill.getBoundingClientRect().width / track.getBoundingClientRect().width) * 100) : -1,
+                  pct: (band.querySelector('.anxj-pct')?.textContent || '').trim(),
+                  said: (band.querySelector('.anxj-said')?.textContent || '').trim(),
+                  inside: bb.left >= rowBox.left - 1 && bb.right <= rowBox.right + 1,
+                };
+              })(),
               exactChip: (() => {
                 const el = [...r.querySelectorAll('span')].find((e) => (e.textContent || '').trim() === 'מדויק');
                 if (!el) return null;
@@ -328,11 +397,25 @@ async function main(): Promise<void> {
       checks += 1;
       assert.equal(seen.overflow, false, say('the page scrolls sideways — a row pushed something past the screen'));
       checks += 1;
-      assert.equal(seen.rows.length, 8, say('the fixture lost rows'));
+      assert.equal(seen.rows.length, 10, say('the fixture lost rows'));
 
       for (const [i, r] of seen.rows.entries()) {
         checks += 4;
-        assert.ok(r.height <= MAX_ROW, say(`row ${i} ("${r.name.slice(0, 20)}") is ${r.height}px, over the ${MAX_ROW}px a compact row may take`));
+        /*
+         * TWO CEILINGS, AND THE SECOND ONE IS NOT A RELAXATION OF THE FIRST.
+         *
+         * Rows 0-7 are ordinary rows and keep the 123px he asked for —
+         * "לא לבזבז יותר מדי גובה לכל קבוצה", then "להוריד בכ-15-20%", both
+         * measured and both paid for. Rows 8 and 9 are the ONE card that
+         * carries the live join log, and it is taller because it is saying
+         * three lines more: the group being worked on, how far it has got,
+         * and which of the four steps it has really passed. The brief asks
+         * for exactly that and forbids the rest — "לא להגדיל כרטיסים שלא
+         * לצורך" — so the ordinary ceiling is untouched and this one is its
+         * own measured number.
+         */
+        const ceiling = i >= 8 ? MAX_RUN_ROW : MAX_ROW;
+        assert.ok(r.height <= ceiling, say(`row ${i} ("${r.name.slice(0, 20)}") is ${r.height}px, over the ${ceiling}px that row may take`));
         assert.ok(r.nameVisible, say(`row ${i} rendered no readable name — "${r.name}"`));
         assert.ok(r.nameInside, say(`row ${i}'s name is outside its own card`));
         assert.equal(r.escaped, 0, say(`row ${i} has ${r.escaped} controls outside the card`));
@@ -367,6 +450,51 @@ async function main(): Promise<void> {
          * name with every other badge already on it, which is where one more
          * chip would push a control off a 360px screen if it were going to.
          */
+        /* ─── and the join log on the two cards that carry one ───────── */
+        if (i >= 8) {
+          checks += 8;
+          const b = r.band;
+          assert.ok(b, say(`row ${i} was given a run and drew no join log — the prop is threaded and never read`));
+          assert.equal(b?.steps, 4, say(`row ${i}: the stepper has ${b?.steps} steps, not 4`));
+          assert.deepEqual(
+            b?.labels,
+            ['מאתר את הקבוצה', 'שולח בקשת הצטרפות', 'ממתין לתשובה', 'סיום'],
+            say(`row ${i}: the four steps are not the four the brief names — ${JSON.stringify(b?.labels)}`),
+          );
+          assert.ok(b?.inside, say(`row ${i}: the join log is outside its own card`));
+          /* Every dot's colour has to RESOLVE. An undefined token is dropped
+             in silence by CSS, which is how a 68% chip once rendered empty. */
+          assert.deepEqual(
+            (b?.dotPaint ?? []).filter((d) => !d.painted),
+            [],
+            say(`row ${i}: a step dot is invisible — neither a fill nor a ring resolved: ${JSON.stringify(b?.dotPaint)}`),
+          );
+          if (i === 8) {
+            /* Live, waiting for the answer: two done, one current, one todo,
+               and the bar at three quarters. */
+            assert.deepEqual(b?.states, ['is-done', 'is-done', 'is-current', 'is-todo'], say(`row 8 states: ${JSON.stringify(b?.states)}`));
+            assert.equal(b?.pct, '75%', say(`row 8 says ${b?.pct}, and three of four steps is 75%`));
+            assert.ok(Math.abs((b?.filled ?? 0) - 75) <= 2, say(`row 8's bar is ${b?.filled}% full while the number says ${b?.pct}`));
+          } else {
+            /*
+             * THE CASE THAT IS TWO THIRDS OF REALITY. No join button, so the
+             * request was never sent and no answer was ever waited for.
+             * Those two steps must read as passed over — and must carry NO
+             * tick, because a tick is a claim that something happened.
+             */
+            assert.deepEqual(
+              b?.states,
+              ['is-done', 'is-skipped', 'is-skipped', 'is-current is-bad'],
+              say(`row 9 states: ${JSON.stringify(b?.states)} — a group with no join button never sent anything`),
+            );
+            assert.deepEqual(b?.marks, [true, false, false, true], say(`row 9 ticks: ${JSON.stringify(b?.marks)} — a skipped step must not be ticked`));
+            assert.equal(b?.said, 'לא נמצא כפתור הצטרפות', say(`row 9 says "${b?.said}"`));
+          }
+        } else {
+          checks += 1;
+          assert.equal(r.band, null, say(`row ${i} drew a join log without being given a run`));
+        }
+
         checks += 1;
         const shouldMark = [0, 2, 4, 6].includes(i);
         if (!shouldMark) {

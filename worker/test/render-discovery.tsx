@@ -27,6 +27,7 @@
  */
 import { renderToStaticMarkup } from 'react-dom/server';
 import { GroupRow, MyGroupsCard } from '@/components/social/Discovery';
+import { joinCardView } from '@/lib/social/join-run';
 import type { DiscoveredGroupRow } from '@/lib/social/types';
 
 /* A 1x1 PNG as a data URI: this measures whether an <img> is rendered at all,
@@ -86,7 +87,50 @@ const cases: [string, DiscoveredGroupRow, boolean, boolean, boolean][] = [
    * were written and never painted. So it is rendered and looked at.
    */
   ['no picture of its own — the publishing list has one', row({ external_id: '8', name: 'קבוצה עם תמונה מושאלת', membership: 'member' }), true, false, false],
+  /*
+   * ─── THE JOIN LOG, ON THE TWO CARDS THAT ACTUALLY HAPPEN ─────────────
+   *
+   * APPENDED, never inserted: the `מדויק` expectations below are keyed on
+   * row INDEX, so putting these in the middle would silently re-target them.
+   *
+   * Row 9 is the live card the reference draws — inside a group, waiting for
+   * Facebook's answer, three of four steps lit. Row 10 is the case the live
+   * database says is far commoner: a group with no join button at all, which
+   * returns before anything is pressed, so the two middle steps were never
+   * taken and must not be drawn as though they were. 46 of this owner's 88
+   * real outcomes are that one.
+   *
+   * Both carry the longest realistic name, because the band sits in the same
+   * column the name wraps in and the worst case is both at once.
+   */
 ];
+
+const liveRow = row({ external_id: '9', name: 'אופקים ביחד — קהילת העסקים והתושבים', members: 34_000, membership: 'none' });
+const endedRow = row({ external_id: '10', name: 'קבוצת תושבי שכונת נווה זאב ורמות באר שבע — קניה, מכירה והמלצות', members: 98_700, membership: 'none' });
+
+/* The two states handed in exactly as the page hands them: computed by
+   joinCardView from a progress blob, never hand-written here — a fixture that
+   drew its own idea of the stepper would measure a copy. */
+const liveView = joinCardView({
+  v: 1, total: 6, done: 2, joined: 1, pending: 1,
+  index: 2, url: liveRow.url, stage: 'waiting', clicked: true, outcome: '',
+  gapUntil: null, at: '2026-11-12T20:55:00Z', startedAt: '2026-11-12T20:40:00Z',
+});
+const endedView = joinCardView({
+  v: 1, total: 6, done: 3, joined: 1, pending: 1,
+  index: 3, url: endedRow.url, stage: 'done', clicked: false, outcome: 'no-button',
+  gapUntil: null, at: '2026-11-12T20:57:00Z', startedAt: '2026-11-12T20:40:00Z',
+});
+
+const runs = `
+  <p style="color:#9aa;font:12px sans-serif;margin:14px 0 4px">join log — live, waiting for the answer</p>
+  <div class="row-probe">${renderToStaticMarkup(
+    GroupRow({ row: liveRow, picked: true, already: false, busy: false, exact: false, run: liveView, fallbackImage: null, onToggle: () => {}, onAdopt: () => {}, onHide: () => {} }) as never,
+  )}</div>
+  <p style="color:#9aa;font:12px sans-serif;margin:14px 0 4px">join log — ended with no join button, middle steps never taken</p>
+  <div class="row-probe">${renderToStaticMarkup(
+    GroupRow({ row: endedRow, picked: true, already: false, busy: false, exact: false, run: endedView, fallbackImage: null, onToggle: () => {}, onAdopt: () => {}, onHide: () => {} }) as never,
+  )}</div>`;
 
 const body = cases
   .map(
@@ -176,4 +220,4 @@ const card = `
 console.log(`<!doctype html><html lang="he" dir="rtl"><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <link rel="stylesheet" href="app.css">
-<body class="bg-ink-950"><div class="social-theme" style="padding:16px">${body}${card}</div></body></html>`);
+<body class="bg-ink-950"><div class="social-theme" style="padding:16px">${body}${runs}${card}</div></body></html>`);

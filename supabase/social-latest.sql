@@ -2129,6 +2129,12 @@ end $$;
 -- TO UNDO: supabase/social-schema-v41-rollback.sql. It drops the function and
 -- the table; nothing else in the product reads them, and with the table gone
 -- the engine falls back to exactly the behaviour it has today.
+--
+-- AMENDED BY v42 (12.11): a hold already running is re-computed from the
+-- configured pause rather than frozen at the length it was created with, so
+-- shortening the pause reaches the hold the owner is sitting inside. Only
+-- ever shorter, and never past the day's ceiling. See the note at the
+-- re-base below; to undo just that, supabase/social-schema-v42-rollback.sql.
 -- ---------------------------------------------------------------------------
 create table if not exists public.social_publish_cycle (
   tenant_id uuid primary key references public.social_tenants(id) on delete cascade,
@@ -2278,8 +2284,54 @@ begin
     row.rounds_in_window := 0;
   end if;
 
+  -- ─── v42 · A HOLD IN FORCE FOLLOWS A PAUSE THAT WAS SHORTENED ───────────
+  --
+  -- "אני רוצה שההשהיה בין סבב לסבב של 100 קבוצות יהיה 6 שעות ולא 8 כמו עכשיו.
+  --  ואת הפרסום שרץ עכשיו גם שיהיה לפי המספרים האלה."
+  --
+  -- Before this, the instant was computed once when the round closed and was
+  -- then immutable: shortening the pause changed the NEXT hold and left the
+  -- running one at its old length. That is defensible — and it is not what
+  -- the owner means when he shortens a pause while sitting inside one.
+  --
+  -- SO IT IS RE-COMPUTED FROM THE MOMENT THE ROUND CLOSED, every call, with
+  -- the pause this caller is configured with. Two properties make it safe:
+  --
+  --   · ONLY EVER SHORTER (`least`). A configuration change can bring a hold
+  --     forward, never push it out. That is what makes it monotone: a fleet
+  --     running two versions converges on the shorter pause instead of
+  --     flipping the instant back and forth on the owner's screen every time
+  --     a different caller ticks. Raising the pause takes effect on the next
+  --     round, which is the only direction where waiting costs nothing.
+  --
+  --   · THE DAY'S CEILING IS A FLOOR HERE. When the window's rounds are
+  --     spent, the candidate is still pushed out to the end of the 24-hour
+  --     window exactly as it was when the hold was created — so shortening
+  --     the pause CANNOT buy a third round in a day. That is the property
+  --     that actually protects the account, and it is asserted on its own in
+  --     worker/test/cycle-db.test.ts.
+  if row.rest_until is not null then
+    rest_candidate := row.cycle_started_at + make_interval(hours => p_rest_hours);
+    if row.rounds_in_window >= p_rounds_per_window then
+      rest_candidate := greatest(rest_candidate, row.window_started_at + interval '24 hours');
+    end if;
+    row.rest_until := least(row.rest_until, rest_candidate);
+    -- AND THE CEILING IS RE-IMPOSED, not merely preserved. `least` above can
+    -- only keep a hold that is already shorter than the candidate — so a row
+    -- whose rest_until sits BELOW the end of a spent window (a hand-edited
+    -- row, a row written by an older version, a repair run by somebody at
+    -- three in the morning) would have kept that shorter hold and released a
+    -- third round inside the day. Caught by the test, not by reading: the
+    -- first version of this block passed `least` alone and the ceiling
+    -- assertion failed by exactly the ten minutes the fixture was off by.
+    if row.rounds_in_window >= p_rounds_per_window then
+      row.rest_until := greatest(row.rest_until, row.window_started_at + interval '24 hours');
+    end if;
+  end if;
+
   -- A hold that has expired is cleared HERE, on the first call past the
-  -- instant, so the worker never has to write this row to resume.
+  -- instant, so the worker never has to write this row to resume. A hold the
+  -- block above just brought into the past is cleared by this same line.
   if row.rest_until is not null and row.rest_until <= now_ then
     row.rest_until := null;
   end if;

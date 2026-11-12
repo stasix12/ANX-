@@ -330,14 +330,78 @@ async function main(): Promise<void> {
   eq(new Date(row('rest_until')).getTime(), new Date(held).getTime(), 'and does not push the pause further out — a hold that lengthened on every attempt would never end');
 
   /*
-   * THE CLOCK THAT MOVED. Nothing a caller passes can shorten a hold: the
-   * instant was computed once, by the server, and the only thing that ends it
-   * is the server's own now() passing it. Here the same call arrives claiming
-   * a one-hour rest — and the eight-hour hold it finds is untouched.
+   * ─── v42 · A SHORTENED PAUSE REACHES THE HOLD ALREADY RUNNING ──────────
+   *
+   * "ואת הפרסום שרץ עכשיו גם שיהיה לפי המספרים האלה."
+   *
+   * This section used to assert the OPPOSITE — that the instant, once
+   * written, could not be moved by any later caller. That was the safe
+   * reading of "זמן ההפסקה חייב להישמר בצד השרת", and it was wrong about
+   * what the owner wants: he shortened the pause while sitting inside an
+   * eight-hour one, and the thing he was sitting inside did not move.
+   *
+   * So the instant is now re-computed from the moment the round closed, with
+   * whatever pause the caller is configured with — and the two properties
+   * below are what keep that from being a hole.
    */
-  const lying = JSON.parse(tick('100, 1, 2, true'));
-  eq(lying.resting, true, 'a later call with different numbers cannot talk its way out of a hold in force');
-  eq(new Date(row('rest_until')).getTime(), new Date(held).getTime(), 'and cannot move the instant it was given');
+  const shorter = JSON.parse(tick('100, 1, 2, true'));
+  eq(shorter.resting, true, 'a one-hour pause still holds — an hour has not passed since the round closed');
+  eq(
+    new Date(row('rest_until')).getTime(),
+    new Date(row('cycle_started_at')).getTime() + 3600_000,
+    'but the hold now ends one hour after the round closed, not eight — the shortened pause reached it',
+  );
+
+  /*
+   * AND ONLY EVER SHORTER. A caller configured with a LONGER pause must not
+   * push the hold out: that is what makes this monotone, so a fleet running
+   * two versions converges on the shorter pause instead of flipping the
+   * instant back and forth on the owner's screen every time one of them ticks.
+   */
+  const longer = JSON.parse(tick('100, 12, 2, true'));
+  eq(longer.resting, true, 'a twelve-hour pause still holds');
+  eq(
+    new Date(row('rest_until')).getTime(),
+    new Date(row('cycle_started_at')).getTime() + 3600_000,
+    'and did NOT push the hold out — a configuration change can only bring it forward',
+  );
+
+  /*
+   * ─── AND THE DAY'S CEILING IS NOT FOR SALE ──────────────────────────────
+   *
+   * THE ONE THAT MATTERS. Re-basing a hold means a number the owner controls
+   * can now move an instant that is holding his account back — so the thing
+   * to prove is that it cannot move the one instant that protects it.
+   *
+   * Both rounds of the window are spent here, which is the state where the
+   * hold runs to the END OF THE 24-HOUR WINDOW rather than to the pause. A
+   * caller then arrives configured with a one-minute pause. If the ceiling
+   * were merely a starting value, that call would release publishing and buy
+   * a third hundred inside the day — straight past "ביממה של 24 שעות אפשר עד
+   * שתי סבבים (200)" and into the band where every rate limit on either
+   * account has landed.
+   */
+  exec(`update public.social_publish_cycle set
+          rounds_in_window = 2,
+          window_started_at = now() - interval '3 hours',
+          cycle_started_at = now() - interval '10 minutes',
+          rest_until = now() - interval '10 minutes' + interval '21 hours'`);
+  const windowEnd = one(`select (window_started_at + interval '24 hours')::text from public.social_publish_cycle`);
+  const greedy = JSON.parse(tick('100, 0, 2, true'));
+  eq(greedy.resting, true, 'with both rounds spent, a pause of ZERO hours does not release publishing');
+  eq(
+    new Date(row('rest_until')).getTime(),
+    new Date(windowEnd).getTime(),
+    'the hold still runs to the end of the 24-hour window — the ceiling is a floor here, and shortening the pause cannot buy a third round in a day',
+  );
+  eq(row('cycle_count'), '0', 'and nothing was counted while it held');
+
+  /* Put a plain eight-hour hold back for the sections that follow. */
+  exec(`update public.social_publish_cycle set
+          rounds_in_window = 1,
+          window_started_at = now(),
+          cycle_started_at = now(),
+          rest_until = now() + interval '8 hours'`);
 
   /* AND IT ENDS BY ITSELF, with no write from any worker. */
   exec(`update public.social_publish_cycle set rest_until = now() - interval '1 second'`);

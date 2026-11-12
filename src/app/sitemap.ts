@@ -26,13 +26,13 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     // ANX3D 3D-print store (/shop)
     { url: `${site.url}/shop`, lastModified, changeFrequency: 'weekly', priority: 0.9 },
     { url: `${site.url}/shop/categories`, lastModified, changeFrequency: 'weekly', priority: 0.7 },
-    ...['all', ...SEED_CATEGORIES.map((c) => c.slug)].map((slug) => ({
+    ...['all', ...SEED_CATEGORIES.filter((c) => SEED_PRODUCTS.some((p) => p.published && p.categories.includes(c.slug))).map((c) => c.slug)].map((slug) => ({
       url: `${site.url}/shop/c/${slug}`,
       lastModified,
       changeFrequency: 'weekly' as const,
       priority: 0.7,
     })),
-    ...SEED_PRODUCTS.map((p) => ({
+    ...SEED_PRODUCTS.filter((p) => p.published).map((p) => ({
       url: `${site.url}/shop/p/${p.slug}`,
       lastModified,
       changeFrequency: 'monthly' as const,

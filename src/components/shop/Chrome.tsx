@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
-import { categoryHref } from '@/lib/shop/logic';
+import { categoryHref, visibleCategories } from '@/lib/shop/logic';
 import { STATIC_CATEGORY_SLUGS } from '@/lib/shop/static';
 import { useCurrentUser, useShop } from '@/lib/shop/store';
 import {
@@ -238,7 +238,7 @@ function Drawer({ open, onClose }: { open: boolean; onClose: () => void }) {
   useEffect(() => onClose(), [pathname, onClose]);
 
   if (!open) return null;
-  const cats = [...s.db.categories].sort((a, b) => a.sortOrder - b.sortOrder);
+  const cats = visibleCategories(s.db.categories, s.db.products);
   const row = 'flex items-center gap-3 rounded-xl px-3 py-3 text-[15px] font-semibold hover:bg-x-soft';
   return (
     <div className="fixed inset-0 z-50" role="dialog" aria-modal="true" aria-label="תפריט">

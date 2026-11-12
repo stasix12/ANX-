@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { COLOR_LIST } from '@/lib/shop/seed';
-import { applyFilters, emptyFilters, priceBounds } from '@/lib/shop/logic';
+import { applyFilters, emptyFilters, priceBounds, visibleCategories } from '@/lib/shop/logic';
 import { useShop } from '@/lib/shop/store';
 import type { Filters, Product } from '@/lib/shop/types';
 import { IconClose, IconStar } from './icons';
@@ -51,7 +51,7 @@ export function FilterSheet({
   if (!open) return null;
   const count = applyFilters(scope, draft).length;
   const toggle = (list: string[], v: string) => (list.includes(v) ? list.filter((x) => x !== v) : [...list, v]);
-  const cats = [...s.db.categories].sort((a, b) => a.sortOrder - b.sortOrder).filter((c) => c.slug !== lockedCategory);
+  const cats = visibleCategories(s.db.categories, s.db.products).filter((c) => c.slug !== lockedCategory);
   const pct = (v: number) => ((v - min) / (max - min)) * 100;
   const label = 'mb-3 text-[16px] font-extrabold';
 

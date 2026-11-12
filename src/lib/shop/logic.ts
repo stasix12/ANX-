@@ -79,6 +79,13 @@ export function categoryHref(slug: string, staticSlugs?: Set<string>): string {
   return `/shop/c/all?cat=${encodeURIComponent(slug)}`;
 }
 
+/** Categories that have at least one product on sale, in display order. */
+export function visibleCategories(categories: Category[], products: Product[]): Category[] {
+  return [...categories]
+    .filter((c) => products.some((p) => p.published && p.categories.includes(c.slug)))
+    .sort((a, b) => a.sortOrder - b.sortOrder);
+}
+
 /* ---------------------------------------------------------------- search */
 
 /** Lower-cases and strips Hebrew niqqud/geresh so "ג׳ויסטיק" ≈ "גויסטיק". */

@@ -1,5 +1,5 @@
 // End-to-end journey test for /shop: home → category → product → color → cart →
-// checkout → order, plus filters, unpriced (WhatsApp) products, search,
+// checkout → order, plus filters, hidden products, search,
 // favorites, auth and admin (incl. a product with a diameter choice).
 // Usage: BASE=http://localhost:3000 node scripts/shop-e2e.cjs <screenshot-dir> [width] [height]
 const { chromium } = require(process.env.PW_CORE || 'playwright-core');
@@ -37,7 +37,7 @@ const assert = (c, m) => { if (!c) throw new Error('ASSERT: ' + m); console.log(
   await page.getByRole('navigation', { name: 'ניווט תחתון' }).getByRole('link', { name: 'קטגוריות' }).click();
   await page.waitForURL('**/shop/categories');
   await shot('02-categories');
-  assert((await page.locator('main ul[dir=ltr] > li').count()) === 7, 'seven categories (six cleaning + courses)');
+  assert((await page.locator('main ul[dir=ltr] > li').count()) === 5, 'only categories with live products (5)');
 
   console.log('3 catalog');
   await page.getByRole('link', { name: /^ידיות לניקוי ספות/ }).first().click();
@@ -69,26 +69,24 @@ const assert = (c, m) => { if (!c) throw new Error('ASSERT: ' + m); console.log(
   await page.waitForTimeout(300);
   assert(await badge(2), 'cart badge shows 2 items');
 
-  console.log('unpriced product');
-  await go('/shop/p/wand-of-troy');
-  assert((await page.getByText('מחיר יעודכן בקרוב').count()) > 0, 'unpriced product says price will be updated');
-  const wa = await page.getByRole('link', { name: /בוואטסאפ/ }).getAttribute('href');
-  assert(wa.startsWith('https://wa.me/') && decodeURIComponent(wa).includes('Wand of Troy'), 'WhatsApp order link carries the product');
-  assert((await page.getByRole('button', { name: /הוסף לסל/ }).count()) === 0, 'no add-to-cart without a price');
-  assert((await page.getByText('תמונה להמחשה').count()) > 0, 'mock-up image is captioned as illustrative');
+  console.log('only live products');
+  const hidden = await page.request.get(BASE + '/shop/p/wand-of-troy');
+  assert(hidden.status() === 404, 'hidden product (no photos) has no page');
+  await go('/shop/c/all');
+  assert((await page.getByText('תמונה להמחשה').count()) === 0, 'no mock-up images left in the catalogue');
 
   console.log('7 favorites');
   await go('/shop/c/all');
-  for (const n of ['ANACONDA', 'Wand of Troy', 'ראש שאיבה לחריצים', 'קופסה למשאבת Shurflo']) {
+  for (const n of ['ANACONDA', 'MINI VIPER', 'BIG MAMBA', 'מחבר מהיר לצינור הזרקה']) {
     await page.getByRole('button', { name: `הוספת ${n} למועדפים` }).first().click();
   }
   await page.getByRole('button', { name: 'הוספת סט קליפסים לצינורות לסל' }).first().click();
-  await page.getByRole('button', { name: 'לפרטים ולהזמנה — Wand of Troy' }).first().click();
-  await page.waitForURL('**/shop/p/wand-of-troy');
+  await page.getByRole('button', { name: 'לפרטים ולהזמנה — ערכת שדרוג TURBO X' }).first().click();
+  await page.waitForURL('**/shop/p/turbo-x');
   await go('/shop/favorites');
   await shot('07-favorites');
   assert((await page.locator('article').count()) === 4, 'favorites shows 4');
-  await page.getByRole('button', { name: 'הסרת ראש שאיבה לחריצים מהמועדפים' }).click();
+  await page.getByRole('button', { name: 'הסרת מחבר מהיר לצינור הזרקה מהמועדפים' }).click();
   assert((await page.locator('article').count()) === 3, 'remove from favorites works');
 
   console.log('5 cart');
@@ -112,7 +110,7 @@ const assert = (c, m) => { if (!c) throw new Error('ASSERT: ' + m); console.log(
   await page.keyboard.press('Enter');
   await page.waitForTimeout(400);
   assert((await page.locator('article').count()) >= 1, 'search results for ידית');
-  await page.getByRole('combobox').fill('שטיחים');
+  await page.getByRole('combobox').fill('קורסים');
   await page.keyboard.press('Enter');
   await page.waitForTimeout(300);
   assert((await page.locator('article').count()) >= 1, 'search by category name');

@@ -33,12 +33,12 @@ export const COLORS = {
 export const COLOR_LIST: ColorOption[] = Object.values(COLORS);
 
 export const SEED_CATEGORIES: Category[] = [
-  { slug: 'handles', name: 'ידיות לניקוי ספות', shortName: 'ידיות', icon: 'handle', image: img('cat-handles'), sortOrder: 1 },
+  { slug: 'handles', name: 'ידיות לניקוי ספות', shortName: 'ידיות', icon: 'handle', image: real('anx-anaconda', 5), sortOrder: 1 },
   { slug: 'wands', name: 'טולים לניקוי שטיחים', shortName: 'טולים שטיחים', icon: 'wand', image: img('cat-wands'), sortOrder: 2 },
-  { slug: 'adapters', name: 'מתאמים ומחברים', shortName: 'מתאמים', icon: 'adapter', image: img('cat-adapters'), sortOrder: 3 },
+  { slug: 'adapters', name: 'מתאמים ומחברים', shortName: 'מתאמים', icon: 'adapter', image: real('quick-coupler', 3), sortOrder: 3 },
   { slug: 'suction', name: 'אביזרי שאיבה', shortName: 'אביזרי שאיבה', icon: 'suction', image: img('cat-suction'), sortOrder: 4 },
-  { slug: 'accessories', name: 'אביזרים משלימים', shortName: 'משלימים', icon: 'accessory', image: img('cat-accessories'), sortOrder: 5 },
-  { slug: 'parts', name: 'חלקי חילוף', shortName: 'חלקי חילוף', icon: 'parts', image: img('cat-parts'), sortOrder: 6 },
+  { slug: 'accessories', name: 'אביזרים משלימים', shortName: 'משלימים', icon: 'accessory', image: real('turbo-x', 1), sortOrder: 5 },
+  { slug: 'parts', name: 'חלקי חילוף', shortName: 'חלקי חילוף', icon: 'parts', image: real('sabrina-maxi-panel', 1), sortOrder: 6 },
   { slug: 'courses', name: 'קורסים', shortName: 'קורסים', icon: 'course', image: '/products/course-stain-removal/1.webp', sortOrder: 7 },
 ];
 
@@ -385,6 +385,8 @@ export const SEED_PRODUCTS: Product[] = [
     imageNotes: { [img('cat-wands')]: ILLUSTRATIVE },
     featured: true,
     tags: ['wand', 'troy', 'טול', 'שטיחים', 'שטיח', 'carpet'],
+    // Hidden until real product photos exist (owner: only live products).
+    published: false,
     createdAt: created(3),
     sortOrder: 2,
   },
@@ -402,6 +404,8 @@ export const SEED_PRODUCTS: Product[] = [
     imageNotes: { [img('connector-360')]: ILLUSTRATIVE },
     featured: true,
     tags: ['360', 'connector', 'swivel', 'מחבר', 'מסתובב'],
+    // Hidden until real product photos exist (owner: only live products).
+    published: false,
     createdAt: created(8),
     sortOrder: 3,
   },
@@ -418,6 +422,8 @@ export const SEED_PRODUCTS: Product[] = [
     imageNotes: { [img('crevice-head')]: ILLUSTRATIVE, [img('cat-suction')]: ILLUSTRATIVE },
     featured: true,
     tags: ['crevice', 'nozzle', 'ראש', 'חריצים', 'פינות', 'שאיבה'],
+    // Hidden until real product photos exist (owner: only live products).
+    published: false,
     createdAt: created(10),
     sortOrder: 4,
   },
@@ -433,6 +439,8 @@ export const SEED_PRODUCTS: Product[] = [
     images: [img('cat-adapters')],
     imageNotes: { [img('cat-adapters')]: ILLUSTRATIVE },
     tags: ['adapter', 'hose', 'מתאם', 'צינור', 'שאיבה'],
+    // Hidden until real product photos exist (owner: only live products).
+    published: false,
     createdAt: created(12),
     sortOrder: 5,
   },
@@ -448,6 +456,8 @@ export const SEED_PRODUCTS: Product[] = [
     images: [img('cat-adapters')],
     imageNotes: { [img('cat-adapters')]: ILLUSTRATIVE },
     tags: ['water', 'fitting', 'injection', 'מים', 'הזרקה', 'מחבר'],
+    // Hidden until real product photos exist (owner: only live products).
+    published: false,
     createdAt: created(14),
     sortOrder: 6,
   },
@@ -474,6 +484,8 @@ export const SEED_PRODUCTS: Product[] = [
     ],
     compatibility: ['משאבת Shurflo 8095-901-890 (230VAC) עם זוויות לחיצה PL 3/8" בשני הפתחים'],
     tags: ['shurflo', 'pump', 'box', 'משאבה', 'קופסה', 'מארז'],
+    // Hidden until real product photos exist (owner: only live products).
+    published: false,
     createdAt: created(1),
     sortOrder: 7,
   },
@@ -553,6 +565,8 @@ export const SEED_PRODUCTS: Product[] = [
       { label: 'קצה לצינור פלדה', value: 'קוטר פנימי ~36–37 מ״מ' },
     ],
     tags: ['wand', 'tube', 'extension', 'מוט', 'צינור', 'הארכה', 'M34'],
+    // Hidden until real product photos exist (owner: only live products).
+    published: false,
     createdAt: created(20),
     sortOrder: 10,
   },
@@ -572,7 +586,7 @@ const DEMO_ADMIN: User = {
 };
 
 /** Bumped when the seed changes shape, so browsers drop the old demo catalogue. */
-export const DB_VERSION = 23;
+export const DB_VERSION = 24;
 
 export function buildSeedDB(): ShopDB {
   return {

@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { categoryHref } from '@/lib/shop/logic';
+import { categoryHref, visibleCategories } from '@/lib/shop/logic';
 import { STATIC_CATEGORY_SLUGS } from '@/lib/shop/static';
 import { useShop } from '@/lib/shop/store';
 import { ShopFrame } from '../Chrome';
@@ -11,7 +11,7 @@ import { ShopFooter } from './HomeView';
 
 export function CategoriesView() {
   const s = useShop();
-  const cats = [...s.db.categories].sort((a, b) => a.sortOrder - b.sortOrder);
+  const cats = visibleCategories(s.db.categories, s.db.products);
   const counts = (slug: string) => s.db.products.filter((p) => p.published && p.categories.includes(slug)).length;
   return (
     <ShopFrame nav="categories">

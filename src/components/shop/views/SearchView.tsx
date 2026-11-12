@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { categoryHref, productHref, searchProducts, suggestions } from '@/lib/shop/logic';
+import { categoryHref, productHref, searchProducts, suggestions, visibleCategories } from '@/lib/shop/logic';
 import { STATIC_CATEGORY_SLUGS, STATIC_PRODUCT_SLUGS } from '@/lib/shop/static';
 import { useShop } from '@/lib/shop/store';
 import { ShopFrame } from '../Chrome';
@@ -41,7 +41,7 @@ export function SearchView({ initial = '' }: { initial?: string }) {
     if (!initial) input.current?.focus();
   }, [initial]);
 
-  const sugg = useMemo(() => suggestions(s.db.products, s.db.categories, text), [s.db.products, s.db.categories, text]);
+  const sugg = useMemo(() => suggestions(s.db.products, visibleCategories(s.db.categories, s.db.products), text), [s.db.products, s.db.categories, text]);
   const results = useMemo(() => searchProducts(s.db.products, s.db.categories, submitted), [s.db.products, s.db.categories, submitted]);
   const showSuggest = text.trim() !== '' && text !== submitted;
 
@@ -67,7 +67,7 @@ export function SearchView({ initial = '' }: { initial?: string }) {
     else run(sg.label);
   };
 
-  const cats = [...s.db.categories].sort((a, b) => a.sortOrder - b.sortOrder);
+  const cats = visibleCategories(s.db.categories, s.db.products);
 
   return (
     <ShopFrame nav={false}>

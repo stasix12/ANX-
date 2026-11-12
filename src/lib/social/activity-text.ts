@@ -191,6 +191,7 @@ const TITLE: Record<string, string> = {
   disconnected: 'החיבור לפייסבוק נותק',
   metrics_columns_missing: 'חסר עדכון במסד הנתונים',
   commands_payload_missing: 'חסר עדכון במסד הנתונים',
+  commands_progress_missing: 'חסר עדכון במסד הנתונים',
 };
 
 /** When the event has no headline of its own, its severity is the headline. */

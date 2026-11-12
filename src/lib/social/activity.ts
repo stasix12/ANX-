@@ -390,6 +390,7 @@ const KIND: Record<string, ActivityKind> = {
      is unaffected; it is the installation that needs a minute. */
   rounds_column_missing: 'system',
   commands_payload_missing: 'system',
+  commands_progress_missing: 'system',
 };
 
 export function activityKind(entry: Pick<ActivityEntry, 'event' | 'level'>): ActivityKind {

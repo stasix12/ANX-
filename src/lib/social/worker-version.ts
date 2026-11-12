@@ -907,6 +907,14 @@
  *   "sent"                     5      locating                   1
  *   joinCardView               0      JOIN_STEPS                 0   (drawn by
  *                                     the dashboard, tree-shaken out — correct)
+ *
+ * The fingerprint moved once more after that measurement, and the reason is
+ * worth writing down rather than re-pasting: classifying the new
+ * `commands_progress_missing` event touched src/lib/social/activity.ts and
+ * activity-text.ts, both of which the installer bundles. The gate caught it —
+ * which is the whole point of a fingerprint that is not allowed to drift.
+ * Checked against the release list the same minute: v4.65.0 is the newest
+ * published tag, so 4.66.0 is free.
  */
 export const WORKER_VERSION = '4.66.0';
 
@@ -1659,4 +1667,4 @@ export const WORKER_VERSION = '4.66.0';
  * worker/facebook/join.ts and written by worker/social-worker.ts, both of
  * which run only on his PC. Numbers under WORKER_VERSION above.
  */
-export const WORKER_FINGERPRINT = 'e4dbf0504ddde994';
+export const WORKER_FINGERPRINT = 'b7036de834e6ff7c';

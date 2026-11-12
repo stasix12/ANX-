@@ -107,6 +107,12 @@ const SYSTEM_BY_DESIGN = new Set([
      says which round it belonged to. */
   'rounds_column_missing',
   'commands_payload_missing',
+  /* The same shape again, and deliberately the same class: a database that
+     has not run v43 costs the discovery screen its four live steps and
+     nothing else. The joining itself, the pacing and every outcome are
+     unaffected, so this is news about the installation and not about a
+     group. */
+  'commands_progress_missing',
   'avatar_upload_blocked',
   'account_save_failed',
   /* Same shape as the line above it: the machine read which profiles this

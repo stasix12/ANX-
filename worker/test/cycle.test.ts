@@ -32,7 +32,13 @@ const src = (p: string) => readFileSync(new URL(`../../${p}`, import.meta.url), 
 /* ══════════════ 1. THE OWNER'S NUMBERS ══════════════════════════════════ */
 
 eq(CYCLE_LIMIT, 100, '"כל 100 פרסומים מוצלחים"');
-eq(CYCLE_REST_HOURS, 8, '"תתחיל הפסקה של 8 שעות"');
+/*
+ * EIGHT IN THE BRIEF, SIX BY HIS DECISION ON 12.11 — after he had watched a
+ * real round close on his own account. Pinned rather than left loose because
+ * the engine and the card read the same constant, and a pause the card
+ * promises and the engine does not keep is the worst of both.
+ */
+eq(CYCLE_REST_HOURS, 6, 'the pause is six hours — "תקטין את ההפסקה של ה 8 שעות", 12.11');
 /*
  * "ביממה של 24 שעות אפשר עד שתי סבבים (200) קבוצות ככה אנחנו בסדר."
  *
@@ -314,6 +320,10 @@ async function main(): Promise<void> {
           rest: document.querySelectorAll('.anxc-rest').length,
           clock: document.querySelector('.anxc-clock')?.textContent?.trim() ?? '',
           count: document.querySelector('.anxc-count')?.textContent?.replace(/\s+/g, ' ').trim() ?? '',
+          /* The sentence that PROMISES the pause, read off the rendered card.
+             A hardcoded number here and a different constant in the engine
+             would be the card lying about something the owner plans around. */
+          promise: document.querySelector('.anxc-sub')?.textContent?.replace(/\s+/g, ' ').trim() ?? '',
           barPct: (() => {
             const t = document.querySelector('.anxc-track') as HTMLElement | null;
             const f = document.querySelector('.anxc-bar') as HTMLElement | null;
@@ -339,6 +349,18 @@ async function main(): Promise<void> {
           is(Math.abs(seen.barPct - 37) <= 2, `${w}: the bar is ${seen.barPct}% for 37/100`);
           eq(seen.rest, 0, `${w}: nothing is holding, so no hold band is drawn`);
           eq(seen.switchOn, 'true', `${w}: the switch reads as on`);
+          /*
+           * THE CARD PROMISES THE ENGINE'S OWN NUMBER. Added on 12.11 with
+           * the move from eight hours to six: the subtitle is the only place
+           * the owner is TOLD how long a pause lasts, and he schedules his
+           * day around it. Measured off the rendered text, so a literal
+           * typed into the JSX fails here rather than on his screen.
+           */
+          is(
+            seen.promise.includes(`${CYCLE_REST_HOURS} שעות`),
+            `${w}: the card promises the engine's own pause (${CYCLE_REST_HOURS}h) — got "${seen.promise}"`,
+          );
+          is(seen.promise.includes(String(CYCLE_LIMIT)), `${w}: and the engine's own ceiling`);
         }
         if (which === 'resting') {
           eq(seen.rest, 1, `${w}: the hold band is drawn`);

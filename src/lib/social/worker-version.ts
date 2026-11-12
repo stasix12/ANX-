@@ -802,7 +802,7 @@
  *
  * התזמון, סדר התור, מנגנון הפרסום וההגדרות הקיימות לא נגעו.
  */
-export const WORKER_VERSION = '4.62.0';
+export const WORKER_VERSION = '4.63.0';
 
 /**
  * A FINGERPRINT OF EVERYTHING THE INSTALLER CARRIES.
@@ -1522,4 +1522,4 @@ export const WORKER_VERSION = '4.62.0';
  * is asked to update anything for a window that only draws what is already in
  * social_activity_log.
  */
-export const WORKER_FINGERPRINT = '3cc7d662f58ed349';
+export const WORKER_FINGERPRINT = 'a164284e92d3a3df';

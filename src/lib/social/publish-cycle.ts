@@ -36,7 +36,27 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 
 /** The owner's numbers. Changing one of these changes the engine and the card together. */
 export const CYCLE_LIMIT = 100;
-export const CYCLE_REST_HOURS = 8;
+/*
+ * ─── SIX HOURS, AMENDED BY THE OWNER ON 12.11 ─────────────────────────────
+ *
+ * The brief quoted above asked for eight. He watched the mechanism complete
+ * its first real round that afternoon — exactly 100 publications between
+ * 11:14 and 12:46, then nothing — and asked for the pause to come down.
+ *
+ * WHAT THIS NUMBER DOES AND DOES NOT DO, measured on his own account rather
+ * than assumed: it changes the SPACING of the day's publishing, not its
+ * total. The ceiling that decides the total is CYCLE_ROUNDS_PER_WINDOW — two
+ * rounds in twenty-four hours — and when those are spent the hold runs to the
+ * end of the window whatever this number says. His 100 publications took one
+ * hour and thirty-one minutes, so at eight hours his two rounds spread over
+ * about eleven hours; at six, about nine. Two hundred either way.
+ *
+ * SO A SHORTER PAUSE IS NOT MORE VOLUME, IT IS MORE PRESSURE PER HOUR, and
+ * that is the only reason this is a number worth arguing about: every rate
+ * limit either account has hit landed between 210 and 265 publications in a
+ * day. Six keeps the day's total under that and keeps the two rounds apart.
+ */
+export const CYCLE_REST_HOURS = 6;
 export const CYCLE_ROUNDS_PER_WINDOW = 2;
 export const CYCLE_WINDOW_HOURS = 24;
 

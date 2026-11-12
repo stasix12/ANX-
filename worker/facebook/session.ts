@@ -349,7 +349,11 @@ export class BrowserSession {
    * command in this file uses, because they mean the same thing and the owner
    * reads them in the same place.
    */
-  async discoverGroups(headless: boolean, query: string, opts: { havePictures?: string[] } = {}): Promise<SearchOutcome> {
+  async discoverGroups(
+    headless: boolean,
+    query: string,
+    opts: { havePictures?: string[]; haveFacts?: string[] } = {},
+  ): Promise<SearchOutcome> {
     if (!this.hasProfile()) return { groups: [], pictures: new Map(), unread: [], offTopic: 0, pictureless: 0, problem: 'אין עדיין פרופיל דפדפן — צריך קודם להתחבר לפייסבוק.', truncated: false };
     const page = await this.newPage(headless, 'גילוי קבוצות');
     try {

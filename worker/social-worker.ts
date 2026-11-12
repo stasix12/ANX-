@@ -2380,8 +2380,12 @@ async function runCommands(state: WorkerState, headless: boolean, browser: Brows
            * this business has ever seen WITHOUT a stored picture. searchGroups
            * intersects it with what it actually found.
            */
-          const have = await groupsWithPictures();
-          const found = await session.discoverGroups(headless, phrase, { havePictures: have });
+          const stored = await storedDiscovery();
+          const found = await session.discoverGroups(headless, phrase, {
+            havePictures: stored.pictures,
+            /* What it has no reason to stop on. See storedDiscovery. */
+            haveFacts: stored.facts,
+          });
           if (found.problem) {
             ok = false;
             result = found.problem;
@@ -2436,12 +2440,27 @@ async function runCommands(state: WorkerState, headless: boolean, browser: Brows
              * instead of the symptom.
              */
             const blind = found.pictureless ? ` ${found.pictureless} כרטיסים בלי כתובת תמונה.` : '';
-            /* Counted rather than hidden: a search that drops most of what it
-               found owes the person the number, or "why so few" has no answer. */
-            const skipped = found.offTopic ? ` (${found.offTopic} תוצאות שלא הכילו את המילה סוננו)` : '';
+            /*
+             * HOW THE RESULTS DIVIDE — NOT WHAT WAS TAKEN AWAY.
+             *
+             * This sentence used to read "(37 תוצאות שלא הכילו את המילה
+             * סוננו)", and it was true: the search filtered them out. Since
+             * "להראות הכל, לסמן מה מדויק" nothing is filtered, so the same
+             * sentence would now be a lie about his own screen — it would
+             * promise 37 missing groups that are in fact sitting in the list
+             * he is looking at.
+             *
+             * So it reports the split instead. `offTopic` counts the rows
+             * that are IN the list and sorted below the exact ones, and the
+             * remainder is the exact count, which is the number he actually
+             * wants when he typed a city name.
+             */
+            const split = found.offTopic
+              ? ` מתוכן ${found.groups.length - found.offTopic} מכילות את המילה במדויק, ו-${found.offTopic} קרובות אליה ומסומנות בהמשך הרשימה.`
+              : '';
             result = found.groups.length
-              ? `נמצאו ${found.groups.length} קבוצות${wrote.fresh ? `, מתוכן ${wrote.fresh} חדשות` : ''}.${shots}${blind}${skipped}${found.truncated ? ' יש עוד — נסו מילה מדויקת יותר.' : ''}`
-              : `לא נמצאו קבוצות ששמן מכיל "${phrase}".${skipped}`;
+              ? `נמצאו ${found.groups.length} קבוצות${wrote.fresh ? `, ${wrote.fresh} חדשות` : ''}.${split}${shots}${blind}${found.truncated ? ' יש עוד — נסו מילה מדויקת יותר.' : ''}`
+              : `לא נמצאו קבוצות עבור "${phrase}".`;
           }
         }
       } else if (cmd.command === 'join') {
@@ -4058,14 +4077,39 @@ async function reconcileJoined(found: DiscoveredGroup[], truncated: boolean): Pr
  * because the column is not empty. Only something under Supabase storage counts.
  */
 async function groupsWithPictures(): Promise<string[]> {
+  return (await storedDiscovery()).pictures;
+}
+
+/**
+ * WHAT THE DATABASE ALREADY KNOWS, so the search does not stop to re-learn it.
+ *
+ * Two lists out of one read:
+ *
+ *   `pictures` — rows whose thumbnail is already in our own storage bucket, so
+ *     the browser fetches each one once in the life of the row rather than on
+ *     every re-search. (A signed scontent URL is not one: it expires, which is
+ *     why the filter looks for the public object path.)
+ *
+ *   `facts` — rows that already carry a member count AND a privacy word. The
+ *     second pass of the search stops on a card for 450ms to let Facebook fill
+ *     that line in, and since the phrase filter was removed it walks every
+ *     result instead of a third of them: 18.0s → 37.3s on the 56-result
+ *     fixture. A row that has both has nothing to learn, so it is skipped —
+ *     and mergeDiscovered keeps the stored values either way, so skipping
+ *     cannot erase anything.
+ *
+ * Unchecked on purpose, and it is a different kind of unchecked: a failed read
+ * returns nothing, which means the search does the full work it used to do.
+ * Slower, never destructive.
+ */
+async function storedDiscovery(): Promise<{ pictures: string[]; facts: string[] }> {
   const db = await workerDb();
-  /* Unchecked here on purpose, and it is a different kind of unchecked: a
-     failed read makes this return nothing, which means the search fetches
-     thumbnails it already had. Wasteful, never destructive. */
-  const { data } = await db.from('social_discovery_groups').select('external_id, image_url');
-  return ((data ?? []) as { external_id: string; image_url: string | null }[])
-    .filter((r) => /\/storage\/v1\/object\/public\//.test(r.image_url ?? ''))
-    .map((r) => r.external_id);
+  const { data } = await db.from('social_discovery_groups').select('external_id, image_url, members, privacy');
+  const rows = (data ?? []) as { external_id: string; image_url: string | null; members: number | null; privacy: string | null }[];
+  return {
+    pictures: rows.filter((r) => /\/storage\/v1\/object\/public\//.test(r.image_url ?? '')).map((r) => r.external_id),
+    facts: rows.filter((r) => r.members !== null && !!r.privacy && r.privacy !== 'unknown').map((r) => r.external_id),
+  };
 }
 
 /**

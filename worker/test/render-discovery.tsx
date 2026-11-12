@@ -51,19 +51,32 @@ const row = (over: Partial<DiscoveredGroupRow>): DiscoveredGroupRow => ({
   ...over,
 });
 
-const cases: [string, DiscoveredGroupRow, boolean, boolean][] = [
-  ['Hebrew, not a member', row({ external_id: '1', name: 'באר שבע ביחד' }), false, false],
-  ['Cyrillic in an RTL row', row({ external_id: '2', name: 'Наша Беэр-Шева 24', members: 12_000, privacy: 'private', membership: 'member' }), false, false],
-  ['mixed Hebrew and Cyrillic', row({ external_id: '3', name: 'Беэр-Шева — באר שבע והסביבה', members: 8_400, membership: 'requested' }), false, false],
-  ['Latin', row({ external_id: '4', name: 'Beer Sheva Community Board', members: 1_234_567 }), false, false],
+/*
+ * AND ONE MORE COLUMN: `exact`.
+ *
+ * "להראות הכל, לסמן מה מדויק" — the search stopped deleting the results whose
+ * name does not carry the phrase, and marks the ones that do instead. That
+ * mark is another chip on a row that already truncates, in an RTL page, beside
+ * names in three scripts — the exact shape that has pushed controls off a
+ * 360px screen once in this feature. So the worst row here carries it: the
+ * longest Hebrew name with every other badge already on it.
+ *
+ *   [label, row, already, picked, exact]
+ */
+const cases: [string, DiscoveredGroupRow, boolean, boolean, boolean][] = [
+  ['Hebrew, not a member', row({ external_id: '1', name: 'באר שבע ביחד' }), false, false, true],
+  ['Cyrillic in an RTL row', row({ external_id: '2', name: 'Наша Беэр-Шева 24', members: 12_000, privacy: 'private', membership: 'member' }), false, false, false],
+  ['mixed Hebrew and Cyrillic', row({ external_id: '3', name: 'Беэр-Шева — באר שבע והסביבה', members: 8_400, membership: 'requested' }), false, false, true],
+  ['Latin', row({ external_id: '4', name: 'Beer Sheva Community Board', members: 1_234_567 }), false, false, false],
   [
     'a very long Hebrew name with every badge',
     row({ external_id: '5', name: 'קבוצת תושבי שכונת נווה זאב ורמות באר שבע — קניה, מכירה, המלצות ועסקים מקומיים', members: 98_700, privacy: 'private', membership: 'member' }),
     true,
     true,
+    true,
   ],
-  ['nothing known about it', row({ external_id: '6', name: 'דרושים דרום', members: null, privacy: 'unknown', membership: 'unknown' }), false, false],
-  ['already in the publishing list', row({ external_id: '7', name: 'עסקים בבאר שבע', membership: 'member' }), true, false],
+  ['nothing known about it', row({ external_id: '6', name: 'דרושים דרום', members: null, privacy: 'unknown', membership: 'unknown' }), false, false, false],
+  ['already in the publishing list', row({ external_id: '7', name: 'עסקים בבאר שבע', membership: 'member' }), true, false, true],
   /*
    * A ROW WITH NO PICTURE OF ITS OWN, BESIDE ONE THE PUBLISHING LIST HAS.
    *
@@ -72,12 +85,12 @@ const cases: [string, DiscoveredGroupRow, boolean, boolean][] = [
    * was meant to replace — which is the shape of the two button skins that
    * were written and never painted. So it is rendered and looked at.
    */
-  ['no picture of its own — the publishing list has one', row({ external_id: '8', name: 'קבוצה עם תמונה מושאלת', membership: 'member' }), true, false],
+  ['no picture of its own — the publishing list has one', row({ external_id: '8', name: 'קבוצה עם תמונה מושאלת', membership: 'member' }), true, false, false],
 ];
 
 const body = cases
   .map(
-    ([label, r, already, picked]) => `
+    ([label, r, already, picked, exact]) => `
   <p style="color:#9aa;font:12px sans-serif;margin:14px 0 4px">${label}</p>
   <div class="row-probe">${renderToStaticMarkup(
     GroupRow({
@@ -85,6 +98,7 @@ const body = cases
       picked,
       already,
       busy: false,
+      exact,
       /* Only the borrowed-picture fixture gets one, so the test can prove the
          letter is replaced for it and kept for every other row. */
       fallbackImage: r.external_id === '8' ? BORROWED : null,

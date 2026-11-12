@@ -31,10 +31,13 @@ import {
   waitForWorkerCommand,
 } from '@/lib/social/client';
 import {
+  FILTER_EMPTY,
   FILTER_LABEL,
   JOINED_QUERY,
   SORT_LABEL,
+  countExact,
   matchesFilter,
+  nameMatches,
   newSince,
   normalizeQuery,
   queryProblem,
@@ -80,7 +83,10 @@ import { CloseIcon, EyeIcon, SearchIcon, UsersIcon } from '@/components/icons';
  */
 
 /** How the rows are asked for. Membership first, then the two privacies. */
-const FILTERS: DiscoveryFilter[] = ['all', 'none', 'member', 'requested', 'public', 'private'];
+/* 'exact' sits second on purpose: it is the chip that gives him back the
+   narrow list the search used to produce on its own, so it belongs beside
+   "הכל" and not at the end behind "פרטיות". */
+const FILTERS: DiscoveryFilter[] = ['all', 'exact', 'none', 'member', 'requested', 'public', 'private'];
 const SORTS: DiscoverySort[] = ['relevance', 'members', 'name'];
 
 /* The run's own ceiling, mirroring worker/facebook/join.ts. Fifteen groups at
@@ -265,13 +271,28 @@ export default function DiscoverPage() {
     [load, searching, toast, workerId, workerOnline],
   );
 
+  /*
+   * THE PHRASE THE EXACT MARK IS MEASURED AGAINST.
+   *
+   * Empty for the "my own groups" scan, which is filed under the reserved
+   * '@joined' string and is not a phrase anybody typed. Handed to nameMatches
+   * as-is it would call every one of his own groups a near miss and mark none
+   * of them; empty, it marks all of them, and because the mark and the total
+   * then agree the chip and the sentence both stay off the screen.
+   */
+  const phrase = active === JOINED_QUERY ? '' : active;
+
   const shown = useMemo(() => {
     if (!rows) return [];
     const listed = rows.filter((r) => !r.hidden).map((r) => ({ ...r, privacy: r.privacy, membership: r.membership }));
-    return sortGroups(listed.filter((r) => matchesFilter(r, filter)), sort);
-  }, [rows, filter, sort]);
+    return sortGroups(listed.filter((r) => matchesFilter(r, filter, phrase)), sort, phrase);
+  }, [rows, filter, sort, phrase]);
 
   const totals = useMemo(() => summarize((rows ?? []).filter((r) => !r.hidden)), [rows]);
+  /* Over every row of this search, not over `shown`: the sentence under the
+     heading explains the whole result, and it must not change every time he
+     taps a membership chip. */
+  const exactTotal = useMemo(() => countExact((rows ?? []).filter((r) => !r.hidden), phrase), [rows, phrase]);
   const fresh = useMemo(
     () => newSince((rows ?? []).filter((r) => !r.hidden), activeSearch?.previous_run_at ?? null),
     [rows, activeSearch],
@@ -726,6 +747,7 @@ export default function DiscoverPage() {
             query={active}
             fresh={fresh}
             totals={totals}
+            exact={exactTotal}
             watching={activeSearch?.watching}
             onToggleWatch={activeSearch ? () => toggleWatch(activeSearch) : undefined}
             joinedNotListed={joinedNotListed.length}
@@ -763,6 +785,7 @@ export default function DiscoverPage() {
                 picked={picked.has(row.id)}
                 already={inSystem.has(row.external_id) || !!row.target_id}
                 busy={busyId === row.id}
+                exact={!!phrase && nameMatches(row.name, phrase)}
                 fallbackImage={targetPics.get(row.external_id) ?? null}
                 onToggle={() => toggle(row.id)}
                 onAdopt={() => adopt(row)}
@@ -792,7 +815,7 @@ export default function DiscoverPage() {
           <EmptyState
             icon={<UsersIcon aria-hidden className="h-6 w-6" />}
             title="אין קבוצות בסינון הזה"
-            description={`נמצאו ${totals.total} קבוצות, אבל אף אחת מהן לא ${FILTER_LABEL[filter]}. בחרו "הכל" כדי לראות את כולן.`}
+            description={`נמצאו ${totals.total} קבוצות, אבל ${FILTER_EMPTY[filter]}. בחרו "הכל" כדי לראות את כולן.`}
           />
         )}
 

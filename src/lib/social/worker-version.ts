@@ -802,7 +802,42 @@
  *
  * התזמון, סדר התור, מנגנון הפרסום וההגדרות הקיימות לא נגעו.
  */
-export const WORKER_VERSION = '4.63.0';
+/*
+ * 4.63.0 → 4.64.0. DOES THIS HAVE TO REACH THE PC? YES — IT IS ENTIRELY ON IT.
+ *
+ *   "המנגנון חיפוש קבוצות עובד לאט ולא מוצא את כל הקבוצות שיש"
+ *
+ * Group discovery does not run on the server at all. The signed-in browser on
+ * his Windows machine opens Facebook's own search, scrolls it and reads the
+ * cards; the hosted app only stores what comes back. Every one of the four
+ * fixes is in that code:
+ *
+ *   worker/facebook/discover.ts  — the phrase filter loses its veto and
+ *     becomes a mark plus a sort key (it was deleting 37 of 56 results on his
+ *     own account); PASSES 6 → 12; the scroll stops on two barren passes AT
+ *     THE BOTTOM instead of on the first pass that adds nothing, which was
+ *     ending the read on Facebook's own render delay; a 25-second ceiling on
+ *     the picture pass.
+ *   worker/facebook/mygroups.ts  — the section heading above a card is now
+ *     the NEAREST one, not every heading at the level joined together. On the
+ *     layout Facebook ships once there are suggestions, that join matched
+ *     "קבוצות מומלצות" and dropped his own groups with it; worker/test/
+ *     discovery-complete.test.ts reproduces it in a browser and the list came
+ *     back EMPTY.
+ *   worker/social-worker.ts      — the search is now told which rows the
+ *     database can already answer for (a stored member count, privacy word
+ *     and picture), so the second pass stops only on cards it could learn
+ *     something from. Showing everything tripled that pass's work: measured
+ *     on the 56-result fixture, 18.0s became 37.3s, and a re-run of a saved
+ *     phrase — the common case — now costs 17.1s instead of 37.4s. And the
+ *     sentence he reads no longer claims results were filtered out, because
+ *     they are not.
+ *
+ * Left on 4.63.0 the dashboard would show the new "מדויק" chip and the new
+ * filter over a result set the PC still truncated and still filtered: the UI
+ * of the fix without the fix.
+ */
+export const WORKER_VERSION = '4.64.0';
 
 /**
  * A FINGERPRINT OF EVERYTHING THE INSTALLER CARRIES.
@@ -1522,4 +1557,23 @@ export const WORKER_VERSION = '4.63.0';
  * is asked to update anything for a window that only draws what is already in
  * social_activity_log.
  */
-export const WORKER_FINGERPRINT = 'a164284e92d3a3df';
+/*
+ * ─── 12.11.2026 — 4.64.0: THE FINGERPRINT AND THE VERSION MOVED TOGETHER ───
+ *
+ * As they should: the whole of this change is worker/facebook/discover.ts and
+ * worker/facebook/mygroups.ts, which exist only to drive the browser on his
+ * PC. There is no question to answer here, and it was measured anyway, against
+ * a bundle built from this exact tree (node scripts/build-app.mjs, then
+ * grep -oF … | wc -l over dist/app/worker.cjs):
+ *
+ *   barren                   8      b.exact                 1
+ *   atBottom                 5      notMine.test(head       1
+ *   PASSES = 12              1      known.has               1
+ *   PICTURE_FETCH_BUDGET_MS  2      haveFacts               2
+ *   readMyGroups             4   (the control)
+ *
+ * Every one of the five fixes is compiled into the file that runs on his
+ * machine. countExact, the count under the heading, answers 0 — it is drawn by
+ * the dashboard and tree-shaken out of the worker, which is correct.
+ */
+export const WORKER_FINGERPRINT = '55b32347616bfbd9';

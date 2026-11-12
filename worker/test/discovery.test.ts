@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import {
+  countExact,
   dedupe,
   groupIdFromHref,
   interpretCard,
@@ -593,6 +594,43 @@ const eq = (a: unknown, b: unknown, msg: string) => {
   is(sortGroups(rows, 'name').map((r) => r.name).join('|').length > 0, 'Hebrew, Russian and English sort in one list without throwing');
   eq(sortGroups(rows, 'relevance') !== rows, true, 'and none of them mutate the array they were given');
 
+  /*
+   * ─── THE "מדויק" CHIP AND THE ORDER IT COMES WITH ─────────────────────
+   *
+   * "להראות הכל, לסמן מה מדויק." The search no longer deletes the results
+   * whose name does not carry the phrase — 37 of 56 on his own account — so
+   * everything he used to lose is now in the list, and these are the whole
+   * of what makes a list of 56 readable instead of a list of 19: a chip that
+   * narrows it on demand, a mark, and the exact ones first.
+   *
+   * 'a' and 'c' carry "באר שבע"; 'b' is Наша Беэр-Шева, which is the SAME
+   * CITY written in Russian and is exactly the kind of row the filter used
+   * to throw away.
+   */
+  eq(rows.filter((r) => matchesFilter(r, 'exact', 'באר שבע')).map((r) => r.external_id), ['a', 'c'], 'מכילות את המילה — the chip gives him the old narrow list on demand');
+  eq(
+    rows.filter((r) => matchesFilter(r, 'exact', '')).length,
+    3,
+    'and with no phrase at all — the "my own groups" scan — the chip is a no-op rather than an empty screen',
+  );
+  eq(
+    sortGroups([rows[1], rows[0], rows[2]], 'relevance', 'באר שבע').map((r) => r.external_id),
+    ['a', 'c', 'b'],
+    'THE EXACT ONES COME FIRST, and the rest keep the order Facebook gave them',
+  );
+  eq(
+    sortGroups([rows[1], rows[0], rows[2]], 'relevance', '').map((r) => r.external_id),
+    ['b', 'a', 'c'],
+    'and with no phrase nothing moves — every row scores the same, so the chosen order is left exactly as it was',
+  );
+  eq(
+    sortGroups(rows, 'name', 'באר שבע').map((r) => r.external_id).slice(0, 2).sort(),
+    ['a', 'c'],
+    'including in שם א־ב, where it splits the alphabet into two runs on purpose',
+  );
+  eq(countExact(rows, 'באר שבע'), 2, 'and the sentence under the heading counts them');
+  eq(countExact(rows, ''), 3, 'with no phrase it equals the total, so the sentence that explains the split stays off the screen');
+
   const s = summarize(rows);
   eq([s.total, s.member, s.requested, s.fresh], [3, 1, 1, 1], 'the summary card counts each row exactly once');
   eq(summarize([]).total, 0, 'and an empty search is zero, not a blank');
@@ -646,8 +684,68 @@ const eq = (a: unknown, b: unknown, msg: string) => {
   );
   is(!/seen\.add\(key\)/.test(worker), 'and no anchor is skipped before it has been considered for the name');
   is(/search\/groups/.test(worker), "and it reads Facebook's own group search, signed in as the account that is already signed in");
-  is(/onTopic = all\.filter\(\(g\) => nameMatches\(g\.name, query\)\)/.test(worker), 'and keeps only the results whose NAME carries the phrase');
-  is(/offTopic: all\.length - onTopic\.length/.test(worker), 'counting what it dropped rather than hiding it — "why so few" has to have an answer');
+  /*
+   * ─── 12.11.2026 · THE PHRASE TEST LOST ITS VETO ─────────────────────────
+   *
+   * These two pinned `all.filter(nameMatches)` — keep only the results whose
+   * NAME carries the phrase — and the second one pinned the count of what
+   * that dropped, because "why so few" had to have an answer.
+   *
+   * It had an answer and the answer was bad. On the owner's own account the
+   * filter threw away 37 of 56 results: "נמצאו 19 קבוצות. (37 תוצאות שלא
+   * הכילו את המילה סוננו)". What it threw away was ב״ש against באר שבע,
+   * ק. גת against קריית גת, and every group whose name is in English.
+   *
+   * "להראות הכל, לסמן מה מדויק" — so nameMatches still decides which names
+   * really carry the phrase, and that decision is now a LABEL and a SORT KEY
+   * rather than a gate. The property these assertions protect is the one
+   * that matters: the phrase test is still applied, still from the one
+   * shared function, and the owner is still told how the results divide.
+   */
+  is(
+    /nameMatches\(g\.name, query\)/.test(worker),
+    'the phrase test is still applied, from the one shared function — the search does not invent its own idea of a match',
+  );
+  is(
+    /exact: nameMatches\(g\.name, query\)/.test(worker),
+    'but as a LABEL on every result, not a gate in front of it — nothing Facebook returned is hidden from him',
+  );
+  is(
+    /sort\(\(a, b\) => Number\(b\.exact\) - Number\(a\.exact\)\)/.test(worker),
+    'and the exact ones are sorted first, so a broad phrase still reads top-down',
+  );
+  is(
+    /offTopic: groups\.filter\(\(g\) => !g\.exact\)\.length/.test(worker),
+    'and the count is still reported — over the rows actually returned, so the number matches the list on his screen',
+  );
+
+  /*
+   * ─── AND THE SENTENCE HE READS MUST NOT CLAIM A FILTER THAT IS GONE ────
+   *
+   * "נמצאו 19 קבוצות. (37 תוצאות שלא הכילו את המילה סוננו)" was true while
+   * the filter existed. Left in place after the filter went, the exact same
+   * sentence becomes a lie about his own screen: it names 37 groups as
+   * missing while they sit in the list in front of him. A wording this test
+   * does not hold is a wording that outlives the behaviour it describes.
+   */
+  const main = readFileSync(new URL('../social-worker.ts', import.meta.url), 'utf8');
+  /* Comments stripped first: the comment above the new sentence quotes the
+     old one on purpose, so that the next reader knows why the wording moved.
+     What must not survive is the wording the OWNER sees. */
+  const mainCode = main.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  is(!/תוצאות שלא הכילו את המילה סוננו/.test(mainCode), 'the report no longer says results were filtered out — nothing is filtered out any more');
+  is(!/סוננו/.test(mainCode), 'and it does not tell him anything was filtered, in any wording');
+  /* `;\s` and not `;\n`: the installer is built on a Windows runner, where
+     the checkout has CRLF line endings and a bare \n matches nothing — the
+     whole of this block would then assert on an empty string. package.test.ts
+     guards the rule, and it caught this one. */
+  const sentence = main.match(/const split = found\.offTopic[\s\S]{0,400}?;\s/);
+  is(sentence, 'the report builds the split from offTopic');
+  is(
+    /found\.groups\.length - found\.offTopic/.test(sentence?.[0] ?? ''),
+    'and names the exact count as the remainder of what is on screen, so the two numbers add up to the headline',
+  );
+  is(/מסומנות/.test(sentence?.[0] ?? ''), 'and tells him the rest are marked rather than missing');
 
   const sql = readFileSync(new URL('../../supabase/social-latest.sql', import.meta.url), 'utf8');
   const check = sql.match(/check \(membership in \(([^)]*)\)\)/);

@@ -44,6 +44,24 @@ export interface DiscoveredGroup {
   members: number | null;
   privacy: Privacy;
   membership: Membership;
+  /**
+   * DOES THE NAME REALLY CARRY THE PHRASE — a LABEL now, not a verdict.
+   *
+   * It used to be a filter: anything false was dropped before the owner ever
+   * saw it, and his own runs show what that cost — "נמצאו 19 קבוצות.
+   * (37 תוצאות שלא הכילו את המילה סוננו)". Two thirds of a page of real
+   * groups thrown away because the name said ב״ש and the search said
+   * באר שבע.
+   *
+   * "להראות הכל, לסמן מה מדויק" — 12.11. So everything Facebook returned
+   * comes back, the exact ones are marked and sorted first, and the decision
+   * about which to publish to stays where it was always safest: with him.
+   *
+   * OPTIONAL, because it is a property of a result RELATIVE TO A QUERY and
+   * not of the group: mygroups.ts reads the account's own memberships and
+   * has no phrase to be exact about. Absent means "nobody asked".
+   */
+  exact?: boolean;
 }
 
 /** One search-result card, exactly as the page gave it up. */
@@ -675,16 +693,42 @@ export const PRIVACY_LABEL: Record<Privacy, string> = {
   unknown: '',
 };
 
-export type DiscoveryFilter = 'all' | 'none' | 'member' | 'requested' | 'public' | 'private';
+export type DiscoveryFilter = 'all' | 'exact' | 'none' | 'member' | 'requested' | 'public' | 'private';
 export type DiscoverySort = 'members' | 'relevance' | 'name';
 
 export const FILTER_LABEL: Record<DiscoveryFilter, string> = {
   all: 'הכל',
+  /* The chip that used to be the behaviour. Until 12.11 the search itself
+     threw away every result whose name did not carry the phrase — 37 of 56 on
+     his own account. Now nothing is thrown away, the exact ones are marked and
+     sorted first, and this chip is how he gets the old, narrow list back when
+     he wants it: a choice on the screen instead of a decision taken for him. */
+  exact: 'מכילות את המילה',
   none: 'לא הצטרפתי',
   member: 'כבר חבר',
   requested: 'בקשה ממתינה',
   public: 'ציבוריות',
   private: 'פרטיות',
+};
+
+/**
+ * The same six chips, as the END of a sentence instead of its name.
+ *
+ * The empty state built that sentence by concatenation — `אף אחת מהן לא
+ * ${FILTER_LABEL[filter]}` — and the labels are not written to be read that
+ * way. It produced "אף אחת מהן לא לא הצטרפתי", "אף אחת מהן לא כבר חבר" and
+ * "אף אחת מהן לא ציבוריות", one per chip, all five wrong and one of them
+ * saying the opposite of what it meant. A chip's name and a chip's sentence
+ * are two different strings, so they are two different maps.
+ */
+export const FILTER_EMPTY: Record<DiscoveryFilter, string> = {
+  all: 'אין קבוצות להציג',
+  exact: 'באף אחת מהן השם לא מכיל בדיוק את מה שחיפשתם',
+  none: 'אתם כבר חברים בכולן, או שיש בקשה ממתינה',
+  member: 'אינכם חברים באף אחת מהן',
+  requested: 'אין בקשת הצטרפות ממתינה באף אחת מהן',
+  public: 'אף אחת מהן אינה קבוצה ציבורית',
+  private: 'אף אחת מהן אינה קבוצה פרטית',
 };
 
 export const SORT_LABEL: Record<DiscoverySort, string> = {
@@ -704,10 +748,18 @@ export interface ListedGroup {
   first_seen_at?: string;
 }
 
-export function matchesFilter(g: ListedGroup, filter: DiscoveryFilter): boolean {
+/**
+ * @param query The phrase this list was found for, for the 'exact' chip only.
+ *   Empty for a list that has no phrase (the "my own groups" scan), where
+ *   nameMatches answers true for everything and the chip is a no-op rather
+ *   than an empty screen.
+ */
+export function matchesFilter(g: ListedGroup, filter: DiscoveryFilter, query = ''): boolean {
   switch (filter) {
     case 'all':
       return true;
+    case 'exact':
+      return nameMatches(g.name, query);
     case 'none':
     case 'member':
     case 'requested':
@@ -724,17 +776,53 @@ export function matchesFilter(g: ListedGroup, filter: DiscoveryFilter): boolean 
  * the array's order rather than as a column: a group found by two searches has
  * two different relevances and one row.
  */
-export function sortGroups<T extends ListedGroup>(rows: T[], sort: DiscoverySort): T[] {
+export function sortGroups<T extends ListedGroup>(rows: T[], sort: DiscoverySort, query = ''): T[] {
   const out = [...rows];
-  if (sort === 'relevance') return out;
+  /*
+   * THE NAMES THAT REALLY CARRY THE PHRASE COME FIRST — IN EVERY ORDER.
+   *
+   * "להראות הכל, לסמן מה מדויק." Showing everything is only half of it: a
+   * search for באר שבע that returns fifty-six rows, nineteen of which are
+   * actually in באר שבע, is not readable if those nineteen are scattered
+   * through it. So this is a primary key in front of whichever order he
+   * picked, and his order decides within each block.
+   *
+   * Including "שם א־ב", where it splits the alphabet into two runs. That is
+   * deliberate and it is the lesser cost: an alphabetical list whose exact
+   * matches are interleaved with the near ones answers neither question.
+   *
+   * Nothing moves when there is no phrase (the "my own groups" scan), because
+   * nameMatches calls an empty needle a match for every name — so every row
+   * scores the same and the sort below is left exactly as it was.
+   */
+  const rank = (g: T) => (nameMatches(g.name, query) ? 0 : 1);
+  const byPhrase = (a: T, b: T) => rank(a) - rank(b);
+  if (sort === 'relevance') {
+    /* `relevance` IS Facebook's own order, carried as the array's order. A
+       stable sort keeps it inside each block, which is why this is a sort and
+       not a partition. */
+    return out.sort(byPhrase);
+  }
   if (sort === 'members') {
     /* A group whose count could not be read sinks rather than sorting as zero
        beside groups that really are empty. */
-    return out.sort((a, b) => (b.members ?? -1) - (a.members ?? -1));
+    return out.sort((a, b) => byPhrase(a, b) || (b.members ?? -1) - (a.members ?? -1));
   }
   /* Hebrew, Russian and English in one list: Intl knows the order, and
      `undefined` means the browser's own locale rather than a hard-coded one. */
-  return out.sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
+  return out.sort((a, b) => byPhrase(a, b) || a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
+}
+
+/**
+ * How many of these really carry the phrase in their name.
+ *
+ * The number under the heading, and the reason the "מדויק" chip is legible:
+ * one sentence says how the results divide and what the chip means, once,
+ * instead of a mark the reader has to work out from context.
+ */
+export function countExact(rows: ListedGroup[], query: string): number {
+  if (!normalizeQuery(query)) return rows.length;
+  return rows.filter((r) => nameMatches(r.name, query)).length;
 }
 
 /** How many of these a given search had never turned up before. */

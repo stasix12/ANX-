@@ -94,6 +94,7 @@ export function GroupRow({
   picked,
   already,
   busy,
+  exact = false,
   fallbackImage = null,
   onToggle,
   onAdopt,
@@ -103,6 +104,20 @@ export function GroupRow({
   picked: boolean;
   already: boolean;
   busy: boolean;
+  /**
+   * True when this group's NAME really carries the phrase that was searched.
+   *
+   * "להראות הכל, לסמן מה מדויק" — 12.11. Until then the search deleted every
+   * row for which this is false, 37 of 56 on his own account, and among the
+   * 37 were ב״ש for באר שבע and every group named in English. The test did
+   * not get worse; it lost its veto. It decides this mark and the order, and
+   * he decides what to publish to.
+   *
+   * Computed by the screen from the phrase it is showing, not stored on the
+   * row: the same group is an exact match for באר שבע and a near one for
+   * אשקלון, so it is a property of the search and not of the group.
+   */
+  exact?: boolean;
   /**
    * The picture the PUBLISHING LIST already holds for this same group.
    *
@@ -185,6 +200,17 @@ export function GroupRow({
           <div className="mt-1 flex flex-wrap items-center gap-1">
             {row.membership !== 'unknown' && (
               <Badge tone={MEMBERSHIP_TONE[row.membership]}>{MEMBERSHIP_SHORT[row.membership]}</Badge>
+            )}
+            {/* The mark, not a filter. Its one line of explanation is under
+                the heading in ResultsCard, said once for the whole list
+                rather than guessed at from a chip. */}
+            {exact && (
+              <span
+                title="שם הקבוצה מכיל בדיוק את מה שחיפשתם"
+                className="inline-flex items-center rounded-full bg-brand-400/10 px-1.5 py-0.5 text-[11px] font-bold text-brand-300"
+              >
+                מדויק
+              </span>
             )}
             {already && (
               <span className="inline-flex items-center gap-1 rounded-full bg-success-400/10 px-1.5 py-0.5 text-[11px] font-bold text-success-400">
@@ -653,6 +679,7 @@ export function ResultsCard({
   query,
   fresh,
   totals,
+  exact,
   watching,
   onToggleWatch,
   joinedNotListed,
@@ -663,6 +690,13 @@ export function ResultsCard({
   /** Groups new since the PREVIOUS run of this search — not totals.fresh. */
   fresh: number;
   totals: { total: number; fresh: number; requested: number; member: number; unknown: number };
+  /**
+   * How many of `totals.total` carry the phrase in their name.
+   *
+   * Equal to the total when there is nothing to say — no phrase, or every
+   * result exact — and then the sentence below is not printed at all.
+   */
+  exact?: number;
   watching?: boolean;
   onToggleWatch?: () => void;
   joinedNotListed: number;
@@ -730,6 +764,26 @@ export function ResultsCard({
           <PlusIcon aria-hidden className="h-3.5 w-3.5" />
           הוסף לרשימה את {joinedNotListed} הקבוצות שאתה כבר חבר בהן
         </Button>
+      )}
+      {/*
+        HOW THE LIST DIVIDES — AND WHAT THE "מדויק" CHIP MEANS.
+
+        The search no longer hides the near matches, so the heading's number
+        got bigger and he is owed the reason in the same breath. Said once
+        here instead of on fifty rows: these many carry the phrase and are
+        marked and sorted first, the rest are what Facebook also offered.
+
+        Printed only when the two numbers differ. A search where every result
+        is exact has nothing to explain, and a line that says so would be
+        noise on the screen he reads most.
+      */}
+      {typeof exact === 'number' && exact < totals.total && (
+        <p className="mt-1.5 text-[11px] leading-4 text-mist-500">
+          <span className="font-bold text-mist-300">
+            <span className="tabular-nums">{exact}</span> מהן מכילות את מה שחיפשתם בשם ומסומנות “מדויק”
+          </span>
+          {' '}— והשאר, <span className="tabular-nums">{totals.total - exact}</span>, הן מה שפייסבוק הציע מסביב. סננו ל“מכילות את המילה” כדי לראות רק את הראשונות.
+        </p>
       )}
       {totals.unknown > 0 && (
         <p className="mt-1.5 text-[11px] leading-4 text-mist-500">

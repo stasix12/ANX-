@@ -70,12 +70,31 @@ const MAX_GROUPS = 120;
  */
 const PICTURE_LIMIT = MAX_GROUPS;
 
+/**
+ * THE WHOLE PICTURE DOWNLOAD GETS 25 SECONDS.
+ *
+ * Measured against what it is worth: a group with no thumbnail draws a letter
+ * and publishes exactly the same. Before this there was no limit at all — see
+ * the note in fetchPictures. Twenty-five seconds fetches most of a page of
+ * cache-warm CDN thumbnails and cannot turn a search into a minute of
+ * waiting on its own.
+ */
+const PICTURE_FETCH_BUDGET_MS = 25_000;
+
 /** How many unreadable cards to keep for the log. Three is enough to see a
     pattern and few enough that the line stays readable. */
 const UNREAD_SAMPLES = 3;
 
-/** How far to scroll. Each pass is roughly a screenful of new results. */
-const PASSES = 6;
+/**
+ * How far to scroll. Each pass is roughly a screenful of new results.
+ *
+ * 6 → 12 on 12.11, which is the number mygroups.ts:32 has always used for the
+ * same shape of walk. Six passes is ~12 screenfuls, and the owner's own runs
+ * were coming back with 18-20 groups off result lists Facebook had many more
+ * of. There is no cost to a pass that finds nothing: the barren check below
+ * ends the loop the moment the list really stops growing.
+ */
+const PASSES = 12;
 /** And the ceiling, because a phrase like "קבוצה" matches most of Facebook. */
 
 /** One group's picture, as bytes, for the caller to store somewhere durable. */
@@ -139,7 +158,37 @@ export interface SearchOutcome {
  * that had to tell them apart from the markup would be guessing at exactly the
  * moment it must not.
  */
-export async function searchGroups(page: Page, query: string, opts: { havePictures?: string[] } = {}): Promise<SearchOutcome> {
+export async function searchGroups(
+  page: Page,
+  query: string,
+  opts: {
+    havePictures?: string[];
+    /**
+     * Groups whose stored row ALREADY HAS a member count and a privacy word.
+     *
+     * ─── "עובד לאט" — AND SHOWING EVERYTHING MADE IT WORSE ──────────────
+     *
+     * The second pass stops on each card for 450ms to let Facebook fill in
+     * its "25 אלפי חברים · ציבורית" line, and that cost is per card. While
+     * the phrase filter was in place the pass walked the SURVIVORS — 19 of
+     * 56 on his own account. Showing everything tripled its work: measured
+     * on a 56-result fixture in worker/test/discovery-complete.test.ts, the
+     * same search went from 18.0s to 37.3s.
+     *
+     * So the pass is told what it has no reason to look at. A group already
+     * stored with a count, a privacy word and a picture has nothing this
+     * pass could learn, and 450ms of his wait is the price of asking. On a
+     * re-run of a saved search — which is the common case, and the whole
+     * point of the ⭐ button — that is nearly every row.
+     *
+     * Nothing is lost by skipping: mergeDiscovered resolves members with
+     * `found.members ?? stored.members` and privacy with "unknown falls back
+     * to stored", so a group that comes back without a count keeps the one
+     * in the database rather than overwriting it with null.
+     */
+    haveFacts?: string[];
+  } = {},
+): Promise<SearchOutcome> {
   const url = `https://www.facebook.com/search/groups/?q=${encodeURIComponent(query)}`;
   await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60_000 });
   /* Search results arrive after the shell does, so the wait is for a link to a
@@ -153,6 +202,11 @@ export async function searchGroups(page: Page, query: string, opts: { havePictur
   const unread = new Map<string, UnreadCard>();
   let lastCount = -1;
   let truncated = false;
+  /*
+   * TWO BARREN PASSES IN A ROW, COUNTED — not one. See the note at the break
+   * below: this counter is the whole of that fix.
+   */
+  let barren = 0;
 
   for (let pass = 0; pass < PASSES; pass += 1) {
     const cards = await readCards(page);
@@ -170,28 +224,91 @@ export async function searchGroups(page: Page, query: string, opts: { havePictur
       break;
     }
     /*
-     * STOP WHEN SCROLLING STOPS PRODUCING. Facebook's result list ends
-     * silently — it simply loads nothing more — and a fixed six passes on a
-     * phrase with eleven results is five needless scrolls on somebody's real
-     * account. One barren pass is not enough to be sure (a slow fetch looks
-     * identical), so it takes two in a row.
+     * ─── STOP WHEN SCROLLING STOPS PRODUCING — AND ONLY THEN ──────────────
+     *
+     * FIXED 12.11.2026, AND THE COMMENT HERE WAS ALREADY RIGHT. It said "One
+     * barren pass is not enough to be sure (a slow fetch looks identical), so
+     * it takes two in a row" — and the line under it read
+     *
+     *     if (unique === lastCount && pass > 0) break;
+     *
+     * which ends the scan on the FIRST pass that adds nothing. One slow
+     * Facebook fetch inside the 1,400ms wait below, and the search was over
+     * after two screenfuls. Measured on a fixture of fifty groups in a
+     * scroll-append feed: ten returned, forty lost, in a second and a half.
+     *
+     * The owner's own runs say the same: "נמצאו 19 קבוצות" off a page
+     * Facebook had given 56 results for.
+     *
+     * TWO THINGS MAKE IT SAFE NOW, and mygroups.ts:108 has had both all
+     * along — this file is being brought up to its sibling:
+     *   · `barren >= 2` really is two passes in a row, counted;
+     *   · AND the page must actually be at the bottom. `window.scrollBy` on a
+     *     layout whose results live in an inner scroll container moves
+     *     nothing at all, so every pass reads the same cards and a
+     *     count-only test would stop at the first screenful believing the
+     *     list had ended.
      */
-    if (unique === lastCount && pass > 0) break;
+    const atBottom = await page
+      .evaluate(() => window.innerHeight + window.scrollY >= document.body.scrollHeight - 200)
+      .catch(() => false);
+    barren = unique === lastCount ? barren + 1 : 0;
+    if (barren >= 2 && atBottom) break;
+    /*
+     * AND RUNNING OUT OF PASSES IS NOT THE SAME AS REACHING THE END. It used
+     * to leave `truncated` false, so a search cut off by the ceiling reported
+     * itself complete and the screen said nothing. Whatever stops this loop
+     * short of the bottom now says so.
+     */
+    if (pass === PASSES - 1 && !atBottom) truncated = true;
     lastCount = unique;
     await page.evaluate(() => window.scrollBy(0, window.innerHeight * 2));
     await page.waitForTimeout(1_400);
+    /*
+     * ─── AND NO "THE PAGE WOULD NOT SCROLL" GUARD, BECAUSE THERE IS NO SUCH
+     *     CASE ─────────────────────────────────────────────────────────────
+     *
+     * One was written here — two passes in a row that neither moved the page
+     * nor found anything new, stop — on the reasoning in the comment above
+     * the break: results inside their own scroll container, where
+     * `window.scrollBy` moves nothing, leave `atBottom` false for ever and
+     * every search pays the full ceiling of twelve passes at 1,400ms.
+     *
+     * MEASURED IN CHROMIUM, AND IT CANNOT HAPPEN. Either the window scrolls,
+     * in which case scrollY advances and the guard never counts — a 9000px
+     * body under `html{overflow:hidden}` still scrolls, 0 → 1600 → 3200 —
+     * or the document genuinely cannot scroll, in which case scrollHeight is
+     * one screenful and `scrollY + innerHeight >= scrollHeight - 200` is
+     * TRIVIALLY TRUE, so the break above already ends the loop on the second
+     * barren pass. Both arrangements come back in about four seconds.
+     *
+     * So the guard was removed rather than shipped: it was code on the path
+     * that publishes his posts which no test could make run.
+     */
   }
 
   /*
-   * ONLY THE ONES WHOSE NAME REALLY CARRIES THE PHRASE.
+   * ─── EVERYTHING COMES BACK, AND THE EXACT ONES ARE MARKED ──────────────
    *
-   * Facebook's group search is associative — "ערד" comes back with three
-   * different Dimona groups — and for a publishing list of one city that is
-   * ninety rows to read past. See nameMatches.
+   * "להראות הכל, לסמן מה מדויק" — 12.11.
+   *
+   * This used to be `all.filter(nameMatches)`, on the reasoning that
+   * Facebook's group search is associative and a publishing list of one city
+   * does not want ninety rows to read past. The reasoning is sound and the
+   * cost was not: measured on his own account, the filter threw away 37 of
+   * 56 results — "נמצאו 19 קבוצות. (37 תוצאות שלא הכילו את המילה סוננו)" —
+   * and what it threw away was things like ב״ש for באר שבע, ק. גת for
+   * קריית גת, and every name written in English.
+   *
+   * So nameMatches keeps its job and loses its veto: it still says which
+   * names really carry the phrase, those are marked and sorted first, and
+   * the rest follow instead of disappearing. Nothing is published to without
+   * him choosing it, so the safe default is to show him what exists.
    */
-  const all = dedupe(collected);
-  const onTopic = all.filter((g) => nameMatches(g.name, query));
-  const groups = onTopic.slice(0, MAX_GROUPS);
+  const all = dedupe(collected).map((g) => ({ ...g, exact: nameMatches(g.name, query) }));
+  /* Exact first, and otherwise the order Facebook gave — which is its own
+     relevance ranking and a better tiebreak than anything invented here. */
+  const groups = [...all].sort((a, b) => Number(b.exact) - Number(a.exact)).slice(0, MAX_GROUPS);
 
   /*
    * WHICH PICTURES TO FETCH — AND THE ANSWER USED TO EXCLUDE EVERY NEW GROUP.
@@ -257,14 +374,18 @@ export async function searchGroups(page: Page, query: string, opts: { havePictur
    * the card is brought into view for its picture and its own line is read
    * back while it is there.
    */
+  const known = new Set(opts.haveFacts ?? []);
   const wanted = new Set(
     groups
-      .filter(
-        (g) =>
+      .filter((g) => {
+        /* Stored with everything this pass could teach it. See haveFacts. */
+        if (known.has(g.externalId) && have.has(g.externalId)) return false;
+        return (
           (!have.has(g.externalId) && !/^https?:\/\//i.test(g.image)) ||
           g.members === null ||
-          g.privacy === 'unknown',
-      )
+          g.privacy === 'unknown'
+        );
+      })
       .map((g) => g.externalId),
   );
   await fillPictures(page, groups, wanted);
@@ -277,7 +398,18 @@ export async function searchGroups(page: Page, query: string, opts: { havePictur
     unread: [...unread.values()],
     problem: '',
     truncated,
-    offTopic: all.length - onTopic.length,
+    /*
+     * Still reported, because it is a useful number — but it now counts what
+     * is SORTED LOWER, not what was thrown away.
+     *
+     * Counted over `groups` and not over `all` on purpose: `groups` is what
+     * is actually returned, stored and drawn, and above MAX_GROUPS the slice
+     * takes the tail off the non-exact end. A number that does not match the
+     * screen is how "נמצאו 19 קבוצות" came to sit next to a sentence about
+     * 37 others, so the sentence counts the rows he can see. The ones the
+     * ceiling removed are what `truncated` is for.
+     */
+    offTopic: groups.filter((g) => !g.exact).length,
     pictureless: wanted.size,
   };
 }
@@ -513,9 +645,26 @@ export async function fetchPictures(page: Page, groups: DiscoveredGroup[]): Prom
   const todo = groups.filter((g) => /^https?:\/\//i.test(g.image));
   const lanes = 4;
   let next = 0;
+  /*
+   * ─── A DEADLINE, BECAUSE THERE WAS NONE ────────────────────────────────
+   *
+   * ADDED 12.11.2026. This function had no clock of any kind: four lanes,
+   * up to 120 items, fifteen seconds per request. A CDN answering slowly —
+   * or not at all — put the worst case at a hundred and twenty requests of
+   * fifteen seconds over four lanes, which is SEVEN AND A HALF MINUTES of a
+   * search the owner is watching a spinner for. fillPictures above it has
+   * had a budget since the day it was written; this did not.
+   *
+   * A thumbnail is the least important thing a search returns: a group with
+   * no picture draws a letter and is otherwise completely usable. So the
+   * budget is small, and running out of it is not an error — the lanes stop
+   * asking and whatever arrived is kept.
+   */
+  const deadline = Date.now() + PICTURE_FETCH_BUDGET_MS;
   await Promise.all(
     Array.from({ length: Math.min(lanes, todo.length) }, async () => {
       for (;;) {
+        if (Date.now() >= deadline) return;
         const i = next;
         next += 1;
         if (i >= todo.length) return;

@@ -199,8 +199,29 @@ async function readRows(page: Page): Promise<{ href: string; name: string; image
          */
         const heads = Array.from(scope.querySelectorAll('h1, h2, h3, [role="heading"]')).filter((h) => !box.contains(h));
         if (heads.length) {
-          const text = heads.map((h) => h.textContent || '').join(' ');
-          if (notMine.test(text)) suggested = true;
+          /*
+           * THE NEAREST HEADING ABOVE THE CARD — NOT ALL OF THEM JOINED.
+           *
+           * This joined every heading at the level and tested the result, so
+           * one ancestor holding both "הקבוצות שלך" and "קבוצות מומלצות"
+           * — which is exactly how Facebook lays the page out once there are
+           * suggestions — matched, and EVERY card under it was dropped as a
+           * suggestion, his own groups included. A whole section lost to a
+           * heading that was not the section's.
+           *
+           * The section a card is in is the last heading BEFORE it in
+           * document order. compareDocumentPosition(box) & 4 is
+           * DOCUMENT_POSITION_FOLLOWING: box comes after this heading, so the
+           * heading is above the card. The last such is the nearest. The
+           * fallback is the first heading at all, for the layout where the
+           * card precedes every heading at this level.
+           */
+          let head = null;
+          for (const h of heads) {
+            if (h.compareDocumentPosition(box) & 4) head = h;
+          }
+          if (!head) head = heads[0];
+          if (notMine.test(head.textContent || '')) suggested = true;
           break;
         }
         scope = scope.parentElement;

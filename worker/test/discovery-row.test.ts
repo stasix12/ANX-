@@ -234,6 +234,30 @@ async function main(): Promise<void> {
                * no override at all. A class-name assertion cannot see that. A
                * browser can.
                */
+              /*
+               * THE "מדויק" MARK — PAINTED, OR NOT THERE AT ALL.
+               *
+               * "להראות הכל, לסמן מה מדויק." The search stopped deleting the
+               * results whose name does not carry the phrase; the whole of
+               * what he gets instead is this mark and the order. A prop that
+               * is threaded and never read renders nothing and breaks no
+               * test — the same shape as the two button skins above, which
+               * the diff appeared to deliver and which never reached the
+               * screen. So it is found by the words a person reads, measured,
+               * and checked against which rows were told they are exact.
+               */
+              exactChip: (() => {
+                const el = [...r.querySelectorAll('span')].find((e) => (e.textContent || '').trim() === 'מדויק');
+                if (!el) return null;
+                const b = el.getBoundingClientRect();
+                return {
+                  w: Math.round(b.width),
+                  h: Math.round(b.height),
+                  inside: b.left >= rowBox.left - 1 && b.right <= rowBox.right + 1,
+                  color: getComputedStyle(el).color,
+                  bg: getComputedStyle(el).backgroundColor,
+                };
+              })(),
               action: (() => {
                 const el = [...r.querySelectorAll('a,button')].find((e) => /פתח קבוצה|פתח להצטרפות|הוסף לרשימה/.test(e.textContent || ''));
                 if (!el) return null;
@@ -336,6 +360,37 @@ async function main(): Promise<void> {
         assert.ok(r.sides.actionAtEnd, say(`row ${i}'s button is not on the left — "וכפתורים בצד שמאל"`));
         assert.ok(r.sides.apart > 0, say(`row ${i}: ${r.sides.apart}px between the button and the picture — they overlap, or they have traded sides`));
         assert.ok(Math.abs(r.sides.flush) <= 2, say(`row ${i}: the checkbox's tap box is ${r.sides.flush}px off the action's edge below it, which moves it toward the ⋮`));
+
+        /*
+         * AND THE MARK, AGAINST THE FIXTURE'S OWN LIST. render-discovery.tsx
+         * passes exact: true on rows 0, 2, 4 and 6 — row 4 being the longest
+         * name with every other badge already on it, which is where one more
+         * chip would push a control off a 360px screen if it were going to.
+         */
+        checks += 1;
+        const shouldMark = [0, 2, 4, 6].includes(i);
+        if (!shouldMark) {
+          assert.equal(r.exactChip, null, say(`row ${i} was not told it is an exact match and drew the "מדויק" mark anyway`));
+        } else {
+          checks += 3;
+          assert.ok(r.exactChip, say(`row ${i} was told it is an exact match and drew nothing — the prop is threaded and never read`));
+          assert.ok(
+            !!r.exactChip && r.exactChip.w > 20 && r.exactChip.h > 10,
+            say(`row ${i}'s "מדויק" mark measures ${r.exactChip?.w}×${r.exactChip?.h} — it is not legible`),
+          );
+          assert.ok(!!r.exactChip && r.exactChip.inside, say(`row ${i}'s "מדויק" mark is outside its own card`));
+          /* A tinted chip, not the default text on nothing: both of its
+             colours have to resolve. CSS drops an undefined token silently,
+             which is how a 68% chip once rendered completely empty. */
+          assert.ok(
+            !!r.exactChip && /^rgba?\(/.test(r.exactChip.color) && r.exactChip.color !== 'rgba(0, 0, 0, 0)',
+            say(`row ${i}'s "מדויק" mark has no resolved text colour (${r.exactChip?.color}) — an undefined token is dropped in silence`),
+          );
+          assert.ok(
+            !!r.exactChip && r.exactChip.bg !== 'rgba(0, 0, 0, 0)',
+            say(`row ${i}'s "מדויק" mark has no background (${r.exactChip?.bg}) — it reads as plain text, not as a mark`),
+          );
+        }
       }
 
       /*

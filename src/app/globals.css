@@ -2913,6 +2913,23 @@ body:has(.social-theme) .site-backdrop {
   color: var(--color-mist-300);
 }
 .anxt-when svg { flex: none; width: 13px; height: 13px; color: var(--color-brand-400); }
+/* The same line, as a button — "ימים ושעות". Blue wash and a blue hairline,
+   which is what the brief asks for and what every soft control on this
+   screen already wears. */
+.anxt-whenbtn {
+  width: 100%;
+  min-height: 40px;
+  padding: 5px 8px;
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--color-brand-500) 30%, transparent);
+  background: color-mix(in srgb, var(--color-brand-500) 8%, transparent);
+  text-align: start;
+}
+.anxt-whenbtn:disabled { opacity: 0.6; }
+/* NO CHEVRON. It wrapped to a line of its own at 390px — the row is about
+   155px wide inside a tile — and it is not in the brief either, which asks
+   for "עיצוב כחול בהיר עם מסגרת כחולה" and gets exactly that. The tint and
+   the hairline are what say it can be pressed. */
 .anxt-sep { color: var(--color-mist-500); }
 
 /* ── the foot ── */

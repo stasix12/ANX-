@@ -62,6 +62,8 @@ export interface CampaignTileProps {
   statsHref: string;
   /** The ⋯ — the page owns the menu, the tile owns the button. */
   onMenu?: () => void;
+  /** "ימים ושעות" — opens the sheet the page owns. */
+  onHours?: () => void;
   /** Non-empty while a write for THIS campaign is in flight. */
   busy?: boolean;
   /** The whole account is paused — a tile may not claim to be running. */
@@ -131,6 +133,7 @@ export function CampaignTile({
   editHref,
   statsHref,
   onMenu,
+  onHours,
   busy,
   globalPaused,
 }: CampaignTileProps) {
@@ -243,16 +246,37 @@ export function CampaignTile({
         </span>
       </div>
 
-      {/* ── when it publishes ── */}
-      <p className="anxt-when">
-        <svg aria-hidden viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
-          <rect x="3" y="5" width="18" height="16" rx="3" />
-          <path d="M3 10h18M8 3v4M16 3v4" />
-        </svg>
-        <span>{daysText(schedule)}</span>
-        <span className="anxt-sep" aria-hidden>|</span>
-        <span dir="ltr">{hoursText(schedule)}</span>
-      </p>
+      {/*
+        ── WHEN IT PUBLISHES, AND THE WAY TO CHANGE IT ───────────────────
+        "בכל כרטיס קמפיין יש להוסיף כפתור חדש בשם 'ימים ושעות'."
+
+        The line that PRINTED the schedule becomes the button that opens it,
+        rather than a second control beside it: the owner's finger is already
+        going to the days and the hour when he wants to change the days and
+        the hour, and a tile this size has no room for a label that only
+        reads. Without a handler it stays exactly the line it was.
+      */}
+      {onHours ? (
+        <button type="button" className="anxt-when anxt-whenbtn" onClick={onHours} disabled={busy} aria-label={`ימים ושעות לקמפיין "${campaign.name}"`}>
+          <svg aria-hidden viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+            <rect x="3" y="5" width="18" height="16" rx="3" />
+            <path d="M3 10h18M8 3v4M16 3v4" />
+          </svg>
+          <span>{daysText(schedule)}</span>
+          <span className="anxt-sep" aria-hidden>|</span>
+          <span dir="ltr">{hoursText(schedule)}</span>
+        </button>
+      ) : (
+        <p className="anxt-when">
+          <svg aria-hidden viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+            <rect x="3" y="5" width="18" height="16" rx="3" />
+            <path d="M3 10h18M8 3v4M16 3v4" />
+          </svg>
+          <span>{daysText(schedule)}</span>
+          <span className="anxt-sep" aria-hidden>|</span>
+          <span dir="ltr">{hoursText(schedule)}</span>
+        </p>
+      )}
 
       {/* ── the foot: on/off, the speed, and the two buttons ── */}
       <div className="anxt-foot">

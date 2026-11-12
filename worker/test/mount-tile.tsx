@@ -7,7 +7,9 @@
  * one held, with the held one carrying the way back.
  */
 import { createRoot } from 'react-dom/client';
+import { useState } from 'react';
 import { CampaignTile } from '@/components/social/CampaignTile';
+import { CampaignHoursSheet } from '@/components/social/CampaignHoursSheet';
 import type { CampaignState } from '@/lib/social/campaign';
 import type { Campaign } from '@/lib/social/types';
 
@@ -48,7 +50,44 @@ const FIXTURES = [
   },
 ];
 
-createRoot(document.getElementById('root') as HTMLElement).render(
+/*
+ * ?s=sheet DRIVES THE REAL SHEET, with a save that records what it was
+ * handed and resolves — so the test can press the days, press a preset,
+ * press "שמור שינויים" and read back exactly what would have gone to the
+ * database, without a database.
+ */
+declare global {
+  interface Window { __saved?: unknown; __closed?: boolean }
+}
+
+function SheetHarness() {
+  const [open, setOpen] = useState(true);
+  return (
+    <CampaignHoursSheet
+      open={open}
+      onClose={() => {
+        window.__closed = true;
+        setOpen(false);
+      }}
+      campaignName="ניקוי ספות - באר שבע"
+      schedule={{ enabled: true, days: [0, 1, 2], start: '08:00', gapSeconds: 90 } as never}
+      onSave={async (next) => {
+        window.__saved = next;
+      }}
+    />
+  );
+}
+
+const root = createRoot(document.getElementById('root') as HTMLElement);
+
+if (new URLSearchParams(location.search).get('s') === 'sheet') {
+  root.render(
+    <div className="social-theme">
+      <SheetHarness />
+    </div>,
+  );
+} else {
+  root.render(
   <div className="social-theme" style={{ padding: 10 }}>
     <div className="grid grid-cols-2 gap-2.5 [&>*]:min-w-0">
       {FIXTURES.map((f) => (
@@ -67,8 +106,10 @@ createRoot(document.getElementById('root') as HTMLElement).render(
           editHref="/social/posts/new"
           statsHref={`/social/campaigns/${f.c.id}`}
           onMenu={() => undefined}
+          onHours={() => undefined}
         />
       ))}
     </div>
   </div>,
-);
+  );
+}

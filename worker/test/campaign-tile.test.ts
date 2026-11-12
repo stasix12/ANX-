@@ -52,6 +52,16 @@ const src = (p: string) => readFileSync(new URL(`../../${p}`, import.meta.url), 
   is(/PACE_PROFILES\.map/.test(tile), 'the speed list is built FROM rules.ts, so a card and the engine cannot disagree about a mode');
   is(!/בטוח/.test(tile), 'and the reference’s fourth mode is not invented here');
 
+  /*
+   * ─── ימים ושעות ────────────────────────────────────────────────────────
+   * The schedule line IS the button — one control, not a label beside a
+   * control — and without a handler it falls back to the line it was, so a
+   * tile drawn somewhere with no sheet behind it loses nothing.
+   */
+  is(/onHours\?: \(\) => void;/.test(tile), 'the tile offers a days-and-hours handler');
+  is(/\{onHours \? \(/.test(tile), 'and falls back to a plain line when there is no sheet to open');
+  is(/aria-label=\{`ימים ושעות לקמפיין/.test(tile), 'the button says what it opens, and for which campaign');
+
   /* The way back exists only where there is something to come back from. */
   is(/\{!running && onResume && \(/.test(tile), 'the way back is drawn only for a campaign that is actually held');
   is(/חזרה לפעילות/.test(tile), 'in the reference’s own words');
@@ -71,6 +81,61 @@ const src = (p: string) => readFileSync(new URL(`../../${p}`, import.meta.url), 
   );
   is(/countPublishedSince\(startOfZonedDay/.test(page), "the summary strip's day count is a real query, not a sum of lifetime totals");
   is(/<StatStrip/.test(page), 'and the strip is the measured component, not a new band beside it');
+}
+
+/* ══════════ 2b. THE SHEET: ONE HOUR, AND IT SAVES BEFORE IT SAYS SO ════ */
+
+{
+  const sheet = src('src/components/social/CampaignHoursSheet.tsx');
+
+  /*
+   * NO CLOSING HOUR ANYWHERE. "אין להציג או להגדיר שעת סיום" — and this is
+   * the same rule the product already follows, since readSchedule() stopped
+   * reading schedule_end. A second time field here would be a setting the
+   * engine cannot act on.
+   */
+  eq((sheet.match(/type="time"/g) ?? []).length, 1, 'exactly one hour field — there is no closing hour to set');
+  /*
+   * AND IT SETS NO END — which is a different claim from "never says the
+   * words". The first version of this banned the PHRASE and failed on the
+   * sentence that exists to tell him there isn't one ("אין שעת סיום — היום
+   * פתוח עד חצות"). What may not appear is an end-hour VALUE: a second time
+   * input above, and nothing writing the column readSchedule() stopped
+   * reading.
+   */
+  const code = sheet.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  is(!/schedule_end|\bend:\s/.test(code), 'and it sets no end hour — the column readSchedule() stopped reading stays unwritten');
+  is(/אין שעת סיום/.test(code), 'it says so in as many words, where he will read it');
+
+  /* His four, in his words. */
+  for (const [label, at] of [['בוקר', '08:00'], ['צהריים', '12:00'], ['ערב', '16:00'], ['לילה', '20:00']] as const) {
+    is(new RegExp(`label: '${label}', at: '${at}'`).test(sheet), `the ${label} preset is ${at}`);
+  }
+
+  /*
+   * A SAVE BUTTON MAY NOT CONFIRM A WRITE IT DID NOT WAIT FOR. The draft is
+   * local, the write is awaited, the sheet closes only after it resolved, and
+   * a failure is shown instead of swallowed.
+   */
+  is(/await onSave\(/.test(sheet), 'the write is awaited');
+  is(/await onSave\([\s\S]{0,120}onClose\(\);/.test(sheet), 'and the sheet closes only after it landed');
+  /* And it is said in Hebrew he can act on, not in Postgres. layout.test.ts
+     caught the first version handing him err.message straight through. */
+  is(/catch \(err\)[\s\S]{0,600}setProblem\(friendlyMessage\(err,/.test(sheet), 'a failed save is said out loud, through friendlyMessage, not swallowed and not raw');
+  is(/if \(days\.length === 0\)/.test(sheet), 'and a round with no day is refused before it is saved');
+
+  /* Seeded on every open — four campaigns share one sheet. */
+  is(/useEffect\(\(\) => \{\s*if \(!open\) return;/.test(sheet), "the draft is re-seeded on every open, so one campaign's edit cannot open on another");
+
+  /*
+   * AND THE PAGE SAVES THROUGH THE WRITE IT ALREADY HAD. Not a second copy
+   * of the saveCampaign → syncWeeklyHours → rescheduleCampaignQueue order.
+   */
+  const page = src('src/app/social/campaigns/page.tsx');
+  is(/const saveScheduleNow = useCallback\(/.test(page), 'the page has one awaited save for the sheet');
+  is(/saveScheduleNow[\s\S]{0,400}changeSchedule\(campaign, next\);/.test(page), 'and it runs the SAME changeSchedule the panel runs');
+  is(/saveScheduleNow[\s\S]{0,600}const run = schedulePending\.current\[campaign\.id\];[\s\S]{0,80}await run\(\);/.test(page), 'collapsing its debounce and awaiting the write it parked');
+  is(/<CampaignHoursSheet/.test(page), 'and the sheet is rendered for whichever tile was tapped');
 }
 
 /* ══════════ 3. THE GRID, IN A BROWSER ═════════════════════════════════ */
@@ -203,7 +268,15 @@ async function main(): Promise<void> {
 
       if (width < 1280) {
         eq(seen.rows, [2, 2], `${w}: two tiles to a row, four in view — got rows of ${seen.rows.join('/')}`);
-        is(seen.tallest <= 420, `${w}: the tallest tile is ${seen.tallest}px — a compact tile that tall is the card it replaced`);
+        /*
+         * 460, RAISED FROM 420 WHEN "ימים ושעות" BECAME A BUTTON — a 40px tap
+         * target where a text line used to be, plus its gap. The number is
+         * here to stop the tile drifting back into the card it replaced, and
+         * that card is 915 with its panel: a tile at 442 is still less than
+         * half of it. Raised deliberately and with the reason, rather than
+         * deleted the moment it caught something.
+         */
+        is(seen.tallest <= 460, `${w}: the tallest tile is ${seen.tallest}px — a compact tile that tall is the card it replaced`);
       }
 
       /* 170/250 = 68%, 105/250 = 42%, 250/250 = 100%, 65/250 = 26% — the
@@ -220,10 +293,53 @@ async function main(): Promise<void> {
       shots.push(shot);
       await page.close();
     }
+
+    /* ─── THE SHEET, DRIVEN ───────────────────────────────────────────────
+     *
+     * "פתיחה וסגירה תקינה של החלון · בחירת ימים ושעת הפעלה · שמירה וטעינה
+     *  חוזרת."
+     *
+     * Opened on a campaign publishing Sunday-Tuesday at 08:00. The test adds
+     * Thursday, presses "ערב", saves, and reads back exactly what would have
+     * gone to the database. Nothing is mocked but the write itself.
+     */
+    {
+      const page = await browser.newPage({ viewport: { width: 390, height: 900 } });
+      const crashes: string[] = [];
+      page.on('pageerror', (e) => crashes.push(String(e)));
+      await page.goto(`file://${path.join(dir, 'index.html')}?s=sheet`);
+      await page.waitForSelector('[role="group"][aria-label^="ימי פרסום"]');
+
+      eq(await page.locator('input[type="time"]').count(), 1, 'the sheet offers exactly one hour field');
+      eq(await page.locator('input[type="time"]').inputValue(), '08:00', 'seeded from the campaign, not from a default');
+      eq(await page.locator('[role="group"][aria-label^="ימי פרסום"] [aria-pressed="true"]').count(), 3, 'and with the three days it really publishes on');
+
+      /* Add Thursday. */
+      await page.locator('button[aria-label="יום חמישי"]').click();
+      eq(await page.locator('[role="group"][aria-label^="ימי פרסום"] [aria-pressed="true"]').count(), 4, 'pressing a day adds it');
+
+      /* And move the hour with a preset. */
+      await page.getByRole('button', { name: /ערב/ }).click();
+      eq(await page.locator('input[type="time"]').inputValue(), '16:00', '"ערב" sets the hour to 16:00');
+
+      /* NOTHING IS SAVED YET — the whole point of a save button. */
+      eq(await page.evaluate(() => window.__saved ?? null), null, 'and not one of those presses wrote anything');
+
+      await page.getByRole('button', { name: 'שמור שינויים' }).click();
+      await page.waitForFunction(() => Boolean(window.__saved));
+      const saved = (await page.evaluate(() => window.__saved)) as { days: number[]; start: string; enabled: boolean };
+      eq(saved.days, [0, 1, 2, 4], 'the save carries the four days, in order');
+      eq(saved.start, '16:00', 'and the hour the preset set');
+      eq(saved.enabled, true, 'with the schedule switched on');
+      is(!('end' in saved), 'and no end hour — there is none to send');
+      is(await page.evaluate(() => window.__closed === true), 'the sheet closed, and only after the write resolved');
+      eq(crashes, [], 'the sheet threw');
+      await page.close();
+    }
   } finally {
     await browser.close();
   }
-  console.log(`campaign tile OK — ${checks} assertions, four campaigns measured at 360/390/430/1280`);
+  console.log(`campaign tile OK — ${checks} assertions, four campaigns measured at 360/390/430/1280, and the sheet driven end to end`);
   console.log(`shots: ${shots.join(' ')}`);
 }
 

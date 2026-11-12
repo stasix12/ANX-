@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { CampaignCard, campaignOrdinals } from '@/components/social/CampaignCard';
 import { CampaignTile } from '@/components/social/CampaignTile';
+import { CampaignHoursSheet } from '@/components/social/CampaignHoursSheet';
 import { QueueTunerSheet } from '@/components/social/QueueTunerSheet';
 import { CampaignCommentSheet } from '@/components/social/CampaignCommentSheet';
 import { SocialShell } from '@/components/social/SocialShell';
@@ -158,6 +159,10 @@ export default function CampaignsPage() {
      summary strip that no per-campaign state can answer, because those counts
      are lifetime totals and this one is a day. */
   const [publishedToday, setPublishedToday] = useState<number | null>(null);
+  /* Which campaign's "ימים ושעות" sheet is open, or null. One sheet for the
+     whole grid, keyed by the campaign it was opened for — see the seeding
+     note in CampaignHoursSheet. */
+  const [hoursFor, setHoursFor] = useState<Campaign | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const toast = useToast();
@@ -688,6 +693,35 @@ export default function CampaignsPage() {
     [changeSchedule, load, toast],
   );
 
+  /*
+   * ─── THE SHEET'S SAVE, AWAITED ─────────────────────────────────────────
+   *
+   * "להציג אישור שמירה רק לאחר הצלחה אמיתית · השמירה חייבת להיות אטומית
+   *  ככל האפשר."
+   *
+   * changeSchedule() is built for a panel you are already looking at: it
+   * patches the screen at once and debounces the write by 600ms, so it
+   * RETURNS before anything has been saved. A sheet with a save button
+   * cannot use that as it stands — it would close on a confirmation for a
+   * write still sitting in a timer.
+   *
+   * So this runs the very same write rather than a second copy of it: call
+   * changeSchedule, then collapse its debounce and await the function it
+   * parked. One code path to Supabase, one place to get the order of
+   * saveCampaign → syncWeeklyHours / setCampaignRepeat → rescheduleCampaignQueue
+   * right, and a promise that settles only when it really landed.
+   */
+  const saveScheduleNow = useCallback(
+    async (campaign: Campaign, next: CampaignSchedule) => {
+      changeSchedule(campaign, next);
+      clearTimeout(scheduleTimers.current[campaign.id]);
+      delete scheduleTimers.current[campaign.id];
+      const run = schedulePending.current[campaign.id];
+      if (run) await run();
+    },
+    [changeSchedule],
+  );
+
   const changeRepeat = useCallback(
     async (campaign: Campaign, next: CampaignRepeat) => {
       setScheduleBusy((b) => ({ ...b, [campaign.id]: true }));
@@ -1139,6 +1173,7 @@ export default function CampaignsPage() {
                   editHref={mine.length ? `/social/posts/${mine[0].id}` : `/social/posts/new?campaign=${c.id}`}
                   statsHref={`/social/campaigns/${c.id}`}
                   onMenu={() => setCommentFor(c)}
+                  onHours={() => setHoursFor(c)}
                   /* `scheduleBusy[c.id]` AND NOT A NEW act() KEY: changePace
                      already brackets itself with that per-campaign flag, and
                      inventing a `pace-` key here would be a busy state the
@@ -1324,6 +1359,20 @@ export default function CampaignsPage() {
           );
         }}
       />
+
+      {/* ── ימי פעילות והפעלה, for whichever tile was tapped ── */}
+      {hoursFor && (
+        <CampaignHoursSheet
+          open
+          onClose={() => setHoursFor(null)}
+          campaignName={hoursFor.name}
+          /* The campaign's own stored schedule, through the same reader the
+             card uses — so an edit still settling is the one the sheet opens
+             on rather than the row it has not replaced yet. */
+          schedule={scheduleOf(hoursFor)}
+          onSave={(next) => saveScheduleNow(hoursFor, next)}
+        />
+      )}
 
       <QueueTunerSheet
         open={tuner !== null}

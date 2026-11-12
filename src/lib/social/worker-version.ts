@@ -924,7 +924,28 @@
  * yet — it is still the next free number — so this rides with it rather than
  * taking one of its own.
  */
-export const WORKER_VERSION = '4.66.0';
+/*
+ * 4.66.0 → 4.67.0, AND THE REASON IS A MISTAKE WORTH WRITING DOWN.
+ *
+ * The run-summary fix below was committed as 4.66.0 — but 4.66.0 had already
+ * been PUBLISHED, at 22:40:32, by the push an hour earlier. The release
+ * workflow refuses a tag that exists, so that commit would have shipped to
+ * the website and to NOBODY'S PC, silently, which is the exact failure
+ * worker-release.test.ts spends twenty lines warning about.
+ *
+ * It warns because this file cannot check: it has no network, and the only
+ * authority on what is published is the release list. I asked GitHub before
+ * the 4.66.0 push and did not ask again after that push published it. Asking
+ * once is not a habit; asking before every bump is. v4.66.0 is the newest
+ * tag as of 22:40, so 4.67.0 is free.
+ *
+ * What this carries to the PC: a join run in which nothing went wrong used to
+ * report "הצטרפנו ל-0, 0 ממתינות לאישור מנהל". It counted two outcomes and
+ * dropped the other five, so his two runs tonight — both `already`, both
+ * fine — read as total failures. The sentence now names every outcome that
+ * occurred.
+ */
+export const WORKER_VERSION = '4.67.0';
 
 /**
  * A FINGERPRINT OF EVERYTHING THE INSTALLER CARRIES.

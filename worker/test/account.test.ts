@@ -76,7 +76,13 @@ async function ownersLayout(browser: import('playwright-core').Browser) {
    * does not go through page routes, and a fake host would quietly exercise
    * the screenshot fallback instead of the path this test is about.
    */
-  const server = createServer((_req, res) => {
+  /*
+   * WHAT THE AVATAR'S OWN SERVER WAS SENT — and specifically whether the
+   * worker's session rode along. See the cookie planted below.
+   */
+  const sentToAvatar: (string | undefined)[] = [];
+  const server = createServer((req, res) => {
+    sentToAvatar.push(req.headers.cookie);
     res.writeHead(200, { 'content-type': 'image/png' });
     res.end(PNG);
   });
@@ -86,6 +92,27 @@ async function ownersLayout(browser: import('playwright-core').Browser) {
 
   const context = await browser.newContext({ locale: 'he-IL' });
   await context.addCookies([{ name: 'c_user', value: ID, domain: '.facebook.com', path: '/' }]);
+  /*
+   * ─── A COOKIE ON THE AVATAR'S OWN HOST, AND IT MUST NOT TRAVEL ────────
+   *
+   * captureAvatar fetches the picture by its address. It used to do that
+   * with `page.context().request`, which SHARES the browser's cookie jar in
+   * both directions — so the fetch carried the worker's Facebook session out
+   * to whatever host the PAGE named, and wrote that reply's Set-Cookie back
+   * into the jar the worker publishes with. Measured 12.11: it sends
+   * `c_user; xs; datr` to any facebook.com address it is handed, and
+   * `addCookies` with a past expiry deletes. One reply could sign the owner
+   * out, and the guard that stood there only noticed if the jar came back
+   * COMPLETELY empty.
+   *
+   * This proves the fetch no longer carries the jar, and it proves it
+   * BEHAVIOURALLY rather than by reading the source. The cookie is planted
+   * on 127.0.0.1 — the avatar's own host in this fixture — because a cookie
+   * on .facebook.com would never have been sent here anyway, and an
+   * assertion that cannot fail is not one. Under the old shared-jar fetch
+   * this cookie WOULD arrive; under a context of its own it cannot.
+   */
+  await context.addCookies([{ name: 'probe_session', value: 'must-not-travel', url: avatarUrl }]);
   const page = await context.newPage();
   const home =
     '<html><head><title>Facebook</title></head><body>' +
@@ -141,7 +168,19 @@ async function ownersLayout(browser: import('playwright-core').Browser) {
    */
   assert.match(profile.probe.where, /· קובץ$/, 'the avatar is fetched by its own address, not photographed');
   assert.deepEqual(profile.image.bytes, PNG, 'and the bytes are the file itself');
-  console.log('  ✓ absolute vanity link + signed CDN src + name-in-a-sentence label, captured on the return trip');
+  /*
+   * AND IT WENT OUT WITHOUT THE SESSION. The server really was asked — the
+   * bytes above came from it — so this is not an empty list standing in for
+   * a request that never happened.
+   */
+  assert.ok(sentToAvatar.length > 0, 'the avatar server was never asked, so the cookie check below would pass on nothing');
+  assert.deepEqual(
+    sentToAvatar.filter(Boolean),
+    [],
+    `the avatar fetch carried the browser's cookies to the picture's host — ${JSON.stringify(sentToAvatar)}. ` +
+      'It must use a context of its own: a decoration must not be able to sign the owner out.',
+  );
+  console.log(`  ✓ absolute vanity link + signed CDN src + name-in-a-sentence label, captured on the return trip (avatar fetched with no session: ${sentToAvatar.length} request(s), 0 carried a cookie)`);
 }
 
 async function main() {

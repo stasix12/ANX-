@@ -3853,12 +3853,37 @@ const scenario: { step: string; line: string }[] = [];
    * them, so that goes first; the photographs stay as fallbacks for a blob:
    * source, which only the page can resolve.
    */
-  const byFile = accountCode.indexOf('request.get(src');
+  const byFile = accountCode.indexOf('api.get(src');
   const byElement = accountCode.indexOf('el.screenshot(');
   const byClip = accountCode.indexOf('page.screenshot({');
   assert.ok(byFile > 0, "the avatar is fetched by the element's own address");
   assert.ok(byElement > byFile, 'photographing the element is the fallback, not the first move');
   assert.ok(byClip > byElement, 'and a clip rectangle is the last resort of all');
+
+  /*
+   * ─── AND IT IS FETCHED WITHOUT THE SESSION ──────────────────────────
+   *
+   * This read used `page.context().request`, which shares the browser's
+   * cookie jar in BOTH directions. Measured 12.11: it sends `c_user; xs;
+   * datr` to any facebook.com address the PAGE names, Playwright writes the
+   * reply's Set-Cookie back into that jar, and addCookies with a past expiry
+   * deletes. The byUrl proof above accepts any src carrying the account's
+   * numeric id with no restriction on the host — so reading a decoration
+   * could sign the owner out of the account he publishes with.
+   *
+   * worker/test/account.test.ts proves the fix behaviourally, by planting a
+   * cookie on the avatar's own host and checking the fetch does not carry
+   * it. This is the source half: the shared jar must not come back by an
+   * edit, and the redirect that would walk a CDN link home must stay shut.
+   */
+  assert.ok(
+    !/page\.context\(\)\.request/.test(accountCode),
+    'the avatar fetch must not use the browser context\'s request — it carries the session out and lets the reply write the jar back',
+  );
+  const ownJar = accountCode.indexOf('request.newContext(');
+  assert.ok(ownJar > 0 && ownJar < byFile, 'it fetches from a context of its own, opened before the fetch');
+  assert.ok(/maxRedirects: 0/.test(accountCode), 'and follows no redirect, so a CDN link cannot walk back to the session host');
+  assert.ok(/api\.dispose\(\)/.test(accountCode), 'and the context is disposed, so a long run does not leak one per avatar');
   assert.ok(/asElement\(\)/.test(account), 'the chosen element is still carried as a handle for those fallbacks');
 
   /*

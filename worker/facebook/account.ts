@@ -1,3 +1,4 @@
+import { request } from 'playwright-core';
 import type { ElementHandle, Page } from 'playwright-core';
 import { patterns } from './selectors';
 
@@ -257,40 +258,59 @@ async function captureAvatar(
   try {
     if (/^https?:/i.test(src)) {
       /*
-       * ─── AND THE SESSION SURVIVES THE FETCH ───────────────────────────
+       * ─── AND THE SESSION SURVIVES THE FETCH — BECAUSE IT IS NEVER IN THE
+       *     ROOM ────────────────────────────────────────────────────────
        *
-       * `context.request` deliberately SHARES the browser's cookie jar —
-       * that is why a signed CDN address works from here at all. The cost of
-       * sharing is that it can also write that jar back.
+       * `src` comes from the PAGE. What stood here fetched it with
+       * `page.context().request`, which shares the browser's cookie jar in
+       * BOTH directions, and then tried to undo the damage afterwards.
        *
-       * WHAT IS KNOWN, measured rather than assumed: on CI's Chromium 131 the
-       * account test ends with the facebook.com jar EMPTY — `cookies now: []`
-       * — after three of these fetches to an address that does not resolve.
-       * On the Chromium here (141) the same probe leaves it untouched
-       * (worker/test/.tmp-jar-probe.ts), which is why the test passes locally
-       * and has never once passed in CI.
+       * MEASURED, 12.11, rather than reasoned:
+       *   · that request sends `c_user; xs; datr` to ANY facebook.com
+       *     address it is handed — and sends nothing at all to the
+       *     *.fbcdn.net hosts avatars actually live on. So the sharing this
+       *     code existed for buys the avatar NOTHING; the old comment here
+       *     claimed it was "why a signed CDN address works from here at
+       *     all", and that was simply false.
+       *   · Playwright feeds every reply's Set-Cookie back into that jar,
+       *     and follows up to twenty redirects, recomputing the cookie
+       *     header for each new host. A CDN link that 302s to facebook.com
+       *     therefore arrives there carrying the live session.
+       *   · `addCookies` with a past expiry DELETES. So one reply can remove
+       *     the session this worker publishes with.
+       *   · and the guard that stood here only restored when the jar came
+       *     back COMPLETELY empty. A partial deletion — `c_user` gone,
+       *     `xs` and `datr` left — left `after.length > 0` and the guard
+       *     said nothing.
        *
-       * WHAT IS NOT KNOWN: whether that build empties it from here or from
-       * somewhere else. So this does not claim a cause — it refuses the
-       * consequence. An avatar is a decoration; the session is the thing the
-       * owner's whole account publishes with, and a decoration must never be
-       * able to sign them out. If the jar was there before the fetch and is
-       * empty after it, it goes back exactly as it was.
+       * The byUrl proof above accepts any src containing the account's
+       * numeric id, with NO restriction on the host, so a page can offer one
+       * on facebook.com itself. An avatar is a decoration, and a decoration
+       * must not be able to sign the owner out.
+       *
+       * So: a context of its own, with no session in it, and no redirect
+       * followed. Nothing that comes back can reach the jar, which is why
+       * the restore-afterwards guard is gone rather than merely tightened —
+       * once no reply can touch the jar it has nothing left to protect. A
+       * link that legitimately redirects now falls back to photographing the
+       * element, which is the path below and is tested.
        */
-      const before = await page.context().cookies('https://www.facebook.com').catch(() => []);
-      const res = await page.context().request.get(src, { timeout: 15_000 }).catch(() => null);
-      if (before.length > 0) {
-        const after = await page.context().cookies('https://www.facebook.com').catch(() => before);
-        if (after.length === 0) await page.context().addCookies(before).catch(() => undefined);
-      }
-      const type = res?.headers()['content-type'] ?? '';
-      if (res?.ok() && /^image\//i.test(type)) {
-        const bytes = await res.body();
-        // A sane avatar is kilobytes. Anything past this is not one, and is
-        // not worth pushing into Storage to find out.
-        if (bytes.length > 0 && bytes.length < 8_000_000) {
-          return { image: { bytes, contentType: type.split(';')[0].trim() }, reason: 'ok', probe: { ...probe, where: `${probe.where} · קובץ` } };
+      const api = await request.newContext({
+        userAgent: await page.evaluate(() => navigator.userAgent).catch(() => undefined),
+      });
+      try {
+        const res = await api.get(src, { timeout: 15_000, maxRedirects: 0 }).catch(() => null);
+        const type = res?.headers()['content-type'] ?? '';
+        if (res?.ok() && /^image\//i.test(type)) {
+          const bytes = await res.body();
+          // A sane avatar is kilobytes. Anything past this is not one, and is
+          // not worth pushing into Storage to find out.
+          if (bytes.length > 0 && bytes.length < 8_000_000) {
+            return { image: { bytes, contentType: type.split(';')[0].trim() }, reason: 'ok', probe: { ...probe, where: `${probe.where} · קובץ` } };
+          }
         }
+      } finally {
+        await api.dispose().catch(() => undefined);
       }
     }
     const inline = /^data:(image\/[a-z+.-]+);base64,([A-Za-z0-9+/=]+)$/i.exec(src);

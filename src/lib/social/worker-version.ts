@@ -837,7 +837,43 @@
  * filter over a result set the PC still truncated and still filtered: the UI
  * of the fix without the fix.
  */
-export const WORKER_VERSION = '4.64.0';
+/*
+ * 4.64.0 → 4.65.0. DOES THIS HAVE TO REACH THE PC? YES — IT IS THE SESSION.
+ *
+ * captureAvatar fetched the profile picture by the address the PAGE gave it,
+ * using `page.context().request` — which shares the browser's cookie jar in
+ * BOTH directions. Measured 12.11:
+ *
+ *   · it sends `c_user; xs; datr` to any facebook.com address it is handed,
+ *     and sends nothing at all to the *.fbcdn.net hosts avatars really live
+ *     on — so the sharing bought the avatar nothing;
+ *   · Playwright writes every reply's Set-Cookie back into that jar and
+ *     follows up to twenty redirects, recomputing the cookie header per hop;
+ *   · `addCookies` with a past expiry DELETES;
+ *   · and the guard beside it only restored when the jar came back
+ *     COMPLETELY empty, so a partial deletion passed in silence.
+ *
+ * The byUrl proof accepts any src containing the account's numeric id with no
+ * restriction on the host, so a page can name one on facebook.com itself.
+ * That is a path by which reading a decoration signs the owner out — and a
+ * signed-out worker is "עדיין לא מפרסם כלום", a complaint already in the log.
+ *
+ * It now fetches from a context of its own, with no session in it and no
+ * redirect followed. Left on 4.64.0 the PC keeps the shared jar, so this is
+ * exactly the kind of fix that is worthless on the dashboard alone.
+ *
+ * worker/test/account.test.ts proves it behaviourally: a cookie is planted on
+ * the avatar's own host, and the fetch must not carry it. Reverted to the old
+ * shared jar, that assertion fails with
+ * ["probe_session=must-not-travel"].
+ *
+ * MEASURED against a bundle built from this tree (node scripts/build-app.mjs,
+ * then grep -oF … | wc -l over dist/app/worker.cjs):
+ *
+ *   request.newContext      1      page.context().request  0
+ *   maxRedirects: 0         1      captureAvatar           6  (the control)
+ */
+export const WORKER_VERSION = '4.65.0';
 
 /**
  * A FINGERPRINT OF EVERYTHING THE INSTALLER CARRIES.
@@ -1576,4 +1612,10 @@ export const WORKER_VERSION = '4.64.0';
  * machine. countExact, the count under the heading, answers 0 — it is drawn by
  * the dashboard and tree-shaken out of the worker, which is correct.
  */
-export const WORKER_FINGERPRINT = '55b32347616bfbd9';
+/*
+ * ─── 12.11.2026 — 4.65.0: the avatar fetch stops carrying the session ─────
+ * Fingerprint and version move together, as they should: the change is in
+ * worker/facebook/account.ts, which runs only on his PC. Numbers under
+ * WORKER_VERSION above.
+ */
+export const WORKER_FINGERPRINT = '5eb1dbe78a516cc5';

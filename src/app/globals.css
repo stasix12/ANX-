@@ -2760,3 +2760,253 @@ body:has(.social-theme) .site-backdrop {
 @media (prefers-reduced-motion: reduce) {
   .anxc-bar, .anxc-track-sw, .anxc-knob { transition: none; }
 }
+
+/* ═══════════ THE COMPACT CAMPAIGN TILE — "תצוגת Grid קומפקטית" ═══════════
+ *
+ * Its own namespace (anxt-*), for the same reason the cycle card has one:
+ * this screen's other card is measured in a browser against exact class
+ * names, and a tile borrowing them would break a green suite to save a
+ * declaration. Every colour is a .social-theme token — a hex here is a
+ * colour a theme change leaves behind.
+ */
+.anxt-tile {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  min-width: 0;
+  padding: 10px;
+  border-radius: var(--radius-card);
+  border: 1px solid var(--color-ink-700);
+  background: var(--color-ink-850);
+  box-shadow: 0 1px 2px rgba(40, 20, 80, 0.03), 0 6px 18px rgba(40, 20, 80, 0.05);
+}
+/* THE BORDER IS THE CAMPAIGN'S OWN COLOUR, set inline from
+   campaignIdentity() — the reference draws a full ring per card, not a stripe
+   down one edge, and the hue is the campaign's identity rather than its
+   status. The status is said by the pill and the meter, which is where a
+   colour that CHANGES belongs. */
+.anxt-tile { border-width: 1.5px; }
+
+.anxt-head { display: flex; align-items: flex-start; gap: 8px; min-width: 0; }
+/* The ⋯ above the cover, one column — see the note in CampaignTile.tsx. */
+.anxt-side { flex: none; display: flex; flex-direction: column; align-items: center; gap: 5px; }
+.anxt-words { display: flex; flex-direction: column; gap: 3px; min-width: 0; flex: 1 1 auto; }
+.anxt-name {
+  font-size: clamp(12.5px, 3.6vw, 14.5px);
+  font-weight: 800;
+  color: var(--color-mist-100);
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+.anxt-no {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: clamp(10px, 2.9vw, 11.5px);
+  font-weight: 700;
+  color: var(--color-mist-500);
+}
+.anxt-no svg { flex: none; width: 11px; height: 11px; color: var(--color-brand-400); }
+
+.anxt-pill {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: clamp(10px, 2.9vw, 11.5px);
+  font-weight: 800;
+  background: color-mix(in srgb, var(--color-brand-500) 12%, transparent);
+  color: var(--color-brand-400);
+}
+.anxt-pill svg { flex: none; width: 12px; height: 12px; }
+.anxt-pill[data-tone="live"] {
+  background: color-mix(in srgb, var(--color-success-400) 16%, transparent);
+  color: var(--color-success-400);
+}
+.anxt-pill[data-tone="held"] {
+  background: color-mix(in srgb, var(--color-warning-400) 18%, transparent);
+  color: var(--color-warning-400);
+}
+
+.anxt-pic {
+  flex: none;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  place-items: center;
+  width: 54px;
+  height: 54px;
+  overflow: hidden;
+  border-radius: 12px;
+  border: 1px solid var(--color-ink-700);
+  background: var(--color-ink-800);
+  color: var(--color-mist-500);
+}
+.anxt-pic img, .anxt-pic video { width: 100%; height: 100%; object-fit: cover; }
+.anxt-pic svg { width: 22px; height: 22px; }
+
+.anxt-more {
+  flex: none;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 11px;
+  border: 1px solid var(--color-ink-700);
+  background: var(--color-ink-800);
+  color: var(--color-mist-300);
+}
+.anxt-more svg { width: 17px; height: 17px; }
+
+/* ── the meter ── */
+.anxt-meter { display: flex; align-items: center; gap: 7px; min-width: 0; }
+.anxt-pctchip {
+  flex: none;
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: clamp(10px, 2.9vw, 11.5px);
+  font-weight: 800;
+  background: var(--color-brand-500);
+  color: var(--color-on-brand);
+}
+/* --color-on-state AND NOT --color-on-brand on a status fill: ui.tsx keeps a
+   separate ink for the success and warning steps precisely because white on
+   amber does not clear 4.5:1. */
+.anxt-pctchip[data-tone="live"] { background: var(--color-success-400); color: var(--color-on-state); }
+.anxt-pctchip[data-tone="held"] { background: var(--color-warning-400); color: var(--color-on-state); }
+.anxt-track {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 7px;
+  border-radius: 999px;
+  background: var(--color-ink-800);
+  overflow: hidden;
+}
+.anxt-bar { display: block; height: 100%; border-radius: 999px; background: var(--color-brand-500); }
+.anxt-bar[data-tone="live"] { background: var(--color-success-400); }
+.anxt-bar[data-tone="held"] { background: var(--color-warning-400); }
+.anxt-of { flex: none; font-size: clamp(10.5px, 3vw, 12px); font-weight: 800; color: var(--color-mist-300); }
+
+/* ── the three figures ── */
+.anxt-figs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 4px;
+  padding: 6px 0;
+  border-block: 1px solid var(--color-ink-700);
+}
+.anxt-fig { display: flex; flex-direction: column; align-items: center; min-width: 0; }
+.anxt-fig b { font-size: clamp(13px, 3.8vw, 15px); font-weight: 800; color: var(--color-mist-100); }
+.anxt-fig span { font-size: clamp(9.5px, 2.7vw, 11px); font-weight: 700; color: var(--color-mist-500); }
+
+/* ── when it publishes ── */
+.anxt-when {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex-wrap: wrap;
+  font-size: clamp(10px, 2.9vw, 11.5px);
+  font-weight: 700;
+  color: var(--color-mist-300);
+}
+.anxt-when svg { flex: none; width: 13px; height: 13px; color: var(--color-brand-400); }
+.anxt-sep { color: var(--color-mist-500); }
+
+/* ── the foot ── */
+.anxt-foot { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.anxt-switch {
+  flex: none;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  place-items: center;
+  width: 52px;
+  height: 40px;
+  background: none;
+  border: 0;
+}
+.anxt-swtrack {
+  display: block;
+  width: 44px;
+  height: 25px;
+  border-radius: 999px;
+  background: var(--color-ink-700);
+  transition: background 140ms ease;
+}
+.anxt-switch[data-on="yes"] .anxt-swtrack { background: var(--color-brand-500); }
+.anxt-swknob {
+  display: block;
+  width: 19px;
+  height: 19px;
+  margin: 3px;
+  border-radius: 999px;
+  background: var(--color-ink-900);
+  transform: translateX(0);
+  transition: transform 140ms ease;
+}
+.anxt-switch[data-on="yes"] .anxt-swknob { transform: translateX(-19px); }
+.anxt-switch:disabled { opacity: 0.55; }
+
+.anxt-pace {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  /* 42 AND NOT 40, MEASURED RATHER THAN CHOSEN. The <select> inside is
+     height:100% of the CONTENT box, so a 40px pill with a 1px border gives it
+     38 — two pixels under the thumb floor this product holds every control
+     to, and campaign-tile.test.ts caught all four of them at 360px. The row
+     centres its items, so the two extra pixels are invisible beside the 40px
+     icon buttons. */
+  height: 42px;
+  padding: 0 9px;
+  border-radius: 12px;
+  border: 1px solid var(--color-ink-700);
+  background: var(--color-ink-800);
+  color: var(--color-brand-400);
+}
+.anxt-pace svg { flex: none; width: 15px; height: 15px; }
+.anxt-pace select {
+  min-width: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: none;
+  font-size: clamp(11px, 3.1vw, 12.5px);
+  font-weight: 800;
+  color: var(--color-mist-100);
+}
+
+.anxt-icon {
+  flex: none;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  border: 1px solid var(--color-ink-700);
+  background: var(--color-ink-800);
+  color: var(--color-mist-300);
+}
+.anxt-icon svg { width: 17px; height: 17px; }
+
+.anxt-back {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  min-height: 40px;
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--color-brand-500) 35%, transparent);
+  background: color-mix(in srgb, var(--color-brand-500) 10%, transparent);
+  font-size: clamp(11.5px, 3.2vw, 13px);
+  font-weight: 800;
+  color: var(--color-brand-400);
+}
+.anxt-back svg { flex: none; width: 16px; height: 16px; }
+.anxt-back:disabled { opacity: 0.55; }

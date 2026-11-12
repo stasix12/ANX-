@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { CampaignCard, campaignOrdinals } from '@/components/social/CampaignCard';
+import { CampaignTile } from '@/components/social/CampaignTile';
 import { QueueTunerSheet } from '@/components/social/QueueTunerSheet';
 import { CampaignCommentSheet } from '@/components/social/CampaignCommentSheet';
 import { SocialShell } from '@/components/social/SocialShell';
@@ -13,6 +14,7 @@ import {
   ErrorState,
   SegmentedControl,
   SkeletonList,
+  StatStrip,
   useConfirm,
   useToast,
 } from '@/components/social/ui';
@@ -23,6 +25,7 @@ import {
   getControl,
   listCampaigns,
   listCampaignPosts,
+  countPublishedSince,
   type CampaignPostSummary,
   listWorkers,
   pauseCampaign,
@@ -43,13 +46,23 @@ import { campaignState, cancellableRows, type CampaignState } from '@/lib/social
 import { SNAPSHOT, readSnapshot, writeSnapshot } from '@/lib/social/snapshot';
 import { MIN_REPEAT_HOURS, readRepeat, readSchedule, repeatColumns, repeatFloorFrom, scheduleColumns, type CampaignRepeat, type CampaignSchedule, readRounds, roundsColumn, roundsSavedMessage, type CampaignRound,} from '@/lib/social/campaign-schedule';
 import { accountGapLabel } from '@/lib/social/rules';
-import { counted } from '@/lib/social/time';
+import { counted, startOfZonedDay } from '@/lib/social/time';
 import { scheduleReadout, type AccountSpacing } from '@/lib/social/schedule-readout';
 import type { Campaign, ControlSettings, PaceId } from '@/lib/social/types';
 import { friendlyMessage } from '@/lib/social/errors';
-import { MegaphoneIcon } from '@/components/icons';
+import { LayersIcon, MegaphoneIcon, SearchIcon, SendIcon, UsersIcon } from '@/components/icons';
 
-type Filter = 'live' | 'all' | 'done';
+/*
+ * FOUR BUCKETS, AND THE REFERENCE DRAWS THREE.
+ *
+ * "הכל | פעילים | מושהים" is what the brief asks for, and 'הסתיימו' is what
+ * the screen already had. Dropping it to reach three chips would delete a
+ * filter the owner uses — he has twenty-five finished campaigns and §9 of the
+ * same brief says "אין למחוק פונקציות קיימות". So the three he asked for are
+ * there, in his order, and the fourth stays beside them. Listed as a
+ * deviation rather than quietly resolved either way.
+ */
+type Filter = 'live' | 'all' | 'done' | 'paused';
 
 /**
  * The campaign list: one card per campaign showing how far it has got and
@@ -134,6 +147,17 @@ export default function CampaignsPage() {
    */
   const [tuner, setTuner] = useState<{ campaignId?: string } | null>(null);
   const [filter, setFilter] = useState<Filter>('live');
+  /* GRID IS THE COMPACT TILE, LIST IS THE CARD THIS SCREEN ALREADY HAD. The
+     reference carries the toggle in its corner and §7 asks for both views —
+     "תצוגה קומפקטית: לניהול מהיר" and "תצוגה מורחבת: לעריכה מלאה". Keeping
+     both is also what makes the redesign additive: CampaignCard is untouched
+     and every test that measures it goes on measuring the same card. */
+  const [view, setView] = useState<'grid' | 'list'>('grid');
+  const [query, setQuery] = useState('');
+  /* Published across the whole account since midnight — the one figure in the
+     summary strip that no per-campaign state can answer, because those counts
+     are lifetime totals and this one is a day. */
+  const [publishedToday, setPublishedToday] = useState<number | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const toast = useToast();
@@ -155,7 +179,7 @@ export default function CampaignsPage() {
        * had exactly this bug and listPostsForCampaign() was written for it;
        * this is the list screen's version of the same fix.
        */
-      const [c, p, st, ctrl, workers, lim, brw, lastPub] = await Promise.all([
+      const [c, p, st, ctrl, workers, lim, brw, lastPub, todayCount] = await Promise.all([
         listCampaigns(),
         listCampaignPosts(),
         campaignStates(),
@@ -168,6 +192,12 @@ export default function CampaignsPage() {
         getLimits(),
         getBrowserSettings(),
         lastPublishedAt(),
+        /* THE SUMMARY STRIP'S ONE QUERY. "פרסומים שבוצעו היום" cannot be
+           summed from the per-campaign states — those are lifetime counts and
+           this is a day — so it rides inside the round trip this screen
+           already makes rather than becoming a second one. A failed read is
+           null, and the strip then prints a dash rather than a zero. */
+        countPublishedSince(startOfZonedDay(new Date()).toISOString()).catch(() => null),
       ]);
       setFloorHours(repeatFloorFrom(lim));
       setPace(lim.pace);
@@ -180,6 +210,7 @@ export default function CampaignsPage() {
         groupMinGapSeconds: brw.groupMinGapSeconds,
         lastPublishedAt: lastPub,
       });
+      setPublishedToday(todayCount);
       const online = workers.some((w) => w.online);
       setCampaigns(c);
       setPosts(p);
@@ -244,8 +275,16 @@ export default function CampaignsPage() {
   const counts = useMemo(() => {
     const list = campaigns ?? [];
     const done = list.filter((c) => ['completed', 'stopped'].includes(stateOf(c).state)).length;
-    return { all: list.length, done, live: list.length - done };
-  }, [campaigns, stateOf]);
+    /* HELD, not merely "not running": a campaign the owner paused, or one the
+       global pause is holding. A campaign that has never started is neither —
+       it is waiting to be launched, and calling it paused would offer a way
+       back from somewhere it has not been. */
+    const paused = list.filter((c) => stateOf(c).state === 'paused' || (control?.paused && stateOf(c).state === 'running')).length;
+    /* The queue waiting across every campaign, and the groups behind them —
+       both summed from states this page already read, not re-queried. */
+    const queued = list.reduce((n, c) => n + stateOf(c).progress.scheduled, 0);
+    return { all: list.length, done, paused, live: list.length - done - paused, queued };
+  }, [campaigns, stateOf, control?.paused]);
 
   /*
    * Sorted, not just filtered.
@@ -304,7 +343,21 @@ export default function CampaignsPage() {
   const visible = useMemo(() => {
     const list = campaigns ?? [];
     const finished = (c: Campaign) => ['completed', 'stopped'].includes(stateOf(c).state);
-    const picked = filter === 'all' ? [...list] : filter === 'done' ? list.filter(finished) : list.filter((c) => !finished(c));
+    const held = (c: Campaign) => stateOf(c).state === 'paused' || Boolean(control?.paused && stateOf(c).state === 'running');
+    const byFilter =
+      filter === 'all'
+        ? [...list]
+        : filter === 'done'
+          ? list.filter(finished)
+          : filter === 'paused'
+            ? list.filter(held)
+            : list.filter((c) => !finished(c) && !held(c));
+    /* THE SEARCH IS A FILTER OVER ROWS ALREADY IN HAND, not a query. The whole
+       account's campaigns are a few dozen rows this screen has already read,
+       and a round trip per keystroke would be a slower answer to a question
+       already on the page. */
+    const needle = query.trim().toLocaleLowerCase('he');
+    const picked = needle ? byFilter.filter((c) => (c.name ?? '').toLocaleLowerCase('he').includes(needle)) : byFilter;
     return picked.sort((a, b) => {
       const sa = stateOf(a);
       const sb = stateOf(b);
@@ -918,17 +971,112 @@ export default function CampaignsPage() {
             variant in ui.tsx; the counts below are the ones this page already
             computed, and they are still omitted rather than zeroed until the
             list is known. */}
+        {/*
+          ── THE SUMMARY STRIP ────────────────────────────────────────────
+          "פס נתונים קומפקטי: סך הקמפיינים, קמפיינים פעילים, פרסומים שבוצעו
+           היום, פרסומים שממתינים בתור."
+
+          StatStrip and not a new strip of my own: it is already measured in a
+          browser by stat-strip.test.ts — four columns of equal width that
+          touch, three one-pixel dividers inset from the edges, one outer
+          border — and a hand-drawn band beside it would be a second opinion
+          about the same shape.
+
+          Every figure is counted, never a placeholder: three of them are
+          summed from the states this screen already read, and the fourth is
+          the day's own query. A failed read prints '—', not a zero.
+        */}
+        <StatStrip
+          items={[
+            {
+              key: 'campaigns',
+              icon: <MegaphoneIcon className="h-4 w-4" />,
+              value: campaigns ? counts.all : '—',
+              label: 'קמפיינים',
+              tone: 'neutral',
+              href: '/social/campaigns',
+            },
+            {
+              key: 'live',
+              icon: <UsersIcon className="h-4 w-4" />,
+              value: campaigns ? counts.live : '—',
+              label: 'פעילים',
+              tone: 'good',
+              href: '/social/campaigns',
+            },
+            {
+              key: 'today',
+              icon: <SendIcon className="h-4 w-4" />,
+              value: publishedToday ?? '—',
+              label: 'פורסמו היום',
+              tone: 'brand',
+              href: '/social/history',
+            },
+            {
+              key: 'queued',
+              icon: <LayersIcon className="h-4 w-4" />,
+              value: campaigns ? counts.queued : '—',
+              label: 'בתור',
+              tone: 'neutral',
+              href: '/social/history',
+            },
+          ]}
+        />
+
+        {/* ── the filter, the search and the view ── */}
         <SegmentedControl
           variant="tabs"
           label="סינון קמפיינים"
           value={filter}
           onChange={setFilter}
           options={[
-            { value: 'live', label: 'פעילים', count: campaigns ? counts.live : undefined },
-            { value: 'done', label: 'הסתיימו', count: campaigns ? counts.done : undefined },
             { value: 'all', label: 'הכל', count: campaigns ? counts.all : undefined },
+            { value: 'live', label: 'פעילים', count: campaigns ? counts.live : undefined },
+            { value: 'paused', label: 'מושהים', count: campaigns ? counts.paused : undefined },
+            { value: 'done', label: 'הסתיימו', count: campaigns ? counts.done : undefined },
           ]}
         />
+
+        <div className="flex items-center gap-2">
+          <label className="flex h-11 min-w-0 flex-1 items-center gap-2 rounded-2xl border border-ink-700 bg-ink-850 px-3">
+            <SearchIcon className="h-4 w-4 shrink-0 text-mist-500" aria-hidden />
+            <input
+              aria-label="חיפוש קמפיין"
+              dir="auto"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="חיפוש קמפיין"
+              className="min-w-0 flex-1 bg-transparent text-[14px] font-semibold text-mist-100 placeholder:text-mist-500 focus:outline-none"
+            />
+          </label>
+          {/* TWO VIEWS, ONE SCREEN — see the note on `view`. The icons carry
+              the names so a thumb knows which is which before tapping. */}
+          {(['grid', 'list'] as const).map((v) => (
+            <button
+              key={v}
+              type="button"
+              onClick={() => setView(v)}
+              aria-pressed={view === v}
+              aria-label={v === 'grid' ? 'תצוגת כרטיסים' : 'תצוגת רשימה'}
+              className={`grid h-11 w-11 shrink-0 place-items-center rounded-2xl border transition-colors ${
+                view === v ? 'border-transparent bg-brand-500 text-on-brand' : 'border-ink-700 bg-ink-850 text-mist-300'
+              }`}
+            >
+              {v === 'grid' ? (
+                <svg aria-hidden viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor">
+                  <rect x="3" y="3" width="8" height="8" rx="2" />
+                  <rect x="13" y="3" width="8" height="8" rx="2" />
+                  <rect x="3" y="13" width="8" height="8" rx="2" />
+                  <rect x="13" y="13" width="8" height="8" rx="2" />
+                </svg>
+              ) : (
+                <svg aria-hidden viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+                  <path d="M4 6h16M4 12h16M4 18h16" />
+                </svg>
+              )}
+            </button>
+          ))}
+        </div>
 
         {!campaigns && !error && (
           <Card>
@@ -953,7 +1101,58 @@ export default function CampaignsPage() {
           />
         )}
 
-        <div className="grid gap-4 lg:grid-cols-2 [&>*]:min-w-0">
+        {/*
+          ── THE COMPACT GRID ─────────────────────────────────────────────
+          "שתי כרטיסיות בכל שורה · ארבעה קמפיינים מוצגים במקביל · התאמה מלאה
+           למסכים קטנים."
+
+          TWO COLUMNS FROM THE NARROWEST PHONE, not from `lg`. The list below
+          keeps the old breakpoint, because a card carrying a seven-day chip
+          row and a time field cannot halve its width on a 360px screen
+          without clipping something the suite measures; a tile can, and that
+          is the whole reason there are two views.
+        */}
+        {view === 'grid' && campaigns && visible.length > 0 && (
+          <div className="grid grid-cols-2 gap-2.5 [&>*]:min-w-0">
+            {visible.map((c) => {
+              const state = stateOf(c);
+              const mine = posts.filter((p) => p.campaign_id === c.id);
+              return (
+                <CampaignTile
+                  key={c.id}
+                  campaign={c}
+                  ordinal={ordinals[c.id] ?? 1}
+                  state={state}
+                  media={mine.find((p) => p.media?.length)?.media?.[0] ?? null}
+                  /* The groups this round really writes to — the distinct
+                     targets of its own queue, which is the number the card
+                     beside it has always printed. */
+                  groups={state.targetCount}
+                  schedule={scheduleOf(c)}
+                  pace={pace}
+                  onPaceChange={(id) => void changePace(c, id)}
+                  /* THE SAME TWO HANDLERS THE CARD USES. Not a second way to
+                     pause a campaign — the identical act() keys, so the tile
+                     greys out on the same write and the page reloads once. */
+                  onPause={() => act(`pause-${c.id}`, () => pauseCampaign(c.id, true), 'הקמפיין נעצר.')}
+                  onResume={() => act(`resume-${c.id}`, () => pauseCampaign(c.id, false), 'הקמפיין ממשיך.')}
+                  editHref={mine.length ? `/social/posts/${mine[0].id}` : `/social/posts/new?campaign=${c.id}`}
+                  statsHref={`/social/campaigns/${c.id}`}
+                  onMenu={() => setCommentFor(c)}
+                  /* `scheduleBusy[c.id]` AND NOT A NEW act() KEY: changePace
+                     already brackets itself with that per-campaign flag, and
+                     inventing a `pace-` key here would be a busy state the
+                     page never sets — and unit.test.ts pins that every act()
+                     key a card can start appears in a busy= prop. */
+                  busy={busy === `pause-${c.id}` || busy === `resume-${c.id}` || Boolean(scheduleBusy[c.id])}
+                  globalPaused={control?.paused ?? false}
+                />
+              );
+            })}
+          </div>
+        )}
+
+        <div className={`grid gap-4 lg:grid-cols-2 [&>*]:min-w-0${view === 'grid' ? ' hidden' : ''}`}>
           {visible.map((c, i) => {
             const state = stateOf(c);
             /* Which kind of "over" this round is, or null when it is not over

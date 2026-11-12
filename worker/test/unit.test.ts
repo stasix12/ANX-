@@ -5660,7 +5660,18 @@ const scenario: { step: string; line: string }[] = [];
    */
   assert.ok(!dash.includes('<Timeline'), 'the dashboard no longer draws a second upcoming list');
   assert.ok(dash.includes('data.upcoming.slice(0, 5)'), 'the queue card draws the next five');
-  assert.ok(dash.includes('at: ltr(formatTimeHe(r.scheduled_at)),'), 'and each of them carries its instant');
+  /*
+   * 12.11.2026 — AND THE INSTANT IT CARRIES IS THE FORECAST.
+   *
+   * This pinned `formatTimeHe(r.scheduled_at)`, which was the whole point
+   * when the clock arrived: a row saying only "בתור" cannot answer "when".
+   * It answered with the PLANNED instant, and on a queue held by the
+   * hundred-publication pause that read 14:29 at 17:15. The claim it is
+   * here to defend — the row says when — is kept; what it says is now the
+   * instant the engine will really use.
+   */
+  assert.ok(dash.includes('at: forecastText(queueForecast.get(r.id) ?? r.scheduled_at),'), 'and each of them carries the instant the engine will use');
+  assert.ok(/projectQueue\(/.test(dash), 'built by the one projection module, not by hand on this screen');
   {
     const flow = readFileSync(new URL('../../src/components/social/LiveFlow.tsx', import.meta.url), 'utf8');
     assert.ok(

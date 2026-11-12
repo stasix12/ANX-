@@ -478,18 +478,27 @@ const row = (id: string, scheduledAt: string, extra: Partial<ProjectableRow> = {
   is(!/progress\.total\)\)/.test(dash.split('const FEATURED_LIMIT')[1].slice(0, 900)), 'the run strip no longer filters campaigns by how many queue rows they have');
   is(/filter\(\(x\): x is \{ campaign: Campaign; state: CampaignState \} => Boolean\(x\.state\)\)/.test(dash), 'it features every live campaign it has a state for');
   /*
-   * RE-POINTED 09.11.2026. The upcoming list this described was "הפרסומים
-   * הקרובים", deleted as a duplicate of "תור פרסומים" above it; the
-   * projection it was handed went with it, because nothing else on the
-   * dashboard consumed it.
+   * RE-POINTED 09.11.2026, AND AGAIN 12.11.2026.
    *
-   * The rule — one clock, never two answers — is asserted as its negative,
-   * which is what it was always really about: no surface on this screen may
-   * re-derive an instant of its own. The queue card draws each row's stored
-   * stamp and nothing computes a second one beside it.
+   * The rule is "one clock, never two answers". In November it was asserted
+   * as its NEGATIVE — the dashboard projects nothing at all — on the
+   * reasoning that the card needing a projection had been deleted and the
+   * queue card could simply draw each row's stored stamp.
+   *
+   * THAT WAS ALREADY TWO ANSWERS, quietly. The stamp is when a row was
+   * PLANNED for; the engine publishes it when its gates let it. The two
+   * agree on an idle queue and part company the moment anything holds —
+   * which on 12.11 was the hundred-publication pause, and the owner was
+   * shown five rows reading 14:29, 14:30, 14:31 at 17:15.
+   *
+   * So the rule is asserted as what it actually means: ONE projection on
+   * this screen, from the one module, and no second instant computed beside
+   * it. The negative that remains is the one that matters — nothing here
+   * does its own date arithmetic on a row.
    */
-  is(!/projectQueue\(/.test(dash), 'the dashboard computes no projection of its own any more — the card that needed one is gone');
-  is(/at: ltr\(formatTimeHe\(r\.scheduled_at\)\)/.test(dash), 'and the queue card draws the row\'s own stored instant, not a second opinion about it');
+  is((dash.match(/projectQueue\(/g) ?? []).length === 1, 'the dashboard builds exactly one projection, from the one module');
+  is(/at: forecastText\(queueForecast\.get\(r\.id\) \?\? r\.scheduled_at\)/.test(dash), 'and the queue card draws the instant the engine will use, not the stamp it was planned for');
+  is(!/scheduled_at\)\.getTime\(\) \+|new Date\(r\.scheduled_at\)\.setMinutes/.test(dash), 'and no surface on it re-derives an instant of its own');
 
   /*
    * FAULT 2 — the countdown in the list read `row.scheduled_at`. It must read
@@ -823,6 +832,14 @@ const row = (id: string, scheduledAt: string, extra: Partial<ProjectableRow> = {
     ['a group\u2019s own page', 'src/app/social/groups/[id]/page.tsx', 'projectedAt={projected.get(r.id)}'],
     ['the post editor\u2019s board', 'src/components/social/LiveBoard.tsx', 'projected={projected}'],
     ['the campaign screen', 'src/app/social/campaigns/[id]/page.tsx', 'projected={projected}'],
+    /*
+     * 12.11.2026 — AND THE DASHBOARD'S OWN QUEUE, which was never on this
+     * list and was therefore the one screen still reading the column while
+     * this section claimed "every list". It is the list the owner actually
+     * watches, and on 12.11 it told him five publications were three hours
+     * overdue when they were minutes away.
+     */
+    ['the dashboard queue', 'src/app/social/page.tsx', 'queueForecast.get(r.id)'],
   ] as const) {
     const src = strip(readFileSync(file, 'utf8'));
     is(src.includes(needle), `${what} draws the instant the engine will use`);
@@ -834,6 +851,55 @@ const row = (id: string, scheduledAt: string, extra: Partial<ProjectableRow> = {
   is(/export async function queueGates\(/.test(client), 'and the gates come from one loader');
   const board = strip(readFileSync('src/components/social/LiveBoard.tsx', 'utf8'));
   is(/useEffect\(\(\) => \{[\s\S]{0,200}queueGates\(\)/.test(board), 'which the 4-second board reads ONCE, not on its beat');
+}
+
+/* ───── 17b. THE QUEUE THE HUNDRED-PUBLICATION PAUSE HELD ───────────── */
+
+/*
+ * HIS SCREEN, 12.11.2026, 17:15 — five rows reading 14:29, 14:30, 14:31.
+ *
+ * "רק לעדכן את השעות יציאת פרסום בהתאם לשעה שאני מחזיר, איפה שרשום 14.29"
+ *
+ * Nothing was wrong with the stamps: the pause held the queue from 14:46, so
+ * every row behind it still carried the minute it was PLANNED for. What was
+ * wrong was printing that column — five publications minutes away, drawn as
+ * three hours overdue.
+ *
+ * NO CAMPAIGN WINDOW HERE ON PURPOSE. The case above (section 2) proves the
+ * window keeps rows out of the past; this one proves the same thing with no
+ * window at all, because his account has none on this round and the only
+ * floor is `now` plus the account gap. That is the shape the dashboard
+ * actually hands projectQueue.
+ */
+{
+  const now = at('2026-11-12T17:15');
+  const held = ['14:29', '14:29', '14:30', '14:31', '14:31'].map((t, i) =>
+    row(`h${i}`, iso(`2026-11-12T${t}`), { campaign_id: 'c1' }),
+  );
+  /* One minute between publications, which is his floor, and the account's
+     last publication is the one that went out at 17:14 just before this. */
+  const spacing: AccountSpacing = { minGapMinutes: 1, groupMinGapMinutes: 0, lastPublishedAt: iso('2026-11-12T17:14') };
+  const projected = projectQueue(held, { now, spacing });
+
+  eq(projected.size, 5, 'every held row is answered for');
+  const instants = [...projected.values()];
+  is(
+    instants.every((v) => v !== null && new Date(v).getTime() >= now.getTime()),
+    'not one of them is reported in the past — which is the whole of what he photographed',
+  );
+  eq(projected.get('h0'), iso('2026-11-12T17:15'), 'the first goes out a gap after the publication that just finished, not at 14:29');
+  eq(projected.get('h1'), iso('2026-11-12T17:16'), 'and the rest cascade a gap apart');
+  eq(projected.get('h4'), iso('2026-11-12T17:19'), 'so five held rows span five minutes, not three hours of lateness');
+
+  /*
+   * AND THE STAMPS THEMSELVES ARE UNTOUCHED. The fix is a read: the engine
+   * still claims these rows on the column it always did, and the queue's
+   * order does not move. A projection that wrote would be a re-timing of his
+   * publishing, which is the one thing he has asked over and over not to
+   * touch.
+   */
+  eq(held[0].scheduled_at, iso('2026-11-12T14:29'), 'the row still carries the instant it was planned for');
+  eq(held[4].scheduled_at, iso('2026-11-12T14:31'), 'and so does the last of them');
 }
 
 /* ───── 18. ONE RECORD OWNS THE CAMPAIGN'S GAP ──────────────────────── */

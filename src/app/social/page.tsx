@@ -68,6 +68,7 @@ import { AUTOMATIC_WAITING_STATUSES, EMPTY_QUEUE_SUMMARY, IN_FLIGHT_STATUSES, TE
 import { keep as keepSeen, markAll, readSeen, same as sameSeen, unseen, writeSeen } from '@/lib/social/seen';
 import { SNAPSHOT, readSnapshot, writeSnapshot } from '@/lib/social/snapshot';
 import { addDaysISO, agree, counted, formatTimeHe, ltr, startOfZonedDay, startOfZonedWeek, zonedDateISO, zonedToUtc } from '@/lib/social/time';
+import { projectQueue, spacingFrom } from '@/lib/social/projection';
 import { stampText } from '@/components/social/DateTime';
 import type { FlowRow } from '@/components/social/LiveFlow';
 import { QUEUE_STEP_LABEL, type ActivityEntry, type BrowserSettings, type Campaign, type ControlSettings, type LimitsSettings, type MediaItem, type PaceId, type QueueStatus, type QueueStep } from '@/lib/social/types';
@@ -1517,6 +1518,69 @@ export default function SocialDashboard() {
    * upcoming — so the card shows the same three facts the rest of the page
    * does, rather than a fourth opinion about them.
    */
+  /*
+   * ─── THE CLOCK ON A WAITING ROW IS A FORECAST, NOT ITS STAMP ───────────
+   *
+   * "רק לעדכן את השעות יציאת פרסום בהתאם לשעה שאני מחזיר, איפה שרשום 14.29"
+   *  — 12.11.2026, looking at a queue at 17:15 whose next five rows all said
+   *  14:29, 14:30, 14:31.
+   *
+   * THEY WERE NOT WRONG STAMPS. The hundred-publication pause held the queue
+   * from 14:46, so every row behind it sat on the instant it was PLANNED for
+   * and the engine simply had not reached it yet. The screen printed that
+   * column and so told him five publications were three hours overdue, when
+   * what was true is that they were minutes away.
+   *
+   * AND THE PROJECTION FOR THIS ALREADY EXISTED. It was written for the
+   * "הפרסומים הקרובים" card, that card was deleted on 09.11 as a duplicate of
+   * this queue, and the clock moved here as the raw column — the note that
+   * moved with it says so in as many words ("`scheduled_at` and not a
+   * projection: the projection existed for the deleted card's 24-hour window
+   * and went with it"). The reasoning was that a held row goes out LATER than
+   * its stamp and never earlier, which is true and is exactly why the stamp
+   * is the wrong thing to print: "later, by an amount this screen will not
+   * tell you" is not an answer to "when".
+   *
+   * NOTHING IS WRITTEN. projectQueue reads; `scheduled_at` is untouched, the
+   * engine claims rows on exactly the column it always did, and the order of
+   * the queue does not move. This is the screen catching up with the machine,
+   * not the machine being re-timed.
+   *
+   * AND IT COSTS NO QUERY. The rows, the campaigns, the two gap floors and
+   * the account's last publication are all already on this page — the same
+   * four reads queueGates() would make, which is why it is not called here.
+   */
+  const queueForecast = data
+    ? projectQueue(
+        /* The in-flight row first: it is happening, so it is the floor the
+           rows behind it wait on. projectQueue gives it no entry of its own
+           and moves its clocks, which is what a row already going out means. */
+        [...data.inFlightRows, ...data.upcoming],
+        {
+          now: new Date(),
+          spacing: spacingFrom(data.limits, data.browser, data.lastPublished),
+          /* `lastPublishedAt: null` per campaign, for the reason queueGates()
+             gives: this page does not read a campaign's OWN last publication,
+             and borrowing the account's would make one round wait out an
+             interval that belongs to another. */
+          gates: Object.fromEntries(data.campaigns.map((c) => [c.id, { schedule: scheduleOf(c), lastPublishedAt: null }])),
+        },
+      )
+    : new Map<string, string | null>();
+
+  /* DD.MM in front, and only when the forecast is not today's. A queue held
+     long enough rolls into tomorrow, and "09:14" with no day on it would be
+     the same sentence the stamp was telling: a time that reads as soon. */
+  const forecastText = (iso: string) => {
+    const day = zonedDateISO(new Date(iso));
+    if (day === zonedDateISO(new Date())) return ltr(formatTimeHe(iso));
+    /* DD.MM off the ZONED day, not the browser's. getDate() would read the
+       viewer's own timezone, and this product decides every date in Israel
+       time — the same reason zonedDateISO exists. */
+    const [, m, d] = day.split('-');
+    return ltr(`${formatTimeHe(iso)} ${d}.${m}`);
+  };
+
   const flowRows: FlowRow[] = data
     ? [
         ...data.doneToday.slice(0, 1).map((r) => ({
@@ -1569,14 +1633,19 @@ export default function SocialDashboard() {
            * and no time at all. Deleting the duplicate would then have cost
            * the answer rather than the repetition.
            *
-           * `scheduled_at` and not a projection: the projection existed for
-           * the deleted card's 24-hour window and went with it, and the stamp
-           * is what the engine claims the row on. A row held by a gate will
-           * go out later than its stamp, never earlier — the same direction
-           * the old note on projectOne records, and the round card above
-           * carries the gate's own sentence when one is holding.
+           * ─── 12.11.2026 · AND IT IS THE FORECAST, NOT THE STAMP ───────
+           *
+           * This printed `scheduled_at`, on the reasoning that a held row
+           * goes out later than its stamp and never earlier. True — and it
+           * made this row say 14:29 at 17:15 while the publication it names
+           * was four minutes away. See the note above queueForecast.
+           *
+           * The stamp is still the fallback, for a row the projection
+           * declines to forecast at all (one waiting for a person, one whose
+           * campaign window cannot be read): printing the column it was
+           * stamped with is better than printing nothing.
            */
-          at: ltr(formatTimeHe(r.scheduled_at)),
+          at: forecastText(queueForecast.get(r.id) ?? r.scheduled_at),
         })),
       ]
     : [];

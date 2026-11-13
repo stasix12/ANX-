@@ -5746,6 +5746,32 @@ const scenario: { step: string; line: string }[] = [];
    * באותו היום") printed on a tile a few centimetres below. A second number
    * up here could only disagree with it.
    */
+  /*
+   * ─── ONE SENTENCE PER BRANCH, NOT A PREFIX PLUS A TAIL ──────────────────
+   *
+   * The repeat line was built as a fixed prefix — "חזרה יומית פעילה — הסבב
+   * הבא ייפתח" — plus a branch, and the open-window branch began "— חלון
+   * הפרסום פתוח, הסבב הבא ייפתח בכל רגע". So that state rendered "הסבב הבא
+   * ייפתח" twice in one line.
+   *
+   * Each branch carries its own whole sentence now, which is why the opening
+   * words appear once per branch and the promise appears at most once in
+   * each. Counted rather than pattern-matched: a fourth branch written the
+   * old way puts the count back out of step.
+   */
+  {
+    const next = readFileSync(new URL('../../src/components/social/NextPublication.tsx', import.meta.url), 'utf8');
+    const lines = next.split('\n').filter((l) => !l.trimStart().startsWith('*') && !l.trimStart().startsWith('/*'));
+    const branches = lines.filter((l) => l.includes('חזרה יומית פעילה'));
+    assert.equal(branches.length, 3, `the repeat line has one whole sentence per branch — found ${branches.length}`);
+    for (const line of branches) {
+      assert.equal(
+        (line.match(/הסבב הבא ייפתח/g) ?? []).length <= 1,
+        true,
+        `a branch may promise the next round once, not twice — "${line.trim().slice(0, 90)}"`,
+      );
+    }
+  }
   {
     const flow = readFileSync(new URL('../../src/components/social/LiveFlow.tsx', import.meta.url), 'utf8');
     /* The heading as JSX: the words alone on their line, with nothing

@@ -1582,6 +1582,68 @@ async function main(): Promise<void> {
        not have bought quiet by making everything quiet. */
     const failed = explainFailure({ status: 'failed' as QueueStatus, error: 'משהו נשבר', skip_reason: null });
     expect('published-note', 'PUB-6', 'a failed row still says so, in red, with a retry', [failed.headline, failed.tone, failed.canRetry], ['הפרסום נכשל', 'error', true], NONE);
+
+    /* ===================================================================== */
+    /*  THE RATE LIMIT, AND THE ADVICE THAT NEARLY CAUSED A SECOND POST      */
+    /*                                                                      */
+    /*  worker/facebook/composer.ts:597-598 throws TWO different sentences   */
+    /*  for one rate limit, and both begin "פייסבוק הגביל את קצב הפרסום":    */
+    /*                                                                      */
+    /*    refused  → "…ולא קיבל את הפוסט. הפוסט לא עלה לקבוצה…"               */
+    /*    unknown  → "…הטקסט כבר לא היה בחלון, ולכן אי אפשר לדעת אם הפוסט     */
+    /*                עלה — בדקו בקבוצה לפני שמנסים שוב…"                     */
+    /*                                                                      */
+    /*  AND THE STATUS SETTLES IT WHATEVER THE TEXT SAYS:                    */
+    /*  social-worker.ts:3173 writes `needs_attention` EXACTLY when          */
+    /*  maybeLive is true and `failed` when the post was visibly refused, so  */
+    /*  a rate-limited row in needs_attention is BY CONSTRUCTION a row whose  */
+    /*  post may already be on Facebook.                                     */
+    /*                                                                      */
+    /*  A first version of this branch read the refused sentence, believed    */
+    /*  it, and told the owner "אין צורך לבדוק בקבוצה" with a retry — on      */
+    /*  every such row, including the unknown ones. That is the one outcome   */
+    /*  this product may never produce: "רשום דולג, אבל בפועל נכנסתי וראיתי   */
+    /*  שזה פרסם, זה חמור מאד."                                              */
+    /* ===================================================================== */
+    for (const [name, note] of [
+      ['refused', 'פייסבוק הגביל את קצב הפרסום מהחשבון הזה ולא קיבל את הפוסט. הפוסט לא עלה לקבוצה. צריך להאט את קצב הפרסום ולנסות שוב מאוחר יותר. (מה שפייסבוק כתבה: "אנו מגבילים את התדירות שבה אפשר לפרסם")'],
+      ['outcome unknown', 'פייסבוק הגביל את קצב הפרסום מהחשבון הזה. הטקסט כבר לא היה בחלון, ולכן אי אפשר לדעת אם הפוסט עלה — בדקו בקבוצה לפני שמנסים שוב. (מה שפייסבוק כתבה: "אנו מגבילים את התדירות")'],
+    ] as const) {
+      const info = explainFailure({ status: 'needs_attention' as QueueStatus, error: note, skip_reason: null });
+      expect(
+        'rate-limit-advice',
+        'RL-1',
+        `a parked rate-limited row (${name}) is told to look in the group before anything goes out again`,
+        info.advice.includes('בדקו בקבוצה'),
+        true,
+        'needs_attention for a rate-limited row MEANS the post may already be live — the advice may not send him past that',
+      );
+      expect(
+        'rate-limit-advice',
+        'RL-2',
+        `and it never claims the post did not go up (${name})`,
+        /לא עלה|לא קיבלה את הפוסט|אין צורך לבדוק/.test(info.advice + info.headline),
+        false,
+        'the worker writes that sentence for one of the two cases and the status contradicts it for both',
+      );
+      expect(
+        'rate-limit-advice',
+        'RL-3',
+        `while still naming the cause, so he knows why it stopped (${name})`,
+        info.headline.includes('הגבילה את קצב הפרסום'),
+        true,
+        'a row parked with no stated cause is what sent him hunting through the history',
+      );
+    }
+    /* A rate limit on a row the worker could see was REFUSED is a different
+       row — `failed`, not parked — and it keeps the calm answer further down
+       the file: nothing is live, and the engine retries it by itself. */
+    const refusedRate = explainFailure({
+      status: 'failed' as QueueStatus,
+      error: 'פייסבוק הגביל את קצב הפרסום מהחשבון הזה ולא קיבל את הפוסט. הפוסט לא עלה לקבוצה.',
+      skip_reason: null,
+    });
+    expect('rate-limit-advice', 'RL-4', 'a visibly refused rate limit is still answered as the quiet case', refusedRate.headline, 'פייסבוק ביקשה להאט', NONE);
   }
 
   const pin = (name: string, haystack: string, needle: string) =>

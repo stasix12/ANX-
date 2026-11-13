@@ -375,6 +375,33 @@ const st = (
     { kind: 'ended', stopped: false, repeats: true, opens: at('2026-10-07T08:00').toISOString(), openNow: false },
     'and so does the same round after the window has shut',
   );
+  /*
+   * ─── AND "TOMORROW" SURVIVES A 25-HOUR DAY ──────────────────────────────
+   *
+   * Sunday 25.10.2026 is the day Israel goes back to +02:00 at 02:00, so the
+   * local day is 25 hours long — and it is a publishing day on this schedule.
+   * This branch asked for "tomorrow" as local midnight PLUS 86,400,000ms,
+   * which on that day is 23:00 of the SAME Sunday. nextAllowedAt() answers
+   * that minute (it is inside the window), `opens` accepts it as future, and
+   * the card prints a same-day appointment — the exact fault this branch
+   * exists to remove, returning twice a year.
+   *
+   * Read at 10:00, with the round finished and today already published, the
+   * honest answer is MONDAY's opening hour.
+   */
+  eq(
+    scheduleReadout(ref, st('completed', null, { published: 219 }), at('2026-10-25T10:00'), on),
+    { kind: 'ended', stopped: false, repeats: true, opens: at('2026-10-26T08:00').toISOString(), openNow: false },
+    'on the 25-hour day, tomorrow is still the next CALENDAR day and not 23:00 tonight',
+  );
+  /* And the spring change, where the day is 23 hours: adding 24 would overshoot
+     into the day after next if the hour mattered. It does not here — the
+     answer is the next calendar day either way, which is the point. */
+  eq(
+    scheduleReadout(ref, st('completed', null, { published: 219 }), at('2026-03-29T10:00'), on),
+    { kind: 'ended', stopped: false, repeats: true, opens: at('2026-03-30T08:00').toISOString(), openNow: false },
+    'and on the 23-hour day it is the next calendar day too',
+  );
   /* Outside the window it is the next chosen day's opening hour, never a
      minute that has gone. Friday noon against a Sunday-to-Thursday schedule. */
   eq(

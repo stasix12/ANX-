@@ -108,30 +108,37 @@ export function explainFailure(row: Pick<QueueRow, 'status' | 'error' | 'skip_re
       };
     }
     /*
-     * ─── FACEBOOK SAID NO, AND THAT IS NOT THE SAME AS "WE DO NOT KNOW" ───
+     * ─── THE RATE LIMIT, SAID WITHOUT PROMISING WHAT NOBODY KNOWS ─────────
      *
-     * MEASURED ON HIS ACCOUNT, 13.11.2026: of 347 rows in `needs_attention`,
-     * 60 carry the rate-limit text — and that text contains, in the worker's
-     * own words, "הפוסט לא עלה לקבוצה". Facebook refused the post and said so.
-     * They were falling through to the sentence below, which sends him to the
-     * group to check whether something that was refused is there, and then
-     * tells him to "דלגו" if it is.
+     * THE FIRST VERSION OF THIS BRANCH WAS A DOUBLE-POST HAZARD, and it is
+     * worth writing down exactly how, because it read as the safe option.
      *
-     * So they are answered on their own: nothing to check, nothing to decide,
-     * and retrying is the one case here where a second attempt CANNOT publish
-     * twice — because the first one never published at all.
+     * It said "אין צורך לבדוק בקבוצה: פייסבוק לא קיבלה את הפוסט" and offered
+     * a retry, on the strength of the worker's own sentence — 60 of his 347
+     * parked rows carry "ולא קיבל את הפוסט. הפוסט לא עלה לקבוצה". But that
+     * sentence is only ONE of the two the composer throws for a rate limit
+     * (worker/facebook/composer.ts:597-598). The other is the unknown case in
+     * so many words: "הטקסט כבר לא היה בחלון, ולכן אי אפשר לדעת אם הפוסט עלה
+     * — בדקו בקבוצה לפני שמנסים שוב". Both begin "פייסבוק הגביל את קצב
+     * הפרסום", so one pattern matched both.
      *
-     * `canRetry` is true and `needsOwner` is true together, which is the honest
-     * pair: a person has to press it. The rate-limit branch further down this
-     * file says "המערכת ממתינה ותנסה שוב לבד", and that is true of a DEFERRED
-     * row and false of this one — a row waiting on a person is not a status any
-     * worker collects (CLAIMABLE_STATUSES), so nothing will ever pick it up on
-     * its own. One cannot be reused for the other.
+     * AND THE STATUS SETTLES IT WHATEVER THE TEXT SAYS. social-worker.ts:3173
+     * writes `needs_attention` for a rate-limited row EXACTLY when
+     * `maybeLive` is true, and `failed` when the post was visibly refused —
+     * so a rate-limited row that reaches THIS branch is, by construction, a
+     * row whose post may already be on Facebook. The visibly-refused ones are
+     * `failed` and are answered further down this file.
+     *
+     * So the headline names the cause, which is useful and true, and the
+     * advice keeps the one instruction that matters: look in the group before
+     * anything goes out again. Retrying is still offered — it is how a row
+     * that really did not publish gets published — but it is no longer called
+     * safe. "רשום דולג, אבל בפועל נכנסתי וראיתי שזה פרסם, זה חמור מאד."
      */
     if (/הגביל את קצב|מגבילים את התדירות/.test(text)) {
       return {
-        headline: 'פייסבוק הגבילה את קצב הפרסום — הפוסט לא עלה',
-        advice: 'אין צורך לבדוק בקבוצה: פייסבוק לא קיבלה את הפוסט. אפשר "נסה שוב" מהתפריט של השורה אחרי שההגבלה עוברת, או להשאיר — הפרסומים האחרים ממשיכים לצאת בזמן.',
+        headline: 'פייסבוק הגבילה את קצב הפרסום',
+        advice: 'הפרסום נעצר באמצע בגלל ההגבלה, וייתכן שהפוסט עלה בכל זאת. בדקו בקבוצה לפני שתנסו שוב: אם הוא לא שם — "נסה שוב" מהתפריט של השורה, אחרי שההגבלה עוברת. אם הוא כן שם — אל תעשו כלום, השורה הזאת מונעת ממנו לצאת שוב.',
         canRetry: true,
         needsOwner: true,
         tone: 'warn',

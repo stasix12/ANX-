@@ -6,7 +6,7 @@ import {
   type CampaignSchedule,
 } from './campaign-schedule';
 import type { CampaignState } from './campaign';
-import { startOfZonedDay } from './time';
+import { addDaysISO, zonedDateISO, zonedToUtc } from './time';
 import { NO_SPACING, projectOne, type AccountSpacing } from './projection';
 
 /**
@@ -315,7 +315,27 @@ export function scheduleReadout(
     /* `progress.published` is this round's own count, and the dashboard reads
        it today-scoped while the repeat is on — so "we already ran today". */
     const ranToday = state.progress.published > 0;
-    const from = insideWindow && ranToday ? new Date(startOfZonedDay(now).getTime() + 24 * 60 * 60_000) : now;
+    /*
+     * ─── TOMORROW IS A DATE, NOT 86,400,000 MILLISECONDS ────────────────
+     *
+     * This read `startOfZonedDay(now).getTime() + 24 * 60 * 60_000`, and on
+     * Israel's two clock changes a day is not 24 hours. On Sunday 25.10.2026
+     * the clocks go back at 02:00 and the local day is 25 HOURS long, so
+     * local midnight plus 24h is 23:00 of the SAME day — and Sunday is a
+     * publishing day on this owner's Sun–Thu schedule. nextAllowedAt() would
+     * then answer 23:00 today, `opens` would accept it as "future", and the
+     * card would print a same-day minute as the hour the next round opens:
+     * exactly the fault this branch exists to remove, back twice a year.
+     *
+     * startOfZonedDay(addDaysISO(...)) resolves the day in the calendar and
+     * then asks the zone for its midnight, which is what every other date in
+     * this product does — see startOfZonedWeek's own note, written after the
+     * same trap.
+     */
+    const from =
+      insideWindow && ranToday
+        ? zonedToUtc(addDaysISO(zonedDateISO(now), 1), '00:00')
+        : now;
     const opened = repeats && on && schedule ? nextAllowedAt(schedule, from) : null;
     const opens = opened && opened.getTime() > now.getTime() ? opened.toISOString() : null;
     return {

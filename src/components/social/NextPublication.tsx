@@ -508,14 +508,20 @@ function Words({
              * re-publishes the same post to the same groups on its own is the
              * one state on this card worth noticing from across a room.
              */
+            /*
+             * THE PREFIX IS PER-BRANCH, and it has to be: written once above
+             * the switch it read "חזרה יומית פעילה — הסבב הבא ייפתח" and then
+             * the open-window branch added "— חלון הפרסום פתוח, הסבב הבא
+             * ייפתח בכל רגע" after it, so the sentence said "הסבב הבא ייפתח"
+             * twice in one line. Each branch is a whole sentence now.
+             */
             <>
-              חזרה יומית פעילה — הסבב הבא ייפתח
               {readout.opens ? (
                 /* THE DAY IN WORDS, not only in digits: "היום (ו׳), 13.11"
                    answers the question he actually asks — "מתי" — where a
                    bare 13.11 makes him work out whether that is today. */
                 <>
-                  {` ${dayRelativeHe(new Date(readout.opens), new Date(now))}, `}
+                  {`חזרה יומית פעילה — הסבב הבא ייפתח ${dayRelativeHe(new Date(readout.opens), new Date(now))}, `}
                   <span dir="ltr" className="inline-block tabular-nums">{formatDayMonthHe(readout.opens)}</span>
                   {' בשעה '}
                   <span dir="ltr" className="inline-block tabular-nums">{formatInstantHe(readout.opens)}</span>
@@ -525,9 +531,9 @@ function Words({
                    answer is "any minute now" — NOT the current clock time,
                    which is what nextAllowedAt() hands back inside a window
                    and what this card used to print as an appointment. */
-                ' — חלון הפרסום פתוח, הסבב הבא ייפתח בכל רגע'
+                'חזרה יומית פעילה — חלון הפרסום פתוח, הסבב הבא ייפתח בכל רגע'
               ) : (
-                ' לבד'
+                'חזרה יומית פעילה — הסבב הבא ייפתח לבד'
               )}
             </>
           ) : readout.stopped ? (

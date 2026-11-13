@@ -433,9 +433,11 @@ export default function SocialDashboard() {
         getControl(),
         needTargets ? listTargets() : Promise.resolve(null),
         listQueue({ status: ['manual_pending'], limit: 20 }),
-        /* One column, no joins — see listWaitingForYouIds. It is the cheapest
-           read in this batch and the only one that knows WHICH rows the
-           orange bar is about. */
+        /* One column, no joins, and the exact count is independent of the one
+           row the limit carries back — see waitingForYouSince in client.ts.
+           It knows HOW MANY are waiting and the instant to store, not WHICH
+           rows: that is the trade seen.ts documents. The cheapest read in
+           this batch either way. */
         waitingForYouSince(readSeenUntil()),
         listActivity(30),
         // Ascending, because the limit is applied after the sort: read

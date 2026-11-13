@@ -969,7 +969,27 @@
  * the oldest from 30.09, 284 of them carrying "חלון הפוסט לא נסגר אחרי
  * הלחיצה על פרסום" and 60 the rate limit.
  */
-export const WORKER_VERSION = '4.68.0';
+/*
+ * 4.68.0 → 4.69.0, AND THE RELEASE LIST WAS ASKED FIRST.
+ *
+ * v4.68.0 was published at 15:45:13 today, so it is out and 4.69.0 is free.
+ * This file cannot check that itself — no network — which is why the habit is
+ * to ask before every bump rather than once.
+ *
+ * WHY THIS CARRIES A VERSION AT ALL, since none of it runs on the PC: the
+ * fingerprint covers every file the installer bundles, and
+ * src/lib/social/schedule-readout.ts is one of them (build-app.mjs aliases @
+ * to src, so a module the worker imports transitively ships with it). The
+ * change in it is the card's own arithmetic — "tomorrow" resolved as a date
+ * rather than as 86,400,000ms, so Israel's 25-hour day on 25.10 stops being
+ * read as the same day — and the owner's PC gains nothing from it. It ships
+ * because a bundled file may not differ between what is published and what is
+ * built, which is the whole point of the fingerprint.
+ *
+ * What the PC DOES gain is nothing new: 4.68.0's two corrected error messages
+ * are already in it. He needs one update either way, and this makes it one.
+ */
+export const WORKER_VERSION = '4.69.0';
 
 /**
  * A FINGERPRINT OF EVERYTHING THE INSTALLER CARRIES.
@@ -1720,4 +1740,4 @@ export const WORKER_VERSION = '4.68.0';
  * worker/facebook/join.ts and written by worker/social-worker.ts, both of
  * which run only on his PC. Numbers under WORKER_VERSION above.
  */
-export const WORKER_FINGERPRINT = '475aa84e9cbfc129';
+export const WORKER_FINGERPRINT = 'a5ed5d419e69cf7b';

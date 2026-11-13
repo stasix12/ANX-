@@ -77,8 +77,43 @@ export function PullToRefresh({ onRefresh, children }: { onRefresh: () => Promis
      */
     const blocked = () => document.body.style.overflow === 'hidden' || document.body.hasAttribute('data-scroll-locked');
 
+    /*
+     * ─── A LIST INSIDE THE PAGE IS NOT THE PAGE ──────────────────────────
+     *
+     * "תוסיף כאן אופציה של גלילה למעלה למטה בתוך החלון תורים לראות מה כבר
+     *  פורסם ומה עומד להתפרסם."
+     *
+     * "תור פרסומים" is now a scroll box of its own, and scrolling it BACK —
+     * to the publications that have already gone out — means dragging the
+     * finger DOWN. That is the same gesture as this one, and at the top of
+     * the page this handler would take it: `preventDefault()` on the move,
+     * the list frozen, and the dashboard reloading instead. The one thing he
+     * asked for would be the one thing that could not be done.
+     *
+     * So a touch that starts inside something that CAN still scroll back is
+     * that thing's touch, not the page's. Walked up from the target rather
+     * than asked of one known element, because the rule is about any nested
+     * scroller and this component knows about none of them by name.
+     *
+     * `scrollTop > 0` and not "is scrollable": a list already at its own top
+     * has nothing left to give back, and the pull should pass through to the
+     * page exactly as it does everywhere else — which is what a person
+     * expects from the second tug.
+     */
+    const insideScrolledList = (node: EventTarget | null): boolean => {
+      let el = node instanceof Element ? node : null;
+      while (el && el !== document.body) {
+        if (el.scrollTop > 0) {
+          const how = getComputedStyle(el).overflowY;
+          if (how === 'auto' || how === 'scroll') return true;
+        }
+        el = el.parentElement;
+      }
+      return false;
+    };
+
     const start = (e: TouchEvent) => {
-      if (busy.current || blocked() || e.touches.length !== 1 || !atTop()) {
+      if (busy.current || blocked() || e.touches.length !== 1 || !atTop() || insideScrolledList(e.target)) {
         g.current.active = false;
         return;
       }

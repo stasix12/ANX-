@@ -610,7 +610,254 @@ async function main(): Promise<void> {
         eq(five.labels.filter((t) => t === 'בתור').length, 4, `${width}px: and the four behind it say so`);
       }
 
-      await page.evaluate(() => window.__rows(null));
+      /*
+       * ─── §7b — THE DAY SCROLLS INSIDE THE CARD ─────────────────────────
+       *
+       * "תוסיף כאן אופציה של גלילה למעלה למטה בתוך החלון תורים לראות מה כבר
+       *  פורסם ומה עומד להתפרסם."
+       *
+       * Measured, because every part of it can fail silently: a box with no
+       * height limit grows the card to a mile instead of scrolling; a box
+       * that opens at its top shows him this morning instead of now; a ring
+       * clipped by the scroller takes the one row that is supposed to stand
+       * out; and a list that moves itself while he is reading is worse than
+       * one that does not move at all.
+       *
+       * THE SHAPE IS HIS OWN: on 13.11.2026 his account had 195 publications
+       * finished today and 100 waiting, so 30 above the live row and 40 below
+       * it is a window at both ends and not a list that happens to be long.
+       */
+      {
+        await page.evaluate(() => {
+          const rows: { id: string; name: string; state: 'done' | 'live' | 'next'; at?: string; note?: string }[] = [];
+          for (let i = 0; i < 30; i += 1) rows.push({ id: 'h' + i, name: 'קבוצה שפורסמה ' + i, state: 'done', at: '09:' + String(10 + (i % 50)).padStart(2, '0') });
+          rows.push({ id: 'live', name: 'הקבוצה שמתפרסמת עכשיו', state: 'live', note: 'מעלה מדיה' });
+          for (let i = 0; i < 40; i += 1) rows.push({ id: 'u' + i, name: 'קבוצה בתור ' + i, state: 'next', at: '19:' + String(10 + (i % 50)).padStart(2, '0') });
+          window.__rows(rows as never);
+          window.__queueNotes('מוצגים 30 האחרונים שהסתיימו היום ו-40 הקרובים בתור');
+        });
+        await page.waitForTimeout(200);
+
+        for (const width of [320, 360, 390, 430]) {
+          await page.setViewportSize({ width, height: 1400 });
+          await page.waitForTimeout(200);
+          const box = await page.evaluate(() => {
+            const q = document.querySelector('[data-panel] [data-flow] .anxf-qcard') as HTMLElement;
+            const ul = q.querySelector('.anxf-queue') as HTMLElement;
+            const st = getComputedStyle(ul);
+            const live = q.querySelector('li[data-row="live"]') as HTMLElement;
+            const b = ul.getBoundingClientRect();
+            const r = live.getBoundingClientRect();
+            const card = q.getBoundingClientRect();
+            const cst = getComputedStyle(q);
+            const left = card.left + parseFloat(cst.borderLeftWidth) + parseFloat(cst.paddingLeft);
+            const right = card.right - parseFloat(cst.borderRightWidth) - parseFloat(cst.paddingRight);
+            const li = [...q.querySelectorAll<HTMLElement>('.anxf-queue li')].map((el) => el.getBoundingClientRect());
+            return {
+              rows: li.length,
+              overflowY: st.overflowY,
+              overscroll: st.overscrollBehaviorY,
+              focusable: ul.getAttribute('tabindex'),
+              role: ul.getAttribute('role'),
+              label: ul.getAttribute('aria-label'),
+              scrollable: ul.scrollHeight > ul.clientHeight + 4,
+              clientH: Math.round(ul.clientHeight),
+              cardH: Math.round(card.height),
+              scrollTop: Math.round(ul.scrollTop),
+              /* The live row, in the box's own coordinates. */
+              liveTop: Math.round(r.top - b.top),
+              liveVisible: r.bottom > b.top + 1 && r.top < b.bottom - 1,
+              /* The ring the live row wears must not be sliced by the
+                 scroller: its border box has to sit at least 3px inside. */
+              ringRoom: Math.round(Math.min(r.left - b.left, b.right - r.right)),
+              worst: Math.round(Math.max(...li.map((x) => Math.max(left - x.left, x.right - right)))),
+              notes: [...q.querySelectorAll<HTMLElement>('.anxf-qmore')].map((el) => (el.textContent ?? '').trim()),
+              /* The notes belong to the card, not to the scrolling list — one
+                 at each end, outside the box, so they are readable without
+                 scrolling to find out that there is more to scroll to. */
+              notesOutside: [...q.querySelectorAll('.anxf-qmore')].every((el) => !ul.contains(el)),
+              head: (q.querySelector('.anxf-qhead') as HTMLElement).textContent?.trim() ?? '',
+              cutAt: [...q.querySelectorAll<HTMLElement>('.anxf-row-at')].some((el) => el.scrollWidth > el.clientWidth + 1),
+              pageOverflow: document.documentElement.scrollWidth > document.documentElement.clientWidth,
+            };
+          });
+
+          eq(box.rows, 71, `${width}px: all 71 rows are in the list — 30 behind, the live one, 40 ahead`);
+          eq(box.overflowY, 'auto', `${width}px: THE LIST IS THE SCROLLER — got overflow-y: ${box.overflowY}`);
+          /*
+           * AND NO `overscroll-behavior`, matching the product's other two
+           * scroll boxes and Timeline.tsx's written reason for it: "when the
+           * list reaches its end the gesture should carry on scrolling the
+           * page … what stops the box feeling like a trap". The
+           * pull-to-refresh half is handled in PullToRefresh.tsx, which is
+           * where worker/test/pull-refresh.test.ts measures it.
+           */
+          eq(box.overscroll, 'auto', `${width}px: the box does not trap the gesture at its own end — got ${box.overscroll}`);
+          eq(box.focusable, '0', `${width}px: and it is reachable from a keyboard, like every other scroll box here`);
+          eq(box.role, 'group', `${width}px: named as a region`);
+          is((box.label ?? '').includes('נגללת'), `${width}px: and its name says it scrolls — "${box.label}"`);
+          is(box.scrollable, `${width}px: 71 rows in a ${box.clientH}px box must actually scroll`);
+          is(box.cardH < 520, `${width}px: the card stays a card — ${box.cardH}px tall with 71 rows in it`);
+          /*
+           * IT OPENS AT NOW. Scrolled to the top it would show the first
+           * publication of the morning; what he asked to see is what is
+           * going out and what is next, with the morning behind him.
+           */
+          is(box.scrollTop > 0, `${width}px: the box opens scrolled past the history, not at the top of the day`);
+          is(box.liveVisible, `${width}px: and the publication going out right now is the row it opens on`);
+          is(Math.abs(box.liveTop) <= 8, `${width}px: with that row at the top of the window — it sits at ${box.liveTop}px`);
+          is(box.ringRoom >= 2, `${width}px: the live row's ring is not sliced by the scroller (${box.ringRoom}px of room)`);
+          is(box.worst <= 1, `${width}px: NO ROW MAY LEAVE ITS CARD, with seventy of them as with seven — over by ${box.worst}px`);
+          is(!box.pageOverflow, `${width}px: and a long queue does not push the page sideways`);
+          /*
+           * ONE LINE, AND IT IS OUTSIDE THE SCROLLER.
+           *
+           * Inside it, the sentence that says "this is a window" would itself
+           * have to be scrolled to. One and not two because the second line
+           * put the dashboard 20px over its height ceiling — measured, in
+           * dashboard-size.test.ts, once that suite was fed this card's real
+           * shape instead of three rows.
+           */
+          eq(box.notes.length, 1, `${width}px: the window says what it is showing, once`);
+          eq(box.notesOutside, true, `${width}px: and it is drawn outside the scroller, where it can be read without scrolling`);
+          is(box.notes[0].includes('30') && box.notes[0].includes('40'), `${width}px: naming both ends of the window — "${box.notes[0]}"`);
+          /*
+           * AND THE HEADING CLAIMS NO NUMBER AT ALL.
+           *
+           * It read `תור פרסומים ({rows.length})` while the list WAS the
+           * queue. The list is now a window onto a longer day, so its length
+           * is a fact about this card — and every exact count on this screen
+           * is scoped differently from the next, with the owner's own iron
+           * rule ("חישוב של ממתינים בתור זה רק מה שאמור לצאת באותו היום")
+           * printed on a tile a few centimetres below. A second number up
+           * here could only disagree with it.
+           */
+          eq(box.head, 'תור פרסומים', `${width}px: the heading names the card and counts nothing — "${box.head}"`);
+          is(!/\d/.test(box.head), `${width}px: no digit may creep back into it — "${box.head}"`);
+          /* The time on a row is `flex: none` and the scrollbar takes width
+             from the same line: it may never be cut to fit. */
+          eq(box.cutAt, false, `${width}px: no row's clock is clipped by the scrollbar's gutter`);
+        }
+
+        /* ── AND SCROLLING BACK REALLY REACHES THE MORNING ──────────────── */
+        await page.setViewportSize({ width: 390, height: 1400 });
+        await page.waitForTimeout(140);
+        const back = await page.evaluate(() => {
+          const ul = document.querySelector('[data-panel] [data-flow] .anxf-queue') as HTMLElement;
+          ul.scrollTop = 0;
+          const first = ul.querySelector('li') as HTMLElement;
+          const b = ul.getBoundingClientRect();
+          const r = first.getBoundingClientRect();
+          return { name: (first.querySelector('.anxf-row-name') as HTMLElement)?.textContent?.trim() ?? '', visible: r.top >= b.top - 2 && r.bottom <= b.bottom + 2 };
+        });
+        eq(back.name, 'קבוצה שפורסמה 0', 'scrolled to the top, the oldest publication of the day is the first row');
+        is(back.visible, 'and it is inside the window rather than clipped by it');
+
+        /*
+         * ─── AND IT DOES NOT MOVE WHILE HE IS READING ───────────────────
+         *
+         * The anchor changes every time a publication finishes — about once a
+         * minute on his account — and this screen reloads itself every thirty
+         * seconds. Re-pinning while he is scrolled back through the morning
+         * would drag the list out from under his finger, which is the one
+         * thing the feature exists to allow. So: scrolled away, a new row
+         * arriving may not move him.
+         */
+        const held = await page.evaluate(async () => {
+          const ul = document.querySelector('[data-panel] [data-flow] .anxf-queue') as HTMLElement;
+          ul.scrollTop = 0;
+          const before = ul.scrollTop;
+          /* A publication finishes: the live row becomes done and the row
+             behind it goes live — exactly what the next poll delivers. */
+          const rows: { id: string; name: string; state: 'done' | 'live' | 'next'; at?: string; note?: string }[] = [];
+          for (let i = 0; i < 30; i += 1) rows.push({ id: 'h' + i, name: 'קבוצה שפורסמה ' + i, state: 'done', at: '09:' + String(10 + (i % 50)).padStart(2, '0') });
+          rows.push({ id: 'live', name: 'הקבוצה שמתפרסמת עכשיו', state: 'done', at: '19:09' });
+          rows.push({ id: 'u0', name: 'קבוצה בתור 0', state: 'live', note: 'פותח את הקבוצה' });
+          for (let i = 1; i < 40; i += 1) rows.push({ id: 'u' + i, name: 'קבוצה בתור ' + i, state: 'next', at: '19:' + String(10 + (i % 50)).padStart(2, '0') });
+          window.__rows(rows as never);
+          await new Promise((r) => setTimeout(r, 260));
+          return { before, after: ul.scrollTop };
+        });
+        eq(held.after, held.before, 'a publication finishing may not scroll the list out from under someone reading the morning');
+
+        /* But someone WATCHING the live row is kept with it: put the box back
+           on the anchor and let the next publication start. */
+        const followed = await page.evaluate(async () => {
+          const ul = document.querySelector('[data-panel] [data-flow] .anxf-queue') as HTMLElement;
+          const live = ul.querySelector('li[data-row="live"]') as HTMLElement;
+          ul.scrollTop = Math.max(0, live.getBoundingClientRect().top - ul.getBoundingClientRect().top + ul.scrollTop - 3);
+          const rows: { id: string; name: string; state: 'done' | 'live' | 'next'; at?: string; note?: string }[] = [];
+          for (let i = 0; i < 30; i += 1) rows.push({ id: 'h' + i, name: 'קבוצה שפורסמה ' + i, state: 'done', at: '09:' + String(10 + (i % 50)).padStart(2, '0') });
+          rows.push({ id: 'live', name: 'הקבוצה שמתפרסמת עכשיו', state: 'done', at: '19:09' });
+          rows.push({ id: 'u0', name: 'קבוצה בתור 0', state: 'done', at: '19:10' });
+          rows.push({ id: 'u1', name: 'קבוצה בתור 1', state: 'live', note: 'פותח את הקבוצה' });
+          for (let i = 2; i < 40; i += 1) rows.push({ id: 'u' + i, name: 'קבוצה בתור ' + i, state: 'next', at: '19:' + String(10 + (i % 50)).padStart(2, '0') });
+          window.__rows(rows as never);
+          await new Promise((r) => setTimeout(r, 260));
+          const now = ul.querySelector('li[data-row="live"]') as HTMLElement;
+          const b = ul.getBoundingClientRect();
+          const r = now.getBoundingClientRect();
+          return { top: Math.round(r.top - b.top), visible: r.bottom > b.top && r.top < b.bottom };
+        });
+        is(followed.visible, 'someone watching the live row is kept with it when the next publication starts');
+        is(Math.abs(followed.top) <= 8, `and it is put back at the top of the window — ${followed.top}px`);
+      }
+
+      /*
+       * ─── §7c — A CANCELLED PUBLICATION IS NOT A FAILED ONE ─────────────
+       *
+       * The dashboard mapped every finished row that was not `published` to
+       * 'failed', which draws a red cross and the word נכשל. With one
+       * finished row on the card that was nearly invisible. With a window of
+       * today's finished rows it is a wall of red over publications that were
+       * stopped on purpose — "סיים ואפס" skips every remaining row of a round
+       * in one press, and listTimelineDone returns skipped rows like any
+       * other terminal one.
+       *
+       * The owner has paid for this confusion before, from the other
+       * direction: "רשום דולג, אבל בפועל נכנסתי וראיתי שזה פרסם, זה חמור
+       * מאד." A word on a row is a claim about what happened to it.
+       */
+      {
+        await page.evaluate(() => {
+          window.__rows([
+            { id: 's1', name: 'קבוצה שדולגה', state: 'skipped', at: '09:40', note: 'בוטל ידנית' },
+            { id: 'f1', name: 'קבוצה שנכשלה', state: 'failed', at: '09:41', note: 'לא נמצא חלון הפוסט' },
+            { id: 'd1', name: 'קבוצה שפורסמה', state: 'done', at: '09:42' },
+            { id: 'n1', name: 'קבוצה בתור', state: 'next', at: '09:50' },
+          ] as never);
+        });
+        await page.waitForTimeout(160);
+        /* No named arrow in here: tsx's keepNames injects a `__name` helper
+           that does not exist in the page, and the whole evaluate throws. */
+        const marks = await page.evaluate(() => {
+          const q = document.querySelector('[data-panel] [data-flow] .anxf-qcard') as HTMLElement;
+          const all = [...q.querySelectorAll<HTMLElement>('li')];
+          const skipped = all.find((li) => (li.textContent ?? '').includes('קבוצה שדולגה'))!;
+          const failed = all.find((li) => (li.textContent ?? '').includes('קבוצה שנכשלה'))!;
+          const plain = all.find((li) => (li.textContent ?? '').includes('קבוצה שפורסמה'))!;
+          return {
+            skippedState: skipped.getAttribute('data-row'),
+            skippedText: (skipped.textContent ?? '').trim(),
+            skippedTint: getComputedStyle(skipped).backgroundColor,
+            failedText: (failed.textContent ?? '').trim(),
+            failedTint: getComputedStyle(failed).backgroundColor,
+            plainTint: getComputedStyle(plain).backgroundColor,
+          };
+        });
+        eq(marks.skippedState, 'skipped', 'a cancelled row is drawn as its own state, not folded into failed');
+        is(marks.skippedText.includes('דולג'), `and says so in its own word — "${marks.skippedText}"`);
+        is(!marks.skippedText.includes('נכשל'), 'and never calls a cancellation a failure');
+        is(marks.skippedText.includes('בוטל ידנית'), 'carrying the reason the database already holds for it');
+        eq(marks.skippedTint, marks.plainTint, 'it keeps the card\u2019s own background — the pink tint belongs to something that went wrong');
+        is(marks.failedTint !== marks.plainTint, 'while a real failure still gets that tint');
+        is(marks.failedText.includes('נכשל'), 'and still says what it is');
+      }
+
+      await page.evaluate(() => {
+        window.__rows(null);
+        window.__queueNotes(null);
+      });
       await page.waitForTimeout(140);
     }
 

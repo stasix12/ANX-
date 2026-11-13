@@ -251,7 +251,21 @@ export type FlowRow = {
    * placeholder would say less than the mark does.
    */
   image?: string | null;
-  state: 'done' | 'live' | 'next' | 'failed';
+  /**
+   * WHAT HAPPENED TO IT, AND 'skipped' IS NOT 'failed'.
+   *
+   * The dashboard mapped every finished row that was not `published` to
+   * 'failed', which draws a red cross and the word נכשל. With ONE finished
+   * row on the card that was nearly invisible; with a scrollable window of
+   * today's finished rows it is the difference between a quiet morning and a
+   * wall of red over publications that were cancelled on purpose —
+   * "סיים ואפס" skips every remaining row of a round in one press.
+   *
+   * The two are different facts and the owner has paid for the confusion
+   * before, from the other direction: "רשום דולג, אבל בפועל נכנסתי וראיתי
+   * שזה פרסם, זה חמור מאד."
+   */
+  state: 'done' | 'live' | 'next' | 'failed' | 'skipped';
   /**
    * WHEN, already formatted as HH:MM.
    *
@@ -281,6 +295,7 @@ export function LiveFlow({
   headline,
   now,
   rows,
+  windowNote = null,
   cycle = null,
   onCycleToggle,
   cycleBusy = false,
@@ -291,6 +306,36 @@ export function LiveFlow({
   /** The publication going out right now, or null when none is. */
   now: { name: string; step: QueueStep | null; cover: string | null; image?: string | null } | null;
   rows: readonly FlowRow[];
+  /**
+   * ─── WHAT THE WINDOW SHOWS, AT EACH END ─────────────────────────────────
+   *
+   * The heading used to read `תור פרסומים ({rows.length})`, and that was
+   * honest while the list WAS the queue: one finished row, one in flight and
+   * the next five. The list is now a window onto a longer day — what has
+   * already finished above the live row, the queue below it — so its length
+   * is a fact about this card and not about anything in the database.
+   *
+   * THE NUMBER LEFT RATHER THAN BEING REPLACED. Every exact count this screen
+   * holds is scoped differently: `summary.automaticWaiting` is the whole
+   * queue on every day it holds, `data.waitingToday` is today's and carries a
+   * known over-count, and the three "finished today" counts are keyed on two
+   * different columns. The one tile a few centimetres below this card already
+   * prints the owner's own iron rule — "חישוב של ממתינים בתור זה רק מה שאמור
+   * לצאת באותו היום" — and a second number up here could only ever disagree
+   * with it.
+   *
+   * So ONE line says what is DRAWN, in words. The caller writes it because
+   * only the caller knows what it capped. Null draws nothing, which is the
+   * right answer when nothing was capped.
+   *
+   * ONE AND NOT TWO, and the reason is measured: a line at each end of the
+   * list cost 20px more than the dashboard's height ceiling allows
+   * (dashboard-size.test.ts — 776px against 756px at 360px wide, once that
+   * suite was fed the card's real shape). The card may not get taller to
+   * carry a caveat about itself; "לצמצם את הגובה הכולל" is a standing
+   * instruction on this screen.
+   */
+  windowNote?: string | null;
   /*
    * THE 100-PUBLICATION CYCLE, OR null.
    *
@@ -321,6 +366,82 @@ export function LiveFlow({
   } else if (!now) {
     seen.current = null;
   }
+
+  /*
+   * ─── WHERE THE QUEUE BOX OPENS ──────────────────────────────────────────
+   *
+   * "לראות מה כבר פורסם ומה עומד להתפרסם."
+   *
+   * The list holds both, in the order they happen: what has already gone out
+   * above, what is going out now, and the queue below. Opened at its top it
+   * would show the oldest publication of the day and nothing he is waiting
+   * for — so it opens at NOW, with the history reachable by scrolling back.
+   *
+   * THE ANCHOR IS A ROW, NOT A NUMBER: the publication in flight, or the
+   * first one waiting when nothing is in flight. Both can change under a
+   * 30-second poll, which is exactly why this is guarded below.
+   */
+  const anchorAt = (() => {
+    const live = rows.findIndex((r) => r.state === 'live');
+    if (live >= 0) return live;
+    const next = rows.findIndex((r) => r.state === 'next');
+    return next >= 0 ? next : -1;
+  })();
+  const listRef = useRef<HTMLUListElement>(null);
+  const anchorRef = useRef<HTMLLIElement>(null);
+  /** The anchor row this box was last scrolled to; null before the first. */
+  const placed = useRef<string | null>(null);
+  /**
+   * The scrollTop this component itself last set.
+   *
+   * "Has a person moved the box?" is then one comparison against the live
+   * value, taken at the moment the question is asked — and NOT a flag set by
+   * a scroll listener. A programmatic scroll fires the same event a finger
+   * does, and that event is dispatched a task later than the assignment, so a
+   * flag could still be false at the instant the next poll arrives. Reading
+   * the box itself cannot be out of date.
+   */
+  const mine = useRef(0);
+  useEffect(() => {
+    const box = listRef.current;
+    const el = anchorRef.current;
+    if (!box || !el) return;
+    const id = rows[anchorAt]?.id ?? null;
+    const first = placed.current === null;
+    if (!first && id === placed.current) return;
+    /*
+     * IT MOVES HIM ONCE PER ROW, AND NEVER WHILE HE IS READING.
+     *
+     * The anchor changes every time a publication finishes — about once a
+     * minute on this owner's account — and this screen reloads itself every
+     * thirty seconds. Re-pinning unconditionally would drag the list out from
+     * under a finger scrolled back through the morning, which is the one
+     * thing the feature exists to allow.
+     *
+     * TWO WAYS TO EARN THE SCROLL, and a card needs only one:
+     *
+     *   · HE HAS NOT TOUCHED IT. Then the box is still showing what this
+     *     component put in front of him, including the case that matters most
+     *     — the first load, and a poll that replaces the whole list.
+     *   · OR THE ANCHOR IS ON SCREEN. He has scrolled, and he has scrolled to
+     *     what is happening now; keeping that row in front of him as it
+     *     changes is the whole point of anchoring to it.
+     *
+     * Anything else means he is somewhere else in the day, and the box is his
+     * until he comes back.
+     */
+    const b = box.getBoundingClientRect();
+    const r = el.getBoundingClientRect();
+    const watching = r.bottom > b.top && r.top < b.bottom;
+    /* The 8px of slack is for a browser that lands a pixel or two off what it
+       was asked for; anything beyond that is a finger. */
+    const moved = Math.abs(box.scrollTop - mine.current) > 8;
+    placed.current = id;
+    if (!first && moved && !watching) return;
+    const top = Math.max(0, r.top - b.top + box.scrollTop - 3);
+    box.scrollTop = top;
+    mine.current = box.scrollTop;
+  }, [rows, anchorAt]);
 
   return (
     <section className="anxf" data-flow={mode} aria-label="מצב הפרסום">
@@ -452,7 +573,7 @@ export function LiveFlow({
                 <path d="m3 12.4 9 4.6 9-4.6" />
                 <path d="m3 16.9 9 4.6 9-4.6" />
               </svg>
-              תור פרסומים ({rows.length})
+              תור פרסומים
             </h3>
             {/* A WAY INTO THE WHOLE LIST, and it goes to the screen that
                 already is that list — no new route, no new mechanism. */}
@@ -463,14 +584,26 @@ export function LiveFlow({
               </svg>
             </a>
           </div>
-          <ul className="anxf-queue">
+          {/* WHAT THE WINDOW SHOWS, said before he scrolls into it. */}
+          {windowNote && <p className="anxf-qmore" data-qmore>{windowNote}</p>}
+          {/* tabIndex/role/aria-label: a scrollable region that is not
+              focusable is unreachable with a keyboard. Copied from
+              Timeline.tsx, which is the other list in this product that
+              scrolls inside itself. */}
+          <ul
+            className="anxf-queue"
+            ref={listRef}
+            tabIndex={0}
+            role="group"
+            aria-label="תור הפרסומים — רשימה נגללת"
+          >
             {rows.map((r, i) => {
               /* "בתור הבא" is a claim that nothing is in front of it, so only
                  the first waiting row may wear it; the ones behind it are in
                  the queue, which is a different and smaller statement. */
               const firstNext = rows.findIndex((o) => o.state === 'next');
               return (
-              <li key={r.id} data-row={r.state}>
+              <li key={r.id} data-row={r.state} ref={i === anchorAt ? anchorRef : undefined}>
                 <a className="anxf-row" href="/social/history">
                 {/* The group's picture where the mark was — same box, same
                     place, and the mark stays for a group with no picture. */}
@@ -486,6 +619,16 @@ export function LiveFlow({
                   {r.state === 'failed' && (
                     <span className="anxf-row-why">
                       <b>נכשל</b>
+                      {r.note ? ` · ${r.note}` : ''}
+                    </span>
+                  )}
+                  {/* Its own word and its own reason — `skip_reason` is on
+                      every one of these rows and used to be dropped on the
+                      floor, so a cancelled publication said "נכשל" and
+                      nothing else. */}
+                  {r.state === 'skipped' && (
+                    <span className="anxf-row-skip">
+                      <b>דולג</b>
                       {r.note ? ` · ${r.note}` : ''}
                     </span>
                   )}
@@ -508,6 +651,13 @@ export function LiveFlow({
                     <svg className="anxf-mark-done" viewBox="0 0 24 24" fill="currentColor">
                       <circle cx="12" cy="12" r="11" />
                       <path d="m6.6 12.4 3.6 3.6 7.2-8" fill="none" stroke="#fff" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  ) : r.state === 'skipped' ? (
+                    /* A circle with a line through it: nothing was attempted,
+                       so neither a tick nor a cross is true of it. */
+                    <svg className="anxf-mark-skip" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round">
+                      <circle cx="12" cy="12" r="8.6" />
+                      <path d="M8 12h8" />
                     </svg>
                   ) : r.state === 'failed' ? (
                     <svg className="anxf-mark-failed" viewBox="0 0 24 24" fill="currentColor">

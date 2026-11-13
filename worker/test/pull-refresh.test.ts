@@ -186,6 +186,67 @@ async function main(): Promise<void> {
       await page.waitForFunction(() => window.scrollY === 0);
     }
 
+    /* ── 2b. A LIST INSIDE THE PAGE KEEPS ITS OWN DRAG ─────────────────── */
+    /*
+     * "תוסיף כאן אופציה של גלילה למעלה למטה בתוך החלון תורים לראות מה כבר
+     *  פורסם ומה עומד להתפרסם."
+     *
+     * "תור פרסומים" is a scroll box of its own now, and scrolling it BACK —
+     * to the publications that have already gone out — means dragging the
+     * finger down. That is this component's gesture, and at the top of the
+     * page it would take it: preventDefault on the move, the list frozen, the
+     * dashboard reloading. The one thing he asked for would be the one thing
+     * that could not be done.
+     *
+     * THE TWO HALVES ARE DIFFERENT QUESTIONS and both are asked here: a list
+     * with somewhere left to go keeps its drag, and the same list at its own
+     * top hands it back — because a person who has scrolled a list to the end
+     * and keeps pulling means the page.
+     */
+    {
+      await page.evaluate(() => window.scrollTo(0, 0));
+      await page.waitForFunction(() => window.scrollY === 0);
+      const listY = await page.evaluate(() => {
+        const el = document.querySelector('[data-list]') as HTMLElement;
+        el.scrollTop = 200;
+        const r = el.getBoundingClientRect();
+        return r.top + r.height / 2;
+      });
+      await drag(page, { x: 195, y: listY }, { x: 195, y: listY + 220 }, 14);
+      eq(await refreshes(), 0, 'DRAGGING DOWN INSIDE A SCROLLED LIST MUST NOT RELOAD THE SCREEN — that is how he looks at what has already been published');
+      eq(await prevented(), 0, 'and the list keeps its own gesture: nothing was preventDefault-ed out from under it');
+      eq(await page.locator('.animate-spin').count(), 0, 'and no circle appeared over a list he was only scrolling');
+
+      /*
+       * THE SAME LIST, NOW AT ITS OWN TOP: there is nothing left to scroll
+       * back to, so the pull belongs to the page again.
+       *
+       * ASSERTED ON preventDefault AND NOT ON A RELOAD, deliberately. The
+       * question here is only "whose gesture is it", and preventDefault is
+       * the one way this component can answer it — while a reload would move
+       * `window.__refreshes` and the harness's own load counter, which every
+       * section below this one reads as absolute values. So the drag is kept
+       * under the threshold, exactly like the short pull in §3: the page
+       * takes the gesture and then lets it go.
+       */
+      const topY = await page.evaluate(() => {
+        const el = document.querySelector('[data-list]') as HTMLElement;
+        el.scrollTop = 0;
+        const r = el.getBoundingClientRect();
+        return r.top + r.height / 2;
+      });
+      await drag(page, { x: 195, y: topY }, { x: 195, y: topY + 70 });
+      is((await prevented()) > 0, 'A LIST ALREADY AT ITS OWN TOP GIVES THE PULL BACK TO THE PAGE — the second tug is how a person asks for a refresh');
+      eq(await refreshes(), 0, 'and a tug that short still reloads nothing');
+      await page.waitForTimeout(350);
+      await page.evaluate(() => {
+        const el = document.querySelector('[data-list]') as HTMLElement;
+        el.scrollTop = 200;
+      });
+      await page.evaluate(() => window.scrollTo(0, 0));
+      await page.waitForFunction(() => window.scrollY === 0);
+    }
+
     /* ── 3. a short pull does nothing, and leaves nothing behind ───────── */
     {
       await drag(page, { x: 195, y: 120 }, { x: 195, y: 190 });

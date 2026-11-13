@@ -1580,19 +1580,68 @@ export default function SocialDashboard() {
     return ltr(`${formatTimeHe(iso)} ${d}.${m}`);
   };
 
+  /*
+   * ─── HOW FAR BACK AND HOW FAR FORWARD THE QUEUE BOX REACHES ─────────────
+   *
+   * "תוסיף כאן אופציה של גלילה למעלה למטה בתוך החלון תורים לראות מה כבר
+   *  פורסם ומה עומד להתפרסם."
+   *
+   * NEITHER NUMBER COSTS A QUERY. `doneToday` is already read with limit 500
+   * and `upcoming` with UPCOMING_LIMIT, on every poll, for the cards above —
+   * these two caps only decide how much of what is already in hand gets
+   * drawn, and they exist because a row is a DOM subtree and this list
+   * re-renders every thirty seconds. Measured on his account on 13.11.2026:
+   * 195 published today and 100 waiting, so both ends really are windows.
+   *
+   * What is beyond each end is SAID, in `olderNote` / `newerNote` below,
+   * counted off exact head counts rather than off these arrays — a capped
+   * array's length printed as a total is the mistake this product keeps
+   * making, and the one the queue summary's own docstring warns about.
+   */
+  const HISTORY_SHOWN = 30;
+  const UPCOMING_SHOWN = 40;
+
   const flowRows: FlowRow[] = data
     ? [
-        ...data.doneToday.slice(0, 1).map((r) => ({
-          id: r.id,
-          name: r.target?.name ?? 'קבוצה',
-          /* The group's own picture — already on every row this screen reads
-             (target:social_targets(...,image_url)), so it costs no query. */
-          image: r.target?.image_url ?? null,
-          /* A skipped row is not a success, and the mark on it may not be the
-             green one. `status` is the row's own word for what happened. */
-          state: (r.status === 'published' ? 'done' : 'failed') as FlowRow['state'],
-          at: ltr(formatTimeHe(r.published_at ?? r.updated_at ?? r.scheduled_at)),
-        })),
+        /* OLDEST FIRST, ending just above the live row: the list reads down
+           the day in the order it happened. `doneToday` arrives newest-first
+           (the strip above wants it that way), so the slice is taken from its
+           head — the most recent — and then turned round. */
+        ...data.doneToday
+          .slice(0, HISTORY_SHOWN)
+          /*
+           * SORTED BY THE INSTANT THE ROW PRINTS, not by the one it was read
+           * by. listTimelineDone orders on `updated_at` — the only column
+           * every terminal row is guaranteed to have — while the row draws
+           * `published_at ?? updated_at ?? scheduled_at`. For a publication
+           * that was retried, or one whose comment was written afterwards,
+           * those are different instants, and a list of times that does not
+           * run forwards is a list nobody can read down. Ascending, so the
+           * day arrives at the live row from the morning.
+           */
+          .map((r) => ({ row: r, at: r.published_at ?? r.updated_at ?? r.scheduled_at }))
+          .sort((a, b) => a.at.localeCompare(b.at))
+          .map(({ row: r, at }) => ({
+            id: r.id,
+            name: r.target?.name ?? 'קבוצה',
+            /* The group's own picture — already on every row this screen reads
+               (target:social_targets(...,image_url)), so it costs no query. */
+            image: r.target?.image_url ?? null,
+            /*
+             * THREE OUTCOMES, NOT TWO. This read `r.status === 'published' ?
+             * 'done' : 'failed'`, so every cancelled row wore a red cross and
+             * the word נכשל. With one finished row on the card that was
+             * nearly invisible; with a window of today's it is a wall of red
+             * over publications that were stopped on purpose — "סיים ואפס"
+             * skips every remaining row of a round in one press.
+             */
+            state: (r.status === 'published' ? 'done' : r.status === 'skipped' ? 'skipped' : 'failed') as FlowRow['state'],
+            /* The reason is already on the row (TIMELINE_SELECT reads
+               skip_reason) and used to be dropped, so "דולג" said nothing
+               about why. */
+            note: r.status === 'skipped' ? r.skip_reason ?? null : null,
+            at: ltr(formatTimeHe(at)),
+          })),
         ...data.inFlightRows.slice(0, 1).map((r) => ({
           id: r.id,
           name: r.target?.name ?? 'קבוצה',
@@ -1618,7 +1667,7 @@ export default function SocialDashboard() {
          * the first waiting row (see firstNext in LiveFlow), the ones behind
          * it say "בתור". That rule was written when only one could ever show.
          */
-        ...data.upcoming.slice(0, 5).map((r) => ({
+        ...data.upcoming.slice(0, UPCOMING_SHOWN).map((r) => ({
           id: r.id,
           name: r.target?.name ?? 'קבוצה',
           image: r.target?.image_url ?? null,
@@ -2025,6 +2074,33 @@ export default function SocialDashboard() {
             inFlight={summary.inFlight}
             inFlightRows={data.inFlightRows}
             flowRows={flowRows}
+            /*
+             * ─── WHAT EACH END OF THE WINDOW IS SHOWING ──────────────────
+             *
+             * NEITHER LINE IS A REMAINDER, and that is deliberate. The three
+             * "today" figures on this screen are keyed on two different
+             * columns — countPublishedSince filters on `published_at`, while
+             * countFailuresSince and listTimelineDone both filter on
+             * `updated_at` — so "how many more finished today than this list
+             * holds" is a subtraction across sets that do not line up, and the
+             * answer would be a number nobody could reproduce. (A row
+             * published last night whose comment was retried this morning is
+             * in `doneToday` and not in `today`.)
+             *
+             * So each line says what is DRAWN, from the length of the array it
+             * is drawn from, and only when that array really was cut. "הצג
+             * הכול" in the heading opens the rest — and the exact counts live
+             * on the tiles below, each beside words that match its own scope.
+             */
+            flowWindow={(() => {
+              const cutBack = data.doneToday.length > HISTORY_SHOWN;
+              const cutOn = data.upcoming.length > UPCOMING_SHOWN;
+              if (!cutBack && !cutOn) return null;
+              if (cutBack && cutOn) return `מוצגים ${HISTORY_SHOWN} האחרונים שהסתיימו היום ו-${UPCOMING_SHOWN} הקרובים בתור`;
+              return cutBack
+                ? `מוצגים ${HISTORY_SHOWN} הפרסומים האחרונים שהסתיימו היום`
+                : `מוצגים ${UPCOMING_SHOWN} הפרסומים הקרובים בתור`;
+            })()}
             workerOnline={data.workerOnline}
             publishingBlocked={publishingBlocked}
             fbAccount={data.fbAccount}

@@ -44,6 +44,12 @@ declare global {
     __system: (state: SystemState, online: boolean, blocked: boolean) => void;
     /** Rows for the queue list, when a test needs a particular shape. */
     __rows: (rows: FlowRow[] | null) => void;
+    /*
+     * WHAT THE QUEUE WINDOW IS SHOWING. Driven from a test because the whole
+     * point of it being a prop is that this component cannot derive it —
+     * only the screen that capped the arrays knows.
+     */
+    __queueNotes: (note: string | null) => void;
   }
 }
 
@@ -53,6 +59,7 @@ function Harness() {
   const [step, setStep] = useState<QueueStep>('uploading_media');
   const [rows, setRows] = useState<FlowRow[] | null>(null);
   const [system, setSystem] = useState<{ state: SystemState; online: boolean; blocked: boolean } | null>(null);
+  const [note, setNote] = useState<string | null>(null);
   /* ONE SOURCE FOR THE DAY'S COUNT. It was two — a `published` state and
      day[0], read as `published || day[0]` — and that `||` quietly turned a
      deliberate zero back into 22, which is exactly the case the "nothing
@@ -62,6 +69,7 @@ function Harness() {
   window.__plan = (done, total) => setDay([done, total]);
   window.__step = setStep;
   window.__rows = setRows;
+  window.__queueNotes = setNote;
   window.__system = (state, online, blocked) => setSystem({ state, online, blocked });
 
   const live = mode === 'sending' || mode === 'preparing';
@@ -141,6 +149,7 @@ function Harness() {
               : []
           }
           flowRows={queue}
+          flowWindow={note}
           fbAccount={{ name: 'Stas Terehin', avatar: 'https://example.invalid/a.jpg' }}
           profiles={[
             { name: 'Stas Terehin', kind: 'profile', image: 'https://example.invalid/a.jpg' },

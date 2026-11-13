@@ -5682,14 +5682,76 @@ const scenario: { step: string; line: string }[] = [];
    * "תור פרסומים" above it.
    *
    * The rule it was standing in for is the one that matters and it moves to
-   * the card that inherited the job: the queue card draws a FIXED five
+   * the card that inherited the job: the queue card draws a FIXED number of
    * upcoming rows by design, and the number of rows it is handed may not be
    * the capped read's length. And the clock came with the deleted card — a
    * queued row that says only "בתור" cannot answer "when", which was the one
    * thing the deleted card did that this one did not.
+   *
+   * ─── RE-POINTED 13.11.2026 — THE FIVE BECAME A WINDOW ──────────────────
+   *
+   *   "תוסיף כאן אופציה של גלילה למעלה למטה בתוך החלון תורים לראות מה כבר
+   *    פורסם ומה עומד להתפרסם"
+   *
+   * The card scrolls now, and holds what has already gone out today above the
+   * live row as well as the queue below it. So the constant moved from `5` to
+   * a named cap, and the rule did not move at all: it is still a FIXED number
+   * and still never `data.upcoming.length`.
+   *
+   * AND THE FOOTER'S COUNT IS `summary.automaticWaiting` — which the note
+   * above warns is "the wrong set entirely". That was true of the DELETED
+   * card: its window was the next 24 hours, so a count of every waiting row on
+   * every future day did not describe it. This card has no time bound at all —
+   * `data.upcoming` is listQueue filtered to AUTOMATIC_WAITING_STATUSES and
+   * nothing else — so automaticWaiting is exactly the set it is a window onto,
+   * which is what status.ts's own docstring says that figure is for.
    */
   assert.ok(!dash.includes('<Timeline'), 'the dashboard no longer draws a second upcoming list');
-  assert.ok(dash.includes('data.upcoming.slice(0, 5)'), 'the queue card draws the next five');
+  assert.ok(dash.includes('data.upcoming.slice(0, UPCOMING_SHOWN)'), 'the queue card draws a fixed window of the queue');
+  assert.ok(/const UPCOMING_SHOWN = \d+;/.test(dash), 'and that window is a constant, not the capped read’s length');
+  assert.ok(!dash.includes('data.upcoming.slice(0, data.upcoming.length)'), 'and never the length of the array it came from');
+  /*
+   * THE OTHER HALF OF THE WINDOW: what has already been published. Same rule
+   * from the other end — a fixed cap, and what is beyond it counted off the
+   * three exact head counts for today rather than off `doneToday`, which is
+   * itself a capped read.
+   */
+  assert.ok(dash.includes('data.doneToday\n          .slice(0, HISTORY_SHOWN)'), 'and it carries today’s finished rows above the live one');
+  assert.ok(
+    dash.includes('.sort((a, b) => a.at.localeCompare(b.at))'),
+    'sorted by the instant each row PRINTS — the read orders on updated_at while the row draws published_at, and a column of times that does not run forwards cannot be read',
+  );
+  assert.ok(/const HISTORY_SHOWN = \d+;/.test(dash), 'behind a constant of its own');
+  /*
+   * AND THE WINDOW SAYS WHAT IT SHOWS — never a remainder.
+   *
+   * The three "today" figures on this screen are keyed on two different
+   * columns (countPublishedSince filters on published_at; countFailuresSince
+   * and listTimelineDone both filter on updated_at), so "how many more than
+   * this list holds" is a subtraction across sets that do not line up. The
+   * line states the constants it drew instead, and only when the array it
+   * drew from really was cut.
+   */
+  assert.ok(dash.includes('const cutBack = data.doneToday.length > HISTORY_SHOWN;'), 'the window line is drawn only when the history really was cut');
+  assert.ok(dash.includes('const cutOn = data.upcoming.length > UPCOMING_SHOWN;'), 'and only when the queue really was');
+  assert.ok(!/flowWindow=\{[^}]*summary\.|flowWindow=\{[^}]*data\.today/.test(dash), 'and it never subtracts one scope from another to make a remainder');
+  /*
+   * THE HEADING COUNTS NOTHING. It read `תור פרסומים ({rows.length})` while
+   * the list WAS the queue; the list is now a window onto a longer day, and
+   * every exact count on this screen is scoped differently from the next —
+   * with the owner's iron rule ("חישוב של ממתינים בתור זה רק מה שאמור לצאת
+   * באותו היום") printed on a tile a few centimetres below. A second number
+   * up here could only disagree with it.
+   */
+  {
+    const flow = readFileSync(new URL('../../src/components/social/LiveFlow.tsx', import.meta.url), 'utf8');
+    /* The heading as JSX: the words alone on their line, with nothing
+       interpolated after them. (The rendered version is asserted in a real
+       browser by worker/test/live-flow.test.ts — `eq(box.head, 'תור
+       פרסומים')` — which is what catches a number arriving from anywhere
+       else; this is the source half, so a reader of the file sees the rule.) */
+    assert.ok(/\n\s*תור פרסומים\n/.test(flow), 'the queue heading names the card and counts nothing');
+  }
   /*
    * 12.11.2026 — AND THE INSTANT IT CARRIES IS THE FORECAST.
    *
@@ -5747,11 +5809,29 @@ const scenario: { step: string; line: string }[] = [];
    * head of its list, which is the same claim — the one screen that shows the
    * run in order must show something it has done — asked of the card that
    * inherited the job. The rest of the day is "פעילות אחרונה" and /social/history.
+   *
+   * RE-POINTED AGAIN 13.11.2026, and the claim got BIGGER rather than moving:
+   * "לראות מה כבר פורסם ומה עומד להתפרסם" — the one finished row became a
+   * scrollable window of today's finished rows, oldest first, ending just
+   * above the live one. `.reverse()` is part of the pin because without it
+   * the list would read backwards through the morning while the queue below
+   * it reads forwards, which is the same list disagreeing with itself.
    */
   assert.ok(
-    dash.includes('data.doneToday.slice(0, 1)'),
-    'the queue card must still show the last publication that finished, or the one list showing the run in order shows nothing it has done',
+    dash.includes('data.doneToday\n          .slice(0, HISTORY_SHOWN)'),
+    'the queue card must still show what has finished, or the one list showing the run in order shows nothing it has done',
   );
+  /*
+   * AND IT TELLS A CANCELLED ROW FROM A FAILED ONE. This mapped every
+   * finished row that was not `published` to 'failed' — a red cross and the
+   * word נכשל. One such row was nearly invisible; a window of today's is a
+   * wall of red over publications that were stopped on purpose.
+   */
+  assert.ok(
+    dash.includes("r.status === 'published' ? 'done' : r.status === 'skipped' ? 'skipped' : 'failed'"),
+    'a skipped publication is drawn as skipped, not as a failure',
+  );
+  assert.ok(dash.includes("note: r.status === 'skipped' ? r.skip_reason ?? null : null,"), 'and carries the reason the row already holds');
   assert.ok(!dash.includes('done={soon'), 'and the deleted card\'s second mode is gone, not left dangling');
   /*
    * RE-POINTED. The read moved out of listQueue into listTimelineDone(), and

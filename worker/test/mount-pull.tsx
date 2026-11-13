@@ -69,6 +69,34 @@ function Harness() {
               </div>
             ))}
           </div>
+          {/*
+            A VERTICAL LIST INSIDE THE PAGE — the queue card, in the shape that
+            matters to this component.
+
+            "תוסיף כאן אופציה של גלילה למעלה למטה בתוך החלון תורים לראות מה
+             כבר פורסם ומה עומד להתפרסם."
+
+            Scrolling that list BACK means dragging the finger DOWN, which is
+            this component's own gesture; at the top of the page it would take
+            it, preventDefault the move and reload the dashboard instead. So
+            the list is here, scrolled off its own top, and the test drags
+            inside it.
+          */}
+          <div
+            data-list
+            ref={(el) => {
+              /* Off its own top, so it has something to give back — which is
+                 the whole condition the component tests. */
+              if (el && el.scrollTop === 0) el.scrollTop = 200;
+            }}
+            style={{ maxHeight: 300, overflowY: 'auto', overscrollBehavior: 'contain', marginTop: 12 }}
+          >
+            {Array.from({ length: 40 }, (_, i) => (
+              <div key={i} style={{ height: 44, borderBottom: '1px solid #eee' }}>
+                שורה {i}
+              </div>
+            ))}
+          </div>
           {/* Tall enough that the document really scrolls — without this the
               "only at the very top" rule has nothing to be true about. */}
           <div style={{ height: 2400 }} />

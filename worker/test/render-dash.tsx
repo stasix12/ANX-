@@ -146,6 +146,10 @@ const hero = createElement(LiveQueueHero, {
     },
   ],
   flowRows: queue,
+  /* The note drawn, because it is drawn on his screen: both ends of the list
+     are a window and the line says so. It is one more line of text in the
+     card the ceiling below is measured against. */
+  flowWindow: 'מוצגים 30 האחרונים שהסתיימו היום ו-40 הקרובים בתור',
   fbAccount: { name: 'Stas Terehin', avatar: pic('#1550c4') },
   profiles: [],
   onSwitchProfile: () => undefined,

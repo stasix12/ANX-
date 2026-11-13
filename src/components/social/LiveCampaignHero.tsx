@@ -1064,6 +1064,7 @@ export function LiveQueueHero({
   inFlight = 0,
   inFlightRows = [],
   flowRows = [],
+  flowWindow = null,
   cycle = null,
   onCycleToggle,
   cycleBusy = false,
@@ -1165,6 +1166,10 @@ export function LiveQueueHero({
    * panel draws rows, it does not decide which rows exist.
    */
   flowRows?: readonly FlowRow[];
+  /** Straight through to <LiveFlow>: the words for what the queue window is
+      showing. Only the dashboard knows what it capped, so only the dashboard
+      writes them. */
+  flowWindow?: string | null;
   /*
    * THE 100-PUBLICATION CYCLE. Passed down untouched — this component does
    * no arithmetic on it and draws none of it; LiveFlow owns the card. It is
@@ -1453,6 +1458,7 @@ export function LiveQueueHero({
            queued, and drawing it with a spinner would say a dead worker is
            working. It goes back to being the next one up, which it is. */
         rows={working ? flowRows : flowRows.map((r) => (r.state === 'live' ? { ...r, state: 'next' as const, note: null } : r))}
+        windowNote={flowWindow}
         /* The 100-publication cycle, straight through. null on an installation
            where v41 has not been run, and the card then does not draw at all. */
         cycle={cycle}

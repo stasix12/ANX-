@@ -2351,6 +2351,66 @@ body:has(.social-theme) .site-backdrop {
    */
   grid-template-columns: minmax(0, 1fr);
   gap: 5px;
+  /*
+   * ─── AND IT SCROLLS, INSIDE ITSELF ──────────────────────────────────────
+   *
+   * "תוסיף כאן אופציה של גלילה למעלה למטה בתוך החלון תורים לראות מה כבר
+   *  פורסם ומה עומד להתפרסם."
+   *
+   * The list used to be three rows, then seven, and both fitted. It now
+   * carries what has already finished today above the live row and the queue
+   * below it — on his account that is 195 finished and 100 waiting — so the
+   * card would be a mile long without this.
+   *
+   * 21rem IS THE PRODUCT'S OWN DEPTH, not a number chosen here: Timeline.tsx
+   * and CommentTimeline.tsx are the two vertical scroll boxes this product
+   * already has, both at max-h-[21rem], and Timeline's own note explains why
+   * it is a fraction of a row rather than a whole one — "a row cut through
+   * the middle is what tells a thumb there is more below". A queue row is
+   * 44px over a 5px gap, so 336px cuts the seventh.
+   *
+   * NO `overscroll-behavior`, FOR THE REASON WRITTEN THERE: "when the list
+   * reaches its end the gesture should carry on scrolling the page, which is
+   * what a reader expects and what stops the box feeling like a trap". The
+   * pull-to-refresh half of that is handled where it belongs —
+   * PullToRefresh.tsx ignores a drag that starts in a list with somewhere
+   * left to go, and takes it back the moment the list is at its own top.
+   */
+  max-height: 21rem;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  /*
+   * ROOM FOR THE RING. The live row wears `box-shadow: 0 0 0 3px`, and a
+   * scroll container clips what its children paint outside the content box —
+   * without this the glow is sliced down both sides of the one row that is
+   * supposed to stand out.
+   */
+  padding: 3px;
+}
+/* A scrollable region that cannot be focused is unreachable from a keyboard,
+   and these rows are links rather than a focusable list. Same ring as the
+   product's other two scroll boxes. */
+.anxf-queue:focus-visible {
+  outline: 2px solid var(--color-brand-300);
+  outline-offset: 2px;
+}
+/*
+ * WHAT THE WINDOW SHOWS, said at the end it shows it from.
+ *
+ * The list is a window onto a longer day, and a window that does not say so
+ * is a cap pretending to be a total — the one mistake this product keeps
+ * making. Neither line carries a REMAINDER: the three "today" counts on this
+ * screen are keyed on different columns (published_at for the published one,
+ * updated_at for the other two and for the list's own read), so a subtraction
+ * across them would be a number nobody can reproduce. They say what is drawn,
+ * and "הצג הכול" above them opens the rest.
+ */
+.anxf-qmore {
+  padding: 3px 9px;
+  font-size: clamp(9.5px, 2.9vw, 11.5px);
+  font-weight: 700;
+  color: var(--color-mist-500);
+  text-align: center;
 }
 .anxf-queue li {
   border-radius: var(--radius-lg);
@@ -2386,6 +2446,22 @@ body:has(.social-theme) .site-backdrop {
 }
 .anxf-queue li[data-row="failed"] .anxf-row-name { color: var(--color-error-400); }
 .anxf-queue li[data-row="failed"] .anxf-row-go { color: var(--color-error-300); }
+/*
+ * A SKIPPED ROW IS QUIET, NOT RED.
+ *
+ * Nothing was attempted on it: the round was stopped, or the slot was
+ * cancelled. It keeps the card's own background and says what it is in the
+ * dim grey the row's clock already uses — the failed row's pink tint is for
+ * something that went wrong.
+ */
+.anxf-queue li[data-row="skipped"] .anxf-row-name { color: var(--color-mist-300); }
+.anxf-queue li[data-row="skipped"] .anxf-row-go { color: var(--color-mist-500); }
+.anxf-row-skip {
+  font-size: clamp(9.5px, 2.9vw, 11.5px);
+  font-weight: 600;
+  color: var(--color-mist-500);
+}
+.anxf-row-skip b { font-weight: 900; }
 .anxf-row-why {
   font-size: clamp(9.5px, 2.9vw, 11.5px);
   font-weight: 600;
@@ -2424,6 +2500,9 @@ body:has(.social-theme) .site-backdrop {
 .anxf-mark-failed { color: var(--color-error-300); }
 .anxf-mark-live { color: var(--color-brand-500); }
 .anxf-mark-next { color: var(--color-mist-500); }
+/* Nothing was attempted on a skipped row, so it is neither the green tick nor
+   the red cross — the same grey as a row that has not had its turn. */
+.anxf-mark-skip { color: var(--color-mist-500); }
 
 /* ── the Facebook mark and the group glyph, shared by three sections ──── */
 .anxf-fb {

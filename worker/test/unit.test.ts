@@ -5716,7 +5716,10 @@ const scenario: { step: string; line: string }[] = [];
    * three exact head counts for today rather than off `doneToday`, which is
    * itself a capped read.
    */
-  assert.ok(dash.includes('data.doneToday\n          .slice(0, HISTORY_SHOWN)'), 'and it carries today’s finished rows above the live one');
+  /* Whitespace-insensitive on purpose: a literal newline inside the needle
+     would stop matching the moment the expression is re-indented, and on a
+     CRLF checkout it would never match at all. */
+  assert.ok(/data\.doneToday\s+\.slice\(0, HISTORY_SHOWN\)/.test(dash), 'and it carries today’s finished rows above the live one');
   assert.ok(
     dash.includes('.sort((a, b) => a.at.localeCompare(b.at))'),
     'sorted by the instant each row PRINTS — the read orders on updated_at while the row draws published_at, and a column of times that does not run forwards cannot be read',
@@ -5750,7 +5753,10 @@ const scenario: { step: string; line: string }[] = [];
        browser by worker/test/live-flow.test.ts — `eq(box.head, 'תור
        פרסומים')` — which is what catches a number arriving from anywhere
        else; this is the source half, so a reader of the file sees the rule.) */
-    assert.ok(/\n\s*תור פרסומים\n/.test(flow), 'the queue heading names the card and counts nothing');
+    /* `\s` and not a bare `\n`: the installer is built on a Windows runner
+       where every line ends CRLF, and package.test.ts refuses a regex that
+       would quietly stop matching there. */
+    assert.ok(/\s+תור פרסומים\s+<\/h3>/.test(flow), 'the queue heading names the card and counts nothing');
   }
   /*
    * 12.11.2026 — AND THE INSTANT IT CARRIES IS THE FORECAST.
@@ -5818,7 +5824,7 @@ const scenario: { step: string; line: string }[] = [];
    * it reads forwards, which is the same list disagreeing with itself.
    */
   assert.ok(
-    dash.includes('data.doneToday\n          .slice(0, HISTORY_SHOWN)'),
+    /data\.doneToday\s+\.slice\(0, HISTORY_SHOWN\)/.test(dash),
     'the queue card must still show what has finished, or the one list showing the run in order shows nothing it has done',
   );
   /*

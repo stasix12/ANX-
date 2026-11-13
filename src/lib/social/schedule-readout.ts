@@ -6,6 +6,7 @@ import {
   type CampaignSchedule,
 } from './campaign-schedule';
 import type { CampaignState } from './campaign';
+import { startOfZonedDay } from './time';
 import { NO_SPACING, projectOne, type AccountSpacing } from './projection';
 
 /**
@@ -52,6 +53,48 @@ export type { AccountSpacing };
  * It computes; it does not render and it does not write. The Hebrew belongs to
  * the cards, which have different room for it.
  */
+/**
+ * ─── AND A ROW THAT WAITS ON A PERSON MAY NEVER REPLACE A KNOWN HOUR ──────
+ *
+ * "איפה שרשום הפרסום הבא ויש שגיאה שיש פרסומים שמחכים לי, לדלג עליהם תמיד,
+ *  מה שלא הצליח לפרסם לא להתעסב, ולהראות את השעה והיום שהפרסום אמור לצאת בהם."
+ *
+ * `manual` used to be a KIND, and a kind is a headline: a round with two
+ * frozen rows and a perfectly good publishing day announced the frozen rows
+ * and said nothing about the day. The card he photographed is one of his two
+ * live rounds — 2 rows frozen, 45 and 119 rows queued behind them — and it
+ * printed "שני פרסומים ממתינים לך" where the hour of those 119 belonged.
+ *
+ * MEASURED ON HIS DATABASE, 13.11.2026: 347 rows in `needs_attention`
+ * account-wide (193 his), the oldest from 30.09, 284 of them carrying "חלון
+ * הפוסט לא נסגר אחרי הלחיצה על פרסום" and 60 the rate limit. Four more
+ * arrive a day.
+ *
+ * SO IT IS NOT A STATE OF THIS CAMPAIGN'S CLOCK, and this module does not
+ * carry it at all any more: it answers only "when does the next publication
+ * go out". The count reaches the card as its own `waiting` prop, drawn as one
+ * dim line and only where there is no hour to print — never beside a real
+ * appointment, which is what "מה שלא הצליח לפרסם לא להתעסב" asks for, and
+ * never silently dropped either, because five of his live rounds hold frozen
+ * rows with nothing scheduled and a bare "אין פרסומים מתוזמנים" over 159 of
+ * them would be the screen hiding real work.
+ *
+ * WHAT HE ASKED FOR THAT IS DELIBERATELY NOT DONE IS THE SKIP.
+ * `needs_attention` is an OPEN status, and being open is the only thing
+ * holding that (post, group) pair out of every future round (plan.ts:808 —
+ * "the only per-post brake left" since v33 dropped the unique index). Marking
+ * them `skipped` makes them terminal, which releases that brake AND lets
+ * recycleTombstonedSlot() re-plan the row in place when the same round is
+ * launched again. Checked against all 11,788 published rows: only 32 of his
+ * 193 have a published twin for the same post and group, so 161 are not
+ * duplicates of finished work — they are publications whose fate is genuinely
+ * unknown. Skipping them could send the same post to the same group a second
+ * time, which is what restricted his account before. The card stops nagging
+ * about them. The queue keeps them.
+ *
+ * AND NO FUTURE KIND MAY BE ADDED FOR THEM. A row waiting on a person is not
+ * an answer to "when": it is a fact about a row, and it belongs to the row.
+ */
 export type ScheduleReadout =
   /** A publication is queued, and this is when it goes out. The only instant. */
   | { kind: 'due'; at: string }
@@ -85,9 +128,18 @@ export type ScheduleReadout =
        * such minute exists.
        */
       opens: string | null;
+      /**
+       * THE WINDOW IS OPEN AND NOTHING HAS GONE OUT YET — said in words, not
+       * as a clock.
+       *
+       * nextAllowedAt() answers `now` whenever now is already inside the
+       * window (campaign-schedule.ts:1066-1067), and printing that names the
+       * very minute he is standing in as though it were an appointment — the
+       * fault that file's own comment describes. So `opens` is future-only
+       * and this flag carries the rest.
+       */
+      openNow: boolean;
     }
-  /** Rows are waiting — on him, not on the clock. */
-  | { kind: 'manual'; waiting: number }
   /**
    * Held by the owner's own pause.
    *
@@ -240,15 +292,40 @@ export function scheduleReadout(
      */
     const stopped = state.state === 'stopped';
     const repeats = repeat.enabled && !stopped;
+    /*
+     * ─── WHEN THE NEXT ROUND REALLY OPENS, AND NOT "RIGHT NOW" ──────────
+     *
+     * nextAllowedAt(schedule, now) is the same call the engine makes, and
+     * inside the window it answers `now` — campaign-schedule.ts:1066-1067
+     * returns `from` whenever `from` is already past the opening. Printed as
+     * "הסבב הבא ייפתח בשעה 20:14" at 20:14 that names the minute he is
+     * standing in as though it were an appointment, which is exactly the
+     * fault campaign-schedule.ts:1076-1082 describes in its own words.
+     *
+     * Two things fix it, and both are needed:
+     *
+     *   · ASK FROM TOMORROW WHEN TODAY IS SPENT. A round that already
+     *     published today and is now finished will not reopen today — the
+     *     repeat is daily. So the question becomes "when does the window
+     *     next open AFTER today", and the answer is a real future hour.
+     *   · AND REFUSE A PAST OR PRESENT ANSWER ANYWAY. Whatever comes back,
+     *     only a future instant is printed. The rest is said in words.
+     */
+    const insideWindow = on && schedule ? windowClosesAt(schedule, now) !== null : false;
+    /* `progress.published` is this round's own count, and the dashboard reads
+       it today-scoped while the repeat is on — so "we already ran today". */
+    const ranToday = state.progress.published > 0;
+    const from = insideWindow && ranToday ? new Date(startOfZonedDay(now).getTime() + 24 * 60 * 60_000) : now;
+    const opened = repeats && on && schedule ? nextAllowedAt(schedule, from) : null;
+    const opens = opened && opened.getTime() > now.getTime() ? opened.toISOString() : null;
     return {
       kind: 'ended',
       stopped,
       repeats,
-      /* nextAllowedAt(), the same call the engine makes — never a second rule.
-         Only for a round that is actually coming back: naming an hour for a
-         round nothing will reopen is the window-edge fault this module exists
-         to prevent, one state along. */
-      opens: repeats && on && schedule ? nextAllowedAt(schedule, now)?.toISOString() ?? null : null,
+      opens,
+      /* No future hour to name, the window is open and the repeat is armed:
+         it can reopen at any minute, and that is a sentence, not a clock. */
+      openNow: !opens && insideWindow && repeats,
     };
   }
 
@@ -297,7 +374,20 @@ export function scheduleReadout(
    * לחשב כאן" over a round whose one actionable fact was known, which is the
    * disclaimer eating the answer instead of qualifying it.
    */
-  if (state.progress.manual > 0) return { kind: 'manual', waiting: state.progress.manual };
+  /*
+   * THE ROWS THAT WAIT ON A PERSON USED TO RETURN HERE, AND THAT WAS THE BUG.
+   *
+   * `return { kind: 'manual' }` made them the headline, so a round with two
+   * frozen rows announced the frozen rows and never said when the next
+   * publication goes out — for ten days, on his screen. They are now carried
+   * as `waiting` by the wrapper below, on whatever kind is really true, and
+   * the card draws them as one dim line that cannot win.
+   *
+   * NOTHING IS SKIPPED. See the note on ScheduleReadout: these rows being
+   * OPEN is the only thing holding their (post, group) pairs out of every
+   * future round, and making them terminal would let the same post go out
+   * twice.
+   */
 
   if (state.truncated) return { kind: 'partial' };
 

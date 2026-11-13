@@ -64,6 +64,7 @@ export function CampaignScheduleBoard({
   workerOnline,
   frozenUntil = null,
   neverLaunched = false,
+  waiting = 0,
   armedAt = null,
   pauseLabel = null,
   disabled = false,
@@ -114,6 +115,10 @@ export function CampaignScheduleBoard({
       serving, if it is serving one. */
   /** The round has never gone out — passed through to <NextPublication>. */
   neverLaunched?: boolean;
+  /** How many of this round's rows wait on a PERSON — straight through to
+      <NextPublication>, which draws them as one dim line and only where it has
+      no hour to print. See that prop's own note. */
+  waiting?: number;
   /**
    * A LAUNCH WHOSE ROWS HAVE NOT ARRIVED YET — passed straight through.
    *
@@ -405,6 +410,7 @@ export function CampaignScheduleBoard({
         /* Straight through to the line that answers "when does the next one
            go out" — see the prop's own note. */
         frozenUntil={frozenUntil}
+        waiting={waiting}
         className="mt-1"
       />
     </div>

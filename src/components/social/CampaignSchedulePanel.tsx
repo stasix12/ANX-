@@ -155,6 +155,7 @@ export function CampaignSchedulePanel({
   onPaceChange,
   floorHours = MIN_REPEAT_HOURS,
   neverLaunched = false,
+  waiting = 0,
   showHeader = true,
   compact = false,
   readout,
@@ -302,6 +303,10 @@ export function CampaignSchedulePanel({
    * rather than guessing — but both screens that draw this panel can.
    */
   neverLaunched?: boolean;
+  /** How many of this round's rows wait on a PERSON — straight through to
+      <NextPublication>, which draws them as one dim line and only where it has
+      no hour to print. See that prop's own note. */
+  waiting?: number;
 }) {
   /*
    * ─── THE TWO TRANSLATIONS, AND EVERY READ AND WRITE GOES THROUGH THEM ───
@@ -881,6 +886,7 @@ export function CampaignSchedulePanel({
           scheduleOn={schedule.enabled}
           workerOnline={workerOnline}
           neverLaunched={neverLaunched}
+          waiting={waiting}
           targetName={nextTargetName}
           targetImage={nextTargetImage}
           className="mt-1.5"

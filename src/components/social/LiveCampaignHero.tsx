@@ -863,6 +863,9 @@ export function LiveCampaignHero({
           onEdit={() => setEditingSchedule((v) => !v)}
           editing={editingSchedule}
           readout={readout}
+          /* Same number the campaigns screen passes, from the same place: the
+             round's own rows that wait on a person. */
+          waiting={state.progress.manual}
           campaignName={campaign.name}
           /* "ושיהיה גם טיימר במסך הראשי ליד כרטיסיית הקמפיין שזה סופר את
              ה-3 שעות בגלל המגבלה." It is drawn inside the block below, under

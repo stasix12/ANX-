@@ -945,7 +945,31 @@
  * fine — read as total failures. The sentence now names every outcome that
  * occurred.
  */
-export const WORKER_VERSION = '4.67.0';
+/*
+ * 4.67.0 → 4.68.0, AND THE RELEASE LIST WAS ASKED FIRST — AGAIN.
+ *
+ * v4.67.0 was published at 23:12:28 on 12.11, which the GitHub release list
+ * says and this file cannot: it has no network. So the newest tag is v4.67.0
+ * and 4.68.0 is free. The habit the note above demands is "ask before every
+ * bump", not "ask once"; this is the asking.
+ *
+ * What this carries to the PC is two sentences and no logic. Three error
+ * messages a stuck publication can carry ended with 'ואז "נסה שוב" או "דלג"',
+ * and THERE IS NO "דלג" ANYWHERE IN THE PRODUCT — the row's menu offers "נסה
+ * שוב", two group actions, "הרץ עכשיו", "פרטי הפרסום" and "בטל פרסום". So the
+ * one sentence he reads at the moment he is stuck sent him looking for a
+ * button that does not exist; and the nearest thing to it, "בטל פרסום",
+ * writes `status: 'skipped'`, which is the one action that must NOT be taken
+ * on a row whose post may already be live: being open is the only thing
+ * holding that (post, group) pair out of the next round, and
+ * recycleTombstonedSlot() re-plans a skipped row in place. Two of those three
+ * messages are written here in worker/, which is why this carries a version.
+ *
+ * Measured first, on his account, 13.11.2026: 347 rows in `needs_attention`,
+ * the oldest from 30.09, 284 of them carrying "חלון הפוסט לא נסגר אחרי
+ * הלחיצה על פרסום" and 60 the rate limit.
+ */
+export const WORKER_VERSION = '4.68.0';
 
 /**
  * A FINGERPRINT OF EVERYTHING THE INSTALLER CARRIES.
@@ -1696,4 +1720,4 @@ export const WORKER_VERSION = '4.67.0';
  * worker/facebook/join.ts and written by worker/social-worker.ts, both of
  * which run only on his PC. Numbers under WORKER_VERSION above.
  */
-export const WORKER_FINGERPRINT = 'd0e3f9957d4b0168';
+export const WORKER_FINGERPRINT = '475aa84e9cbfc129';

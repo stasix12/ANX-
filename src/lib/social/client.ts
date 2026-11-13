@@ -2043,35 +2043,53 @@ export async function listQueue(
 }
 
 /**
- * The IDs of every publication that is waiting on a PERSON, and nothing else
- * about them.
+ * HOW MANY PUBLICATIONS ARE WAITING ON A PERSON THAT HE HAS NOT BEEN TOLD
+ * ABOUT YET — and the instant that answers them.
  *
- * The dashboard's orange bar already knows how many there are — queueSummary()
- * counts them. What it did not know is WHICH, and without that the only kind
- * of "I have seen this" it could offer was a flag that hides the next one too
- * (see seen.ts). So: one column, no join, no media, no target. It rides in the
- * dashboard's existing Promise.all and is by a distance the cheapest read in
- * it.
+ * ─── WHY THIS REPLACED A LIST OF IDS ──────────────────────────────────────
  *
- * THE LIMIT IS LOAD-BEARING AND SO IS RETURNING A SHORT LIST HONESTLY. A
- * capped result would let the screen mark "everything" as seen while holding
- * only the first slice of it, and the rows past the cap would then be hidden
- * by a tap that never showed them. The caller compares this list's length
- * against the counted total and simply does not offer to dismiss when the two
- * disagree — which is why this returns what it got rather than paging.
+ * The dashboard's orange bar is dismissable: "ברגע שיש התראה כזאת בכתום
+ * שרשום שיש פוסטים שמחכים לכם, אני רוצה אחרי שפעם אחת אני לוחץ על זה וזה
+ * נעלם אחר כך." The first build of that did it by ID — fetch the waiting
+ * rows, remember which ones were shown, count the rest — with a cap of 200
+ * and a rule that the bar may not be dismissed at all while the cap is
+ * reached, so that one tap could never hide rows nobody had seen.
+ *
+ * MEASURED ON HIS ACCOUNT, 13.11.2026: 347 rows in `needs_attention`. Over
+ * the cap, so for weeks the bar has been counting all 347, un-dismissable,
+ * every thirty seconds — the exact thing the dismissal was built to end. The
+ * cap could be raised, and then it would break again at the new number; there
+ * are 4 more of these rows a day.
+ *
+ * SO WHAT IS REMEMBERED IS AN INSTANT, NOT A SET. "I have been told about
+ * everything that was waiting as of this moment." Rows that arrive afterwards
+ * are newer than it and raise the bar again with their own count, which is the
+ * half of the ID mechanism that mattered — and it costs one number per device
+ * instead of a list that grows without bound.
+ *
+ * `newest` is the watermark to store, and it is a DATABASE instant, read off
+ * the newest row being counted, rather than the browser's own clock: a PC
+ * whose clock is ten minutes fast would otherwise dismiss ten minutes of rows
+ * it never showed. It is null exactly when nothing is waiting.
+ *
+ * ONE QUERY. PostgREST's exact count is of everything matching the filter,
+ * independent of the one row the limit returns.
  */
-export const WAITING_FOR_YOU_LIMIT = 200;
-
-export async function listWaitingForYouIds(): Promise<string[]> {
-  const rows = unwrap<{ id: string }[]>(
-    await db()
-      .from('social_queue')
-      .select('id')
-      .in('status', NEEDS_HUMAN_STATUSES)
-      .order('scheduled_at', { ascending: true })
-      .limit(WAITING_FOR_YOU_LIMIT),
-  );
-  return rows.map((r) => r.id);
+export async function waitingForYouSince(since: string | null): Promise<{ unseen: number; newest: string | null }> {
+  let q = db()
+    .from('social_queue')
+    .select('updated_at', { count: 'exact' })
+    .in('status', NEEDS_HUMAN_STATUSES)
+    .order('updated_at', { ascending: false })
+    .limit(1);
+  /* `updated_at` is stamped by the database on every write
+     (social_queue_set_updated_at), so a row that goes back to waiting after
+     being handled is newer than any watermark and says so again. */
+  if (since) q = q.gt('updated_at', since);
+  const res = await q;
+  if (res.error) throw friendlyError(res.error);
+  const rows = (res.data ?? []) as { updated_at: string | null }[];
+  return { unseen: res.count ?? 0, newest: rows[0]?.updated_at ?? null };
 }
 
 export async function getQueueItem(id: string): Promise<QueueRow | null> {
@@ -2673,7 +2691,7 @@ export async function screenshotUrl(path: string): Promise<string | null> {
  * PostgREST's `db-max-rows` is 1000 by default on Supabase; countByStatus's
  * comment in this same file says so, and every other limit here sits at or
  * under it (CAMPAIGN_QUEUE_LIMIT 1000, LIVE_QUEUE_LIMIT 500, CAP_SCAN_LIMIT
- * 500, WAITING_FOR_YOU_LIMIT 200). This one asked for 5000, so the server
+ * 500). This one asked for 5000, so the server
  * returned 1000, `rows.length >= 5000` was false, and `truncated` could never
  * become true.
  *

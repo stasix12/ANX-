@@ -325,7 +325,11 @@ async function sweepStuck(db: any): Promise<void> {
          * looking at the row and its screenshot, having checked the group.
          */
         step: 'submitted',
-        error: 'המחשב שמפרסם לקבוצות הפסיק לדווח באמצע העבודה. בדקו בקבוצה אם הפוסט עלה, ואז "נסה שוב" או "דלג".',
+        /* NOT "דלג": there is no such button anywhere in the product, and the
+           nearest one ("בטל פרסום") marks the row 'skipped', which releases
+           the only brake holding this post out of the next round. See
+           ErrorDetail.tsx, the needs_attention branch. */
+        error: 'המחשב שמפרסם לקבוצות הפסיק לדווח באמצע העבודה. בדקו בקבוצה אם הפוסט עלה. אם לא — "נסה שוב" מהתפריט של השורה.',
       })
       .in('worker_id', gone)
       .in('status', ['publishing', 'awaiting_confirmation'])

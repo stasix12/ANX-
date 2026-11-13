@@ -587,6 +587,11 @@ async function main(): Promise<void> {
          * things it is allowed to say. Neither half is optional: a block with
          * a bare time and no label is a number nobody can act on, and a label
          * with no state under it is a heading over nothing.
+         *
+         * "ממתינים לך" LEFT THIS LIST ON 13.11.2026 and may not come back:
+         * rows waiting on a person are no longer a STATE of the clock, so they
+         * can never again be the only thing this block says. They are drawn as
+         * a dim third line under one of the states above — see case 13.
          */
         assert.ok(c.strip.trim().startsWith('הפרסום הבא'), `${at}: the block has lost its heading — "${c.strip.slice(0, 40)}"`);
         assert.ok(
@@ -594,7 +599,6 @@ async function main(): Promise<void> {
             c.strip.includes('אין פרסומים מתוזמנים') ||
             c.strip.includes('הסבב הסתיים') ||
             c.strip.includes('הסבב הופסק') ||
-            c.strip.includes('ממתינים לך') ||
             c.strip.includes('מושהה') ||
             c.strip.includes('לא נבחר יום פרסום') ||
             c.strip.includes('הסבב עוד לא הושק') ||
@@ -708,7 +712,16 @@ async function main(): Promise<void> {
        */
       assert.ok(nothingQueued.strip.includes('אין פרסומים מתוזמנים'), `${width}: an empty queue must say nothing is waiting`);
       assert.ok(nothingQueued.strip.includes('יום הפרסום הבא:'), `${width}: and must name what the time beside it is`);
-      assert.match(nothingQueued.strip, /יום הפרסום הבא: ?\d{2}\.\d{2} בשעה \d{2}:\d{2}/, `${width}: the next publishing day's own instant is missing`);
+      /* THE DAY IN WORDS, THEN THE DATE, THEN THE HOUR — "יום הפרסום הבא:
+         מחר, 14.11 בשעה 08:00". The words were added on 13.11.2026 for the
+         same reason as the repeat line beside it: "מחר" is read at a glance
+         and a bare "14.11" has to be worked out. All three parts are pinned,
+         so dropping any one of them fails here. */
+      assert.match(
+        nothingQueued.strip,
+        /יום הפרסום הבא: ?[^,\n]+, ?\d{2}\.\d{2} בשעה \d{2}:\d{2}/,
+        `${width}: the next publishing day needs its day in words, its date and its hour`,
+      );
       /* And it may NOT borrow the countdown a queued publication gets. */
       assert.doesNotMatch(nothingQueued.strip, /בעוד |אמור לצאת עכשיו/, `${width}: an empty queue counted down to a publication`);
       /* Drawn at Friday noon against a Sunday–Thursday window, so the window
@@ -839,12 +852,32 @@ async function main(): Promise<void> {
       assert.ok(!ended.strip.includes('הקמפיין עצור'), `${width}: a finished round is reported as stopped by hand`);
 
       /*
-       * 13 — WAITING ON A PERSON, which the window sentences called "אין פרסום
-       * ממתין". Seven publications were waiting; they were waiting for him.
+       * 13 — WAITING ON A PERSON. SEVEN ROWS, AND THEY ARE NOT THE HEADLINE.
+       *
+       * "איפה שרשום הפרסום הבא ויש שגיאה שיש פרסומים שמחכים לי, לדלג עליהם
+       *  תמיד, מה שלא הצליח לפרסם לא להתעסב, ולהראות את השעה והיום שהפרסום
+       *  אמור לצאת בהם."
+       *
+       * This card used to LEAD with them: scheduleReadout returned a 'manual'
+       * kind, a kind is a headline, and the publishing day went unprinted. On
+       * his own account that was 347 rows, the oldest from 2 November, leading
+       * the card for ten days.
+       *
+       * So the three things pinned here are the three halves of his sentence:
+       * the state of the CLOCK is the headline; the rows are still counted,
+       * dimly, because a card reading "אין פרסומים מתוזמנים" over seven
+       * publications nobody has decided about would be the screen hiding real
+       * work; and no clock time is invented for either of them.
        */
-      assert.match(awaitingHand.strip, /7 פרסומים ממתינים לך/, `${width}: rows waiting for a person were not named, or not counted`);
-      assert.ok(awaitingHand.strip.includes('ממתינים לאישור שלכם'), `${width}: and the block does not say WHAT they are waiting for`);
-      assert.ok(!awaitingHand.strip.includes('אין פרסומים מתוזמנים'), `${width}: publications that ARE waiting were reported as none`);
+      assert.ok(awaitingHand.strip.includes('אין פרסומים מתוזמנים'), `${width}: the clock's own answer must be the headline — nothing is scheduled, and that is what it says`);
+      assert.match(awaitingHand.strip, /7 פרסומים ממתינים להחלטה שלכם/, `${width}: rows waiting for a person were not named, or not counted`);
+      assert.ok(awaitingHand.strip.includes('לא עוצרים את התזמון'), `${width}: and the line does not say the one thing he asked about them — that they hold nothing up`);
+      /* THE ORDER IS THE POINT. The count must come BELOW the state, not above
+         it: that inversion is the bug he photographed. */
+      assert.ok(
+        awaitingHand.strip.indexOf('אין פרסומים מתוזמנים') < awaitingHand.strip.indexOf('ממתינים להחלטה שלכם'),
+        `${width}: the waiting rows are back above the clock's answer, which is the fault being fixed`,
+      );
       assert.doesNotMatch(awaitingHand.strip, /\d{1,2}:\d{2}/, `${width}: a hand-waiting round printed a clock time`);
 
       /*

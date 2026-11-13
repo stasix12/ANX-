@@ -176,7 +176,14 @@ const pick = (o: { rows: StrandedRow[]; workers?: WorkerSeen[]; workersKnown?: b
     /if \(Date\.now\(\) - state\.lastStrandedAt < STRANDED_EVERY_MS\) return;/.test(worker),
     'the sweep must stand down between looks — without the early return it is two reads every five seconds, for ever',
   );
-  const fn = worker.slice(worker.indexOf('async function sweepStranded'), worker.indexOf('async function sweepStranded') + 2600);
+  /* THE WHOLE FUNCTION, NOT A FIXED NUMBER OF CHARACTERS. This read was
+     `+ 2600`, and on 13.11.2026 a ten-character change to the parked row's
+     error message pushed the re-queue write to offset 2629 — so a guard about
+     statuses failed over a sentence. The closing brace at column 0 is this
+     file's own function boundary, so the slice is the function however it
+     grows. */
+  const start = worker.indexOf('async function sweepStranded');
+  const fn = worker.slice(start, worker.indexOf('\n}\n', start));
   is(fn.length > 500, 'sweepStranded is found');
   is(/pickStranded\(/.test(fn), 'and it must take its decision from the tested rules, not re-derive them inline');
   is(/step: 'submitted'/.test(fn), "a parked row must carry 'submitted', which the bulk “המשך סבב” deliberately skips");

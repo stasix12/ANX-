@@ -36,7 +36,7 @@ import {
   listQueue,
   listTargets,
   countWaitingWithin,
-  listWaitingForYouIds,
+  waitingForYouSince,
   listWorkers,
   pauseCampaign,
   queueCampaignComment,
@@ -65,7 +65,7 @@ import { MIN_REPEAT_HOURS, readRepeat, readSchedule, scheduleColumns, type Campa
 import { accountGapLabel } from '@/lib/social/rules';
 import { OVERDUE_AFTER_SECONDS } from '@/lib/social/countdown';
 import { AUTOMATIC_WAITING_STATUSES, EMPTY_QUEUE_SUMMARY, IN_FLIGHT_STATUSES, TERMINAL_STATUSES, type QueueSummary } from '@/lib/social/status';
-import { keep as keepSeen, markAll, readSeen, same as sameSeen, unseen, writeSeen } from '@/lib/social/seen';
+import { readSeenUntil, writeSeenUntil } from '@/lib/social/seen';
 import { SNAPSHOT, readSnapshot, writeSnapshot } from '@/lib/social/snapshot';
 import { addDaysISO, agree, counted, formatTimeHe, ltr, startOfZonedDay, startOfZonedWeek, zonedDateISO, zonedToUtc } from '@/lib/social/time';
 import { projectQueue, spacingFrom } from '@/lib/social/projection';
@@ -186,13 +186,19 @@ interface DashboardData {
    */
   activeTargets: number | null;
   /**
-   * The IDs of every row waiting on a PERSON — the ones the orange bar counts.
-   *
-   * Read as IDs and not as a number because the bar can now be answered: see
-   * lib/social/seen.ts. The count alone could only support a flag that hides
-   * the next one too.
+   * How many rows waiting on a PERSON this device has NOT been told about —
+   * the number the orange bar prints. See lib/social/seen.ts: what is
+   * remembered is an instant, so this is already "minus what was dismissed"
+   * and works at any number of rows.
    */
-  waitingForYou: string[];
+  waitingUnseen: number;
+  /**
+   * The newest such row's own `updated_at`, which is the watermark pressing
+   * "הצג" stores. Null exactly when nothing is waiting. A database instant,
+   * never this browser's clock.
+   */
+  waitingNewest: string | null;
+
   manual: QueueRow[];
   log: ActivityEntry[];
   campaigns: Campaign[];
@@ -430,7 +436,7 @@ export default function SocialDashboard() {
         /* One column, no joins — see listWaitingForYouIds. It is the cheapest
            read in this batch and the only one that knows WHICH rows the
            orange bar is about. */
-        listWaitingForYouIds(),
+        waitingForYouSince(readSeenUntil()),
         listActivity(30),
         // Ascending, because the limit is applied after the sort: read
         // newest-first, these 40 would be the FURTHEST-OUT rows in the queue
@@ -536,7 +542,8 @@ export default function SocialDashboard() {
         waitingToday,
         control,
         activeTargets: targets ? targets.filter((t) => t.enabled).length : null,
-        waitingForYou,
+        waitingUnseen: waitingForYou.unseen,
+        waitingNewest: waitingForYou.newest,
         manual,
         log,
         campaigns,
@@ -680,50 +687,42 @@ export default function SocialDashboard() {
    *
    * These rows move only when a person moves them, so the bar about them used
    * to be permanent: looked at, understood, left alone deliberately, and still
-   * repeated on every load. The count below is of the ones he has NOT been
-   * shown, so pressing "הצג" once answers it — and a row that arrives
-   * afterwards raises it again, with its own number. lib/social/seen.ts holds
-   * the why.
-   *
-   * COVERAGE FIRST. listWaitingForYouIds() is capped, and a capped list would
-   * let one tap mark "everything" as seen while holding only the first slice
-   * of it — hiding rows that were never on screen. When the list and the
-   * counted total disagree the whole mechanism stands down: the bar counts the
-   * total, as it always did, and cannot be dismissed at all.
+   * repeated on every load. `waitingUnseen` is the count of the ones this
+   * device has NOT been told about — the read itself is filtered by the stored
+   * watermark — so pressing "הצג" once answers it, and a row that arrives
+   * afterwards raises it again with its own number. lib/social/seen.ts holds
+   * the why, including what the previous ID-based version could not do: at 347
+   * waiting rows it was over its 200-row cap, which disabled the dismissal
+   * entirely and left the bar un-answerable for weeks.
    */
-  const waitingIds = data?.waitingForYou ?? [];
-  const waitingCovered = !!data && waitingIds.length === summary.needsHuman;
-  const waitingForYou = waitingCovered ? unseen(waitingIds, seen).length : summary.needsHuman;
-
+  const [seenUntil, setSeenUntil] = useState<string | null>(null);
   useEffect(() => {
-    setSeen(readSeen());
+    setSeenUntil(readSeenUntil());
   }, []);
-
   /*
-   * Narrowed to what is still waiting, on every load, and written back.
+   * THE DISMISSAL HAS TO BITE BEFORE THE NEXT POLL, and the comparison that
+   * does it is the same one the next poll will make in the database.
    *
-   * This is what lets the same row raise the bar a second time: handled, it
-   * leaves the set; stuck again later, it is unseen again and says so. It is
-   * also the only thing stopping the key from growing for as long as this
-   * browser is used. `sameSeen` keeps it from writing — and re-rendering — on
-   * every one of the 30-second polls that change nothing.
+   * `waitingUnseen` was counted against the watermark as it stood when this
+   * load began, so it cannot know about a tap that happened afterwards. What
+   * the screen can see is that the watermark now covers the newest row that
+   * WAS counted — and if it covers the newest, it covers all of them, because
+   * the count and the instant come from the same ordered read. One poll later
+   * the read itself returns 0 and this line stops mattering; a row that
+   * arrives in between is newer than the watermark and re-raises the bar with
+   * its own number.
    */
-  useEffect(() => {
-    if (!data || !waitingCovered) return;
-    const next = keepSeen(seen, data.waitingForYou);
-    if (sameSeen(next, seen)) return;
-    setSeen(next);
-    writeSeen(next);
-  }, [data, waitingCovered, seen]);
+  const waitingForYou = data && !(seenUntil && data.waitingNewest && data.waitingNewest <= seenUntil) ? data.waitingUnseen : 0;
 
-  /* Pressing "הצג" means "I am looking at these now" — and the screen it
-     opens lists exactly these rows, which is what makes that true. */
+  /* Pressing "הצג" means "I know about these" — and what is stored is the
+     newest waiting row's own database instant, so nothing that arrives after
+     this tap is hidden by it. */
   const markWaitingSeen = useCallback(() => {
-    if (!data || !waitingCovered) return;
-    const next = markAll(data.waitingForYou);
-    setSeen(next);
-    writeSeen(next);
-  }, [data, waitingCovered]);
+    const at = data?.waitingNewest;
+    if (!at) return;
+    writeSeenUntil(at);
+    setSeenUntil(at);
+  }, [data]);
 
   /**
    * Clears the queue. One implementation behind two entry points: beside
@@ -1703,17 +1702,29 @@ export default function SocialDashboard() {
           : waitingForYou > 0
             ? {
                 title: counted(waitingForYou, 'פרסום אחד ממתין לכם', 'פרסומים ממתינים לכם'),
-                body: 'בדרך כלל פייסבוק ביקשה אימות בחלון הדפדפן שבמחשב, או שהפרסום מחכה לאישור שלכם.',
+                /*
+                 * AND IT SAYS THAT THEY HOLD NOTHING UP, because they do not
+                 * and he asked: "מה שלא הצליח לפרסם לא להתעסב". rules.ts
+                 * releases rows by status and a row waiting on a person is
+                 * not one it looks at — the rest of the queue publishes past
+                 * them. The old body named the likeliest cause ("פייסבוק
+                 * ביקשה אימות"), and on his own 347 rows that cause is not
+                 * the common one: 284 of them are a publish window that did
+                 * not close and 60 are a rate limit. One sentence cannot
+                 * diagnose them, so it says what is true of all of them and
+                 * leaves the diagnosis to the row.
+                 */
+                body: 'פרסומים שנעצרו באמצע וממתינים להחלטה שלכם. הם לא עוצרים את התזמון — שאר הפרסומים ממשיכים לצאת בזמן. "הצג" פותח את הרשימה, וההתראה תחזור רק אם יצטרף פרסום חדש.',
                 actionLabel: 'הצג',
                 /* ?status=needs_attention lands on the history screen's
                    'ידניים' group, which is NEEDS_HUMAN_STATUSES entire — the
                    same three statuses counted here. The list it opens is
                    therefore exactly the rows being marked as shown. */
                 href: '/social/history?status=needs_attention',
-                /* Only offered while the ID list covers the count; see
-                   waitingCovered. Without it the bar behaves as it always
-                   did. */
-                onAction: waitingCovered ? markWaitingSeen : undefined,
+                /* Always answerable now: what the tap stores is a watermark,
+                   not a list, so it cannot run out of room. See seen.ts for
+                   what that trades away and why he asked for it. */
+                onAction: markWaitingSeen,
               }
             : {
                 title: counted(data.counts.paused, 'פרסום אחד תקוע', 'פרסומים תקועים'),

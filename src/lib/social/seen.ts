@@ -1,31 +1,46 @@
 /**
- * WHICH PUBLICATIONS WAITING FOR A PERSON HAVE ALREADY BEEN SHOWN TO THEM.
+ * HOW FAR THE OWNER HAS BEEN TOLD ABOUT PUBLICATIONS THAT WAIT ON A PERSON.
  *
  * "ברגע שיש התראה כזאת בכתום שרשום שיש פוסטים שמחכים לכם, אני רוצה אחרי
  *  שפעם אחת אני לוחץ על זה וזה נעלם אחר כך."
  *
  * The dashboard's orange bar says "N פרסומים ממתינים לכם" and links to the
- * list. Until now it kept saying it: the rows it counts are ones only a person
- * can move, and a person who has looked at them and decided to leave them
- * there was told about them again every thirty seconds, for ever. A warning
- * that cannot be answered is one people learn to read past — which is the
- * opposite of what it is for.
+ * list. Until the first version of this file it kept saying it: the rows it
+ * counts are ones only a person can move, and a person who has looked at them
+ * and decided to leave them there was told about them again every thirty
+ * seconds, for ever. A warning that cannot be answered is one people learn to
+ * read past — which is the opposite of what it is for.
  *
- * SO IT IS DISMISSED BY ROW, NOT BY A FLAG.
+ * ─── WHY THIS IS NOW ONE INSTANT AND NOT A SET OF IDS ─────────────────────
  *
- * A single "hide this bar" boolean would have been four lines, and it would
- * have hidden the NEXT publication that needed him too — silently, with the
- * only other place it appears being a filter on the history screen. The thing
- * being remembered here is therefore not "the bar was dismissed" but "these
- * exact rows were shown", so a row that arrives afterwards raises the bar
- * again with its own count.
+ * It was a set: the ids of the rows that had been shown, pruned on every read
+ * against what was still waiting, so a row that was handled and later got
+ * stuck again counted as unseen a second time. It had a cap — 200 ids — and a
+ * rule that the bar may not be dismissed AT ALL while the cap is reached, so
+ * that one tap could never hide rows nobody had seen.
  *
- * AND WHAT IS REMEMBERED IS PRUNED ON EVERY READ. `keep()` intersects the
- * stored set with what is actually waiting now, which is what makes the second
- * half work: a row that gets handled leaves the set, so if that same row ever
- * comes back — retried, then stuck again — it is unseen once more and says so.
- * It also means the key cannot grow without bound on a machine that publishes
- * every day for a year.
+ * MEASURED ON HIS ACCOUNT, 13.11.2026: 347 rows in `needs_attention`, growing
+ * by about four a day. Over the cap — so the safety rule had been holding the
+ * bar open, un-dismissable, at 347, which is precisely the un-answerable
+ * warning described above. He said what to do about it in the same breath as
+ * the card: "מה שלא הצליח לפרסם לא להתעסב".
+ *
+ * So the watermark: ONE instant, "I have been told about everything that was
+ * waiting as of here". Rows that arrive afterwards are newer than it and raise
+ * the bar again with their own count — the half of the old mechanism that was
+ * load-bearing — and it works at any number of rows, for ever, in one string.
+ *
+ * WHAT IT GIVES UP, SAID PLAINLY: the bar can now be answered while the list
+ * it opens is longer than one screen, so "dismissed" means "I know about
+ * these", not "I have read each one". That is the owner's own instruction, and
+ * nothing is hidden by it that is not still in the queue, on the history
+ * screen, and under the queue tile's own "N דורשים אתכם". NOTHING IS DELETED
+ * AND NO ROW CHANGES STATUS — a row waiting on a person stays exactly where it
+ * is, which is what keeps its (post, group) pair out of every future round.
+ *
+ * THE INSTANT IS THE DATABASE'S, NOT THE BROWSER'S. The caller stores the
+ * `updated_at` of the newest row that was counted, so a PC with a fast clock
+ * cannot dismiss rows that have not arrived yet.
  *
  * Per device, in localStorage, like the bell's unread marker beside it: this
  * is a convenience about one person's attention, not a fact about the
@@ -33,67 +48,42 @@
  * functions below degrade to "nothing has been seen" — the bar simply keeps
  * showing, which is exactly the behaviour it had before this file existed.
  */
-const KEY = 'social:waiting:seen';
-
-/** Unique, in the order given. Stored sets are small; readability wins. */
-const unique = (ids: readonly string[]): string[] => [...new Set(ids)];
+const KEY = 'social:waiting:seen-until';
 
 /**
- * The rows waiting on a person that they have NOT been shown yet.
+ * The watermark, or null when nothing has been dismissed on this device.
  *
- * The bar's count comes from here rather than from the queue summary, so the
- * number and the decision to show it can never disagree.
+ * Anything at all can be under a localStorage key — an older shape of this
+ * feature (this key held an ARRAY of ids until 13.11.2026), another tab
+ * mid-write, a person with the console open. A stored value is never trusted
+ * to be what it was written as, and anything that is not a usable instant
+ * reads as "nothing dismissed", which is the safe direction.
  */
-export function unseen(waiting: readonly string[], seen: readonly string[]): string[] {
-  const known = new Set(seen);
-  return unique(waiting).filter((id) => !known.has(id));
-}
-
-/**
- * The stored set, narrowed to what is still waiting.
- *
- * Called on every load, and its result is what gets written back. See the
- * header: this is the half that lets a row raise the bar a second time.
- */
-export function keep(seen: readonly string[], waiting: readonly string[]): string[] {
-  const live = new Set(waiting);
-  return unique(seen).filter((id) => live.has(id));
-}
-
-/**
- * Everything waiting right now, marked as shown. That is the whole of what
- * pressing "הצג" means — the screen it opens lists exactly these rows.
- */
-export function markAll(waiting: readonly string[]): string[] {
-  return unique(waiting);
-}
-
-/** Two sets holding the same ids, order aside. Saves a pointless write. */
-export function same(a: readonly string[], b: readonly string[]): boolean {
-  if (a.length !== b.length) return false;
-  const other = new Set(b);
-  return a.every((id) => other.has(id));
-}
-
-export function readSeen(): string[] {
+export function readSeenUntil(): string | null {
   try {
     const raw = localStorage.getItem(KEY);
-    if (!raw) return [];
+    if (!raw) return null;
     const parsed: unknown = JSON.parse(raw);
-    /*
-     * Anything at all can be under a localStorage key — an older shape of
-     * this feature, another tab mid-write, a person with the console open.
-     * A stored value is never trusted to be what it was written as.
-     */
-    return Array.isArray(parsed) ? unique(parsed.filter((v): v is string => typeof v === 'string')) : [];
+    if (typeof parsed !== 'string') return null;
+    return Number.isFinite(Date.parse(parsed)) ? parsed : null;
   } catch {
-    return [];
+    return null;
   }
 }
 
-export function writeSeen(ids: readonly string[]): void {
+/**
+ * Stores the watermark — and never moves it backwards.
+ *
+ * Two tabs open on the dashboard poll independently, and the older one's
+ * "newest waiting row" can be a minute behind the other's. A plain write would
+ * let that tab un-dismiss what the first one answered.
+ */
+export function writeSeenUntil(at: string): void {
   try {
-    localStorage.setItem(KEY, JSON.stringify(unique(ids)));
+    if (!Number.isFinite(Date.parse(at))) return;
+    const now = readSeenUntil();
+    if (now && now >= at) return;
+    localStorage.setItem(KEY, JSON.stringify(at));
   } catch {
     /* Private mode, a full quota, storage switched off. The bar keeps
        showing, which is the safe direction for a thing nobody has answered. */

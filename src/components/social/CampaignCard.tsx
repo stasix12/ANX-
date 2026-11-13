@@ -955,6 +955,10 @@ export function CampaignCard({
                round's whole life, not about today's counter. See campaign.ts. */
             neverLaunched={neverLaunched(state)}
             readout={readout}
+            /* The round's own rows that wait on a PERSON. Drawn as one dim
+               line and only where the card has no hour to print — see the
+               prop's note in NextPublication. */
+            waiting={state.progress.manual}
             workerOnline={workerOnline}
             nextTargetName={state.nextTargetName}
             nextTargetImage={nextTargetImage}

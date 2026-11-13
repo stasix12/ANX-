@@ -530,7 +530,7 @@ async function main(): Promise<void> {
    */
   const { error: parkErr } = await db
     .from('social_queue')
-    .update({ status: 'needs_attention', step: 'submitted', error: 'ה-worker הופסק באמצע העבודה. בדקו בקבוצה אם הפוסט עלה, ואז "נסה שוב" או "דלג".' })
+    .update({ status: 'needs_attention', step: 'submitted', error: 'ה-worker הופסק באמצע העבודה. בדקו בקבוצה אם הפוסט עלה. אם לא — "נסה שוב" מהתפריט של השורה.' })
     .eq('worker_id', state.id)
     .in('status', ['publishing', 'awaiting_confirmation'])
     .in('step', MAYBE_LIVE_STEPS);
@@ -1689,7 +1689,10 @@ async function sweepStranded(state: WorkerState): Promise<void> {
         .update({
           status: 'needs_attention',
           step: 'submitted',
-          error: 'הפרסום נקטע באמצע ואין מי שמחזיק אותו. בדקו בקבוצה אם הפוסט עלה, ואז "נסה שוב" או "דלג".',
+          /* NOT "דלג" — see ErrorDetail.tsx: no such button exists, and the
+             nearest one marks the row 'skipped', which releases the only
+             brake holding this post out of the next round. */
+          error: 'הפרסום נקטע באמצע ואין מי שמחזיק אותו. בדקו בקבוצה אם הפוסט עלה. אם לא — "נסה שוב" מהתפריט של השורה.',
         })
         .in('id', decided.park),
       decided.park.length,

@@ -61,14 +61,14 @@ const prog = (o: Record<string, number> = {}) =>
 const st = (
   state: CampaignState['state'],
   nextAt: string | null,
-  extra: { manual?: number; lastPublished?: string; truncated?: boolean; channel?: string } = {},
+  extra: { manual?: number; published?: number; lastPublished?: string; truncated?: boolean; channel?: string } = {},
 ) =>
   ({
     state,
     nextAt,
     nextChannel: extra.channel ?? 'facebook_group',
     truncated: extra.truncated ?? false,
-    progress: prog({ manual: extra.manual ?? 0 }),
+    progress: prog({ manual: extra.manual ?? 0, published: extra.published ?? 0 }),
     done: extra.lastPublished ? [{ published_at: extra.lastPublished }] : [],
   }) as never;
 
@@ -86,7 +86,7 @@ const st = (
    */
   const now = at('2026-10-06T10:12');
   const r = scheduleReadout(ref, st('completed', null), now);
-  eq(r, { kind: 'ended', stopped: false, repeats: false, opens: null }, 'a finished round inside an open window must name no instant');
+  eq(r, { kind: 'ended', stopped: false, repeats: false, opens: null, openNow: false }, 'a finished round inside an open window must name no instant');
 
   /*
    * AND THE PROOF THAT IT IS THE ROUND, NOT THE CLOCK, THAT DECIDES. Same
@@ -171,12 +171,37 @@ const st = (
    */
   eq(scheduleReadout(noDays, st('running', at('2026-10-06T10:20').toISOString()), now), { kind: 'no-day' }, 'a schedule with no day names no instant');
   /* Stopped by hand reads differently from finished, because it is. */
-  eq(scheduleReadout(ref, st('stopped', null), now), { kind: 'ended', stopped: true, repeats: false, opens: null }, 'a round he stopped says it was stopped');
+  eq(scheduleReadout(ref, st('stopped', null), now), { kind: 'ended', stopped: true, repeats: false, opens: null, openNow: false }, 'a round he stopped says it was stopped');
   /*
-   * WAITING ON A PERSON. Every window sentence called this "אין פרסום ממתין".
-   * Seven publications were waiting; they were waiting for him.
+   * ─── WAITING ON A PERSON IS NOT AN ANSWER TO "WHEN" ──────────────────────
+   *
+   * "איפה שרשום הפרסום הבא ויש שגיאה שיש פרסומים שמחכים לי, לדלג עליהם תמיד,
+   *  מה שלא הצליח לפרסם לא להתעסב, ולהראות את השעה והיום שהפרסום אמור לצאת
+   *  בהם."
+   *
+   * This used to return `{ kind: 'manual', waiting: 7 }`, and a kind is a
+   * HEADLINE: seven frozen rows took the card over and the publishing day
+   * underneath them was never printed. On his account that was 347 rows, the
+   * oldest from 2 November, and the card led with them for ten days.
+   *
+   * The rows have not moved and nothing about them is hidden — they are still
+   * in the queue, still on the history screen, still counted by the
+   * dashboard's own bar. What changed is that they no longer answer a question
+   * they were never about. The window is open at 10:12, so that is the answer.
    */
-  eq(scheduleReadout(ref, st('needs_attention', null, { manual: 7 }), now), { kind: 'manual', waiting: 7 }, 'rows waiting for a person are named, and counted');
+  eq(
+    scheduleReadout(ref, st('needs_attention', null, { manual: 7 }), now),
+    { kind: 'window-open', until: at('2026-10-07T00:00').toISOString() },
+    'rows waiting for a person do not become the headline — the clock still answers',
+  );
+  /* AND NO KIND MAY CARRY THEM BACK IN. A sweep is the only way to hold this:
+     seven waiting rows must not change the answer for ANY state. */
+  for (const state of ['not_started', 'running', 'completed', 'paused', 'stopped', 'needs_attention'] as const)
+    eq(
+      scheduleReadout(ref, st(state, null, { manual: 7 }), now),
+      scheduleReadout(ref, st(state, null, { manual: 0 }), now),
+      `${state}: a row waiting on a person may not change what the card says about the clock`,
+    );
   /* Nothing queued, no schedule to describe: nothing is all there is to say. */
   eq(scheduleReadout(off, st('not_started', null), now), { kind: 'none' }, 'no queue and no schedule is "nothing"');
   eq(scheduleReadout(null, st('not_started', null), now), { kind: 'none' }, 'and so is no schedule at all');
@@ -306,22 +331,55 @@ const st = (
   const now = at('2026-10-06T10:12');
   const on: CampaignRepeat = { enabled: true, minHours: 20 };
   /*
-   * AND IT SAYS WHEN. "למה הוא לא מראה מתי אמור לצאת הפרסום הבא" was asked of
-   * exactly this state: the card knew another round was coming and could not
-   * name an hour for it. `opens` is nextAllowedAt() — the first minute the
-   * window permits, which is the earliest the repeat can act. Drawn at 10:12
-   * on a Tuesday inside an 08:00 window, that minute is now.
+   * ─── AND IT SAYS WHEN — BUT NEVER "NOW" ─────────────────────────────────
+   *
+   * "למה הוא לא מראה מתי אמור לצאת הפרסום הבא" was asked of exactly this
+   * state: the card knew another round was coming and could not name an hour
+   * for it. `opens` is nextAllowedAt() — the first minute the window permits,
+   * which is the earliest the repeat can act.
+   *
+   * THIS ASSERTION USED TO READ `opens: now.toISOString()`, AND THAT WAS THE
+   * BUG WRITTEN DOWN. nextAllowedAt() returns `from` unchanged whenever `from`
+   * is already inside the window (campaign-schedule.ts:1066-1067), so at 10:12
+   * on a Tuesday the "appointment" it handed the card was 10:12 — the minute he
+   * was standing in, printed as the hour the next round would open, changing
+   * every time the card re-rendered. campaign-schedule.ts's own comment calls
+   * that fault out in so many words, four lines below the return.
+   *
+   * So `opens` is future-only and `openNow` carries the rest: the window IS
+   * open, the repeat IS armed, and the honest sentence is "any minute now"
+   * rather than a clock reading.
    */
   eq(
     scheduleReadout(ref, st('completed', null), now, on),
-    { kind: 'ended', stopped: false, repeats: true, opens: now.toISOString() },
-    'a finished round that repeats says another one is coming, and when',
+    { kind: 'ended', stopped: false, repeats: true, opens: null, openNow: true },
+    'inside the window the next round is "about to open", never the current minute',
+  );
+  /*
+   * AND ONCE TODAY HAS ALREADY RUN, THE HOUR IS TOMORROW'S.
+   *
+   * The repeat is daily, so a round that has published today and finished will
+   * not reopen today — asking nextAllowedAt() from `now` would answer "now"
+   * for the rest of the day. Asked from tomorrow it answers the real hour:
+   * Wednesday's opening, which is a minute he can plan around.
+   */
+  eq(
+    scheduleReadout(ref, st('completed', null, { published: 219 }), now, on),
+    { kind: 'ended', stopped: false, repeats: true, opens: at('2026-10-07T08:00').toISOString(), openNow: false },
+    'a round that already published today names tomorrow\u2019s opening hour, not this minute',
+  );
+  /* The same round at 23:30, after the window has shut: the day is over either
+     way, and the answer is the same real hour. */
+  eq(
+    scheduleReadout(ref, st('completed', null, { published: 219 }), at('2026-10-06T23:30'), on),
+    { kind: 'ended', stopped: false, repeats: true, opens: at('2026-10-07T08:00').toISOString(), openNow: false },
+    'and so does the same round after the window has shut',
   );
   /* Outside the window it is the next chosen day's opening hour, never a
      minute that has gone. Friday noon against a Sunday-to-Thursday schedule. */
   eq(
     scheduleReadout(ref, st('completed', null), at('2026-10-02T12:00'), on),
-    { kind: 'ended', stopped: false, repeats: true, opens: at('2026-10-04T08:00').toISOString() },
+    { kind: 'ended', stopped: false, repeats: true, opens: at('2026-10-04T08:00').toISOString(), openNow: false },
     'and on a day the schedule does not permit, the hour is the next day it does',
   );
   /* No day chosen: the repeat is armed and there is no minute it can act in.
@@ -329,19 +387,19 @@ const st = (
      indefinitely, by design. */
   eq(
     scheduleReadout({ ...ref, days: [] }, st('completed', null), now, on),
-    { kind: 'ended', stopped: false, repeats: true, opens: null },
+    { kind: 'ended', stopped: false, repeats: true, opens: null, openNow: false },
     'with no day chosen there is no minute to name, and none is named',
   );
   /* The window off is not a window: the repeat still reopens the round, and
      the hour it would open at is not a fact this module has. */
   eq(
     scheduleReadout(off, st('completed', null), now, on),
-    { kind: 'ended', stopped: false, repeats: true, opens: null },
+    { kind: 'ended', stopped: false, repeats: true, opens: null, openNow: false },
     'and a switched-off window names no hour either',
   );
   eq(
     scheduleReadout(ref, st('completed', null), now, REPEAT_WHEN_UNKNOWN),
-    { kind: 'ended', stopped: false, repeats: false, opens: null },
+    { kind: 'ended', stopped: false, repeats: false, opens: null, openNow: false },
     'and one that does not, does not — an unknown repeat names no hour either',
   );
   /*
@@ -351,7 +409,7 @@ const st = (
    */
   eq(
     scheduleReadout(ref, st('stopped', null), now, on),
-    { kind: 'ended', stopped: true, repeats: false, opens: null },
+    { kind: 'ended', stopped: true, repeats: false, opens: null, openNow: false },
     'a round he STOPPED does not repeat, even with the switch on — and is promised no hour',
   );
   /* And the switch changes nothing about any other state's answer. */
@@ -481,17 +539,21 @@ const st = (
   eq(scheduleReadout(ref, st('completed', null, { truncated: true }), now), { kind: 'partial' }, 'a capped read may NOT claim the round ended');
   eq(scheduleReadout(ref, st('not_started', null, { truncated: true }), now), { kind: 'partial' }, 'nor may it answer from a count it does not have');
   /*
-   * BUT A ROW WAITING ON A PERSON SURVIVES THE CAP, for the same reason a
-   * queued row does: p.manual counts rows we can SEE, and a cap can only ever
-   * make that number SMALLER. "לפחות אחד ממתין לך" is safe to under-promise,
-   * whereas 'partial' here printed "לא ניתן לחשב כאן" over the one actionable
-   * fact the card knew — the disclaimer eating the answer instead of
-   * qualifying it. The owner's card 1 is exactly this shape.
+   * AND A ROW WAITING ON A PERSON DOES NOT RESCUE IT.
+   *
+   * This used to return `{ kind: 'manual', waiting: 7 }` — the argument being
+   * that p.manual counts rows we can SEE, so a cap can only make it smaller
+   * and naming them was a safe under-promise. The flaw was in the question:
+   * this module answers WHEN THE NEXT PUBLICATION GOES OUT, and a frozen row
+   * is not an answer to it at any count. With the read capped, the honest
+   * answer about the clock is that there is none. The rows themselves are
+   * still drawn — as a dim line beside this answer, from the count the card
+   * is handed directly (NextPublication's `waiting` prop).
    */
   eq(
     scheduleReadout(ref, st('needs_attention', null, { truncated: true, manual: 7 }), now),
-    { kind: 'manual', waiting: 7 },
-    'a row waiting on HIM is still reported, capped read or not',
+    { kind: 'partial' },
+    'a capped read says it cannot answer — the waiting rows were never the answer',
   );
   /*
    * AND THE REORDER STOPS THERE. With nothing waiting on a person, a capped

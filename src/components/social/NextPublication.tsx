@@ -47,6 +47,7 @@ export function NextPublication({
   targetName = null,
   targetImage = null,
   frozenUntil = null,
+  waiting = 0,
   className = '',
 }: {
   readout: ScheduleReadout;
@@ -131,6 +132,34 @@ export function NextPublication({
    * read the heartbeat must not imply either answer.
    */
   workerOnline?: boolean;
+  /**
+   * ─── HOW MANY OF THIS ROUND'S ROWS ARE WAITING ON A PERSON ───────────────
+   *
+   * "איפה שרשום הפרסום הבא ויש שגיאה שיש פרסומים שמחכים לי, לדלג עליהם תמיד,
+   *  מה שלא הצליח לפרסם לא להתעסב, ולהראות את השעה והיום שהפרסום אמור לצאת
+   *  בהם."
+   *
+   * IT IS A PROP AND NOT PART OF THE READOUT, and that is the whole point:
+   * `scheduleReadout` used to return `{ kind: 'manual', waiting: N }`, and a
+   * kind is a HEADLINE — so a round with two frozen rows and a perfectly good
+   * publishing day announced the frozen rows and never named the day. On his
+   * account that was 347 rows, the oldest from 2 November, leading the card
+   * for ten days. The readout now answers only about the clock
+   * (schedule-readout.ts, and a sweep in its test pins that a waiting row
+   * cannot change any answer), and this number comes in beside it.
+   *
+   * AND IT IS DRAWN ONLY WHERE THERE IS NO INSTANT TO DRAW. With a real
+   * publication coming it is noise and he said so. With nothing queued the
+   * card would otherwise read "אין פרסומים מתוזמנים" over a round holding
+   * seven publications nobody has decided about — the screen hiding real work
+   * rather than sparing him. So: never beside an hour, always under the words.
+   *
+   * NOTHING HERE SKIPS THEM. Being OPEN is the only thing keeping those
+   * (post, group) pairs out of every future round, and marking them terminal
+   * would let the same post go out twice — see the note in
+   * schedule-readout.ts.
+   */
+  waiting?: number;
   className?: string;
 }) {
   /*
@@ -305,7 +334,28 @@ export function NextPublication({
           {offline && <Caveat>המחשב לא מחובר — הפרסום לא ייצא עד שהמחשב יחזור</Caveat>}
         </>
       ) : (
-        <Words readout={readout} scheduleOn={scheduleOn} neverLaunched={neverLaunched} armedAt={armedAt} now={now} />
+        <>
+          <Words readout={readout} scheduleOn={scheduleOn} neverLaunched={neverLaunched} armedAt={armedAt} now={now} />
+          {/*
+            THE THIRD LINE, AND IT IS BUILT SO IT CANNOT BECOME THE FIRST.
+            mist-500 is the dimmest theme-aware grey this product has — the
+            same tier as the group name above — with no icon and no amber,
+            because amber is for something that needs doing and these do not:
+            they hold nothing up.
+
+            AND IT IS NOT A LINK, deliberately. The card's own state badge
+            already goes to /social/history?status=needs_attention — these are
+            the rows that put it in that state — and dashboard-hero.test.ts
+            holds every card to ONE door at most, because two links to the same
+            list is a card asking to be clicked twice.
+          */}
+          {waiting ? (
+            <p data-waiting-note className="mt-1 text-[10.5px] font-bold leading-[13px] text-mist-500">
+              {counted(waiting, 'פרסום אחד ממתין להחלטה שלכם', 'פרסומים ממתינים להחלטה שלכם', 'שני פרסומים ממתינים להחלטה שלכם')}
+              {' · לא עוצרים את התזמון'}
+            </p>
+          ) : null}
+        </>
       )}
     </div>
   );
@@ -438,19 +488,6 @@ function Words({
     );
   }
 
-  if (readout.kind === 'manual') {
-    /* Publications ARE waiting — on him, not on the clock. "אין פרסומים
-       מתוזמנים" over these was the card reporting them as nothing. */
-    return (
-      <>
-        <p className="mt-0.5 text-[14px] font-extrabold leading-[17px] text-warning-400">
-          {counted(readout.waiting, 'פרסום אחד ממתין לך', 'פרסומים ממתינים לך', 'שני פרסומים ממתינים לך')}
-        </p>
-        <p className="mt-0.5 text-[11.5px] font-bold leading-4 text-mist-300">הם לא ממתינים לשעה — הם ממתינים לאישור שלכם</p>
-      </>
-    );
-  }
-
   if (readout.kind === 'ended') {
     return (
       <>
@@ -474,12 +511,21 @@ function Words({
             <>
               חזרה יומית פעילה — הסבב הבא ייפתח
               {readout.opens ? (
+                /* THE DAY IN WORDS, not only in digits: "היום (ו׳), 13.11"
+                   answers the question he actually asks — "מתי" — where a
+                   bare 13.11 makes him work out whether that is today. */
                 <>
-                  {' ב-'}
+                  {` ${dayRelativeHe(new Date(readout.opens), new Date(now))}, `}
                   <span dir="ltr" className="inline-block tabular-nums">{formatDayMonthHe(readout.opens)}</span>
                   {' בשעה '}
                   <span dir="ltr" className="inline-block tabular-nums">{formatInstantHe(readout.opens)}</span>
                 </>
+              ) : readout.openNow ? (
+                /* The window is open and the repeat is armed, so the honest
+                   answer is "any minute now" — NOT the current clock time,
+                   which is what nextAllowedAt() hands back inside a window
+                   and what this card used to print as an appointment. */
+                ' — חלון הפרסום פתוח, הסבב הבא ייפתח בכל רגע'
               ) : (
                 ' לבד'
               )}
@@ -546,8 +592,13 @@ function Words({
       <p className="mt-0.5 text-[14px] font-extrabold leading-[17px] text-mist-100">אין פרסומים מתוזמנים</p>
       <p className="mt-0.5 text-[11.5px] font-bold leading-4 text-mist-300">
         {readout.kind === 'window-next' ? (
+          /* THE DAY IN WORDS FIRST, for the same reason as the repeat line
+             above it: "מחר" is read at a glance and "14.11" has to be worked
+             out. It is still labelled as the publishing DAY and not as a
+             publication — nothing is queued in this state. */
           <>
-            יום הפרסום הבא:{' '}
+            יום הפרסום הבא: {dayRelativeHe(new Date(readout.opens), new Date(now))}
+            {', '}
             <span dir="ltr" className="inline-block tabular-nums">{formatDayMonthHe(readout.opens)}</span>
             {' בשעה '}
             <span dir="ltr" className="inline-block tabular-nums">{formatInstantHe(readout.opens)}</span>

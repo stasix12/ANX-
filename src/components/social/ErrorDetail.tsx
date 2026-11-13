@@ -107,9 +107,62 @@ export function explainFailure(row: Pick<QueueRow, 'status' | 'error' | 'skip_re
         tone: 'warn',
       };
     }
+    /*
+     * ─── FACEBOOK SAID NO, AND THAT IS NOT THE SAME AS "WE DO NOT KNOW" ───
+     *
+     * MEASURED ON HIS ACCOUNT, 13.11.2026: of 347 rows in `needs_attention`,
+     * 60 carry the rate-limit text — and that text contains, in the worker's
+     * own words, "הפוסט לא עלה לקבוצה". Facebook refused the post and said so.
+     * They were falling through to the sentence below, which sends him to the
+     * group to check whether something that was refused is there, and then
+     * tells him to "דלגו" if it is.
+     *
+     * So they are answered on their own: nothing to check, nothing to decide,
+     * and retrying is the one case here where a second attempt CANNOT publish
+     * twice — because the first one never published at all.
+     *
+     * `canRetry` is true and `needsOwner` is true together, which is the honest
+     * pair: a person has to press it. The rate-limit branch further down this
+     * file says "המערכת ממתינה ותנסה שוב לבד", and that is true of a DEFERRED
+     * row and false of this one — a row waiting on a person is not a status any
+     * worker collects (CLAIMABLE_STATUSES), so nothing will ever pick it up on
+     * its own. One cannot be reused for the other.
+     */
+    if (/הגביל את קצב|מגבילים את התדירות/.test(text)) {
+      return {
+        headline: 'פייסבוק הגבילה את קצב הפרסום — הפוסט לא עלה',
+        advice: 'אין צורך לבדוק בקבוצה: פייסבוק לא קיבלה את הפוסט. אפשר "נסה שוב" מהתפריט של השורה אחרי שההגבלה עוברת, או להשאיר — הפרסומים האחרים ממשיכים לצאת בזמן.',
+        canRetry: true,
+        needsOwner: true,
+        tone: 'warn',
+      };
+    }
+    /*
+     * ─── AND THE REST NAME A BUTTON THAT EXISTS ──────────────────────────
+     *
+     * This sentence said "אם כן — דלגו". THERE IS NO "דלג" ANYWHERE IN THE
+     * PRODUCT: the row's menu offers "נסה שוב", "הפסק לנסות בקבוצה הזו", "צא
+     * מהקבוצה בפייסבוק", "הרץ עכשיו", the two "open" items, "פרטי הפרסום" and
+     * "בטל פרסום". An instruction to press something that is not there is an
+     * instruction to go looking for it.
+     *
+     * AND THE NEAREST THING TO IT IS THE ONE ACTION HE MUST NOT TAKE HERE.
+     * "בטל פרסום" writes `status: 'skipped'` (client.ts, cancelQueueItem),
+     * which is terminal — and being OPEN is the only thing holding this (post,
+     * group) pair out of every future round since v33 dropped the unique index
+     * (plan.ts:808). On top of that recycleTombstonedSlot() re-plans a
+     * 'skipped' row IN PLACE when the same round is launched again, so a row
+     * cancelled here can be re-armed and sent to the same group a second time.
+     * For a row whose post may already be live that is the one outcome this
+     * product may never produce — "רשום דולג, אבל בפועל נכנסתי וראיתי שזה
+     * פרסם, זה חמור מאד".
+     *
+     * So leaving it alone IS the action, and the sentence says so in those
+     * words rather than leaving him to guess that doing nothing is allowed.
+     */
     return {
       headline: 'הפרסום נעצר באמצע',
-      advice: 'בדקו בקבוצה אם הפוסט כבר עלה. אם לא — נסו שוב; אם כן — דלגו, כדי לא לפרסם פעמיים.',
+      advice: 'בדקו בקבוצה אם הפוסט כבר עלה. אם לא — "נסה שוב" מהתפריט של השורה. אם כן — אל תעשו כלום: השורה הזאת היא מה שמונע מאותו פוסט לצאת שוב לאותה קבוצה.',
       canRetry: true,
       needsOwner: true,
       tone: 'warn',

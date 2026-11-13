@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { keep, markAll, readSeen, same, unseen, writeSeen } from '../../src/lib/social/seen';
+import { readSeenUntil, writeSeenUntil } from '../../src/lib/social/seen';
 
 /**
  * "אחרי שפעם אחת אני לוחץ על זה וזה נעלם" — DISMISSING THE ORANGE BAR.
@@ -8,16 +8,37 @@ import { keep, markAll, readSeen, same, unseen, writeSeen } from '../../src/lib/
  * WHAT IS AT STAKE, and it is not symmetric.
  *
  * The rows this bar counts are the ones NOTHING will move on its own: Facebook
- * asked for a confirmation, or the publication is waiting for the owner's own
- * approval. No worker claims them, no clock releases them. If the bar stops
- * mentioning one of them and nothing else does, that publication is simply
- * never going out, and the way the owner finds out is a customer not calling.
+ * asked for a confirmation, the publish window did not close and nobody knows
+ * whether the post went up, or the publication is waiting for the owner's own
+ * approval. No worker claims them, no clock releases them.
  *
- * So the cheap version of this feature — one "dismissed" boolean — is the one
- * thing these tests exist to make impossible. Every assertion below is about
- * the same question from a different side: CAN A ROW BE HIDDEN WITHOUT HAVING
- * BEEN SHOWN? Through a capped read, through a stale stored set, through a row
- * that was handled and came back, through storage that throws.
+ * ─── WHY THIS FILE WAS REWRITTEN ON 13.11.2026 ────────────────────────────
+ *
+ * The first version of the dismissal was a SET OF IDS with a 200-row cap, and
+ * a rule that the bar could not be dismissed at all while the cap was reached
+ * — so that one tap could never hide a row nobody had seen. Measured on his
+ * account that day: 347 rows in `needs_attention`, four more arriving a day.
+ * Over the cap. So the safety rule had been holding the bar open at 347,
+ * un-dismissable, every thirty seconds, for weeks — which is precisely the
+ * un-answerable warning the feature was built to end, reached by the route
+ * built to prevent a different harm.
+ *
+ * He chose, in the same message as the card: "מה שלא הצליח לפרסם לא להתעסב."
+ *
+ * So what is stored is now a WATERMARK — one instant, "I have been told about
+ * everything waiting as of here" — and the trade is explicit: ONE TAP ANSWERS
+ * EVERY ROW THAT IS WAITING NOW, however many there are and however few of
+ * them fitted on the screen it opened. What the tests below still hold, and
+ * what matters now that the dismissal is total:
+ *
+ *   • a row that arrives AFTERWARDS is unseen, and raises the bar again;
+ *   • the watermark is the DATABASE's instant and never this browser's clock,
+ *     so a fast PC clock cannot dismiss rows that have not arrived yet;
+ *   • it never moves backwards, so a second tab cannot un-dismiss;
+ *   • anything unreadable in storage — including the ARRAY the old version
+ *     wrote — reads as "nothing dismissed", never as "everything dismissed";
+ *   • nothing is deleted and no row changes status: the queue, the history
+ *     screen and the queue tile's own "N דורשים אתכם" all still hold them.
  *
  *   npx tsx worker/test/seen.test.ts
  */
@@ -32,54 +53,12 @@ const eq = (a: unknown, b: unknown, msg: string) => {
   assert.deepEqual(a, b, msg);
 };
 
-/* ------------------------------------------------------------------ *
- * The pure half: what counts as unseen.
- * ------------------------------------------------------------------ */
-{
-  eq(unseen(['a', 'b'], []), ['a', 'b'], 'nothing stored means nothing has been shown — the bar behaves exactly as it did before this existed');
-  eq(unseen(['a', 'b'], ['a', 'b']), [], 'the set he was shown is the set that stops counting');
-  eq(unseen(['a', 'b', 'c'], ['a', 'b']), ['c'], 'A ROW THAT ARRIVED AFTERWARDS IS STILL UNSEEN — this is the whole difference from a "hidden" flag');
-  eq(unseen([], ['a']), [], 'and a stored id that is no longer waiting cannot invent a row');
-
-  eq(unseen(['a', 'a', 'b'], []), ['a', 'b'], 'a duplicated id is one row, or the bar counts higher than the list it opens');
-
-  /* The one that looks like an edge case and is the common case: he is shown
-     two, handles one, and a third appears before the next poll. */
-  eq(unseen(['b', 'c'], ['a', 'b']), ['c'], 'one handled and one new: the bar comes back, and it comes back saying 1 rather than 2');
-}
+/* The comparison the screen and the database both make. The whole mechanism is
+   one `>`, so it is written out once here and asserted against. */
+const unseenAfter = (watermark: string | null, rowUpdatedAt: string) => !watermark || rowUpdatedAt > watermark;
 
 /* ------------------------------------------------------------------ *
- * The pruning half, which is what lets the SAME row speak twice.
- * ------------------------------------------------------------------ */
-{
-  eq(keep(['a', 'b'], ['a']), ['a'], 'an id that is no longer waiting leaves the stored set');
-  eq(keep(['a'], []), [], 'and a set with nothing left waiting empties completely');
-  eq(keep([], ['a']), [], 'a set that was never written stays empty');
-
-  /*
-   * REINSTATEMENT. A row goes needs_attention, is shown, is retried, publishes
-   * — and weeks later the same id is stuck again. Without the prune it is
-   * still in the stored set and the bar never mentions it.
-   */
-  const shown = markAll(['a']);
-  const afterFixed = keep(shown, []);
-  eq(unseen(['a'], afterFixed), ['a'], 'A ROW THAT WAS HANDLED AND CAME BACK IS UNSEEN AGAIN — the prune is what makes this true');
-  eq(unseen(['a'], shown), [], 'without the prune it would have stayed silent for ever, which is the bug being prevented');
-
-  /* And the same property is what bounds the key: it can never hold more ids
-     than are waiting at that moment. */
-  is(keep(['a', 'b', 'c', 'd'], ['b']).length <= 1, 'the stored set cannot outgrow what is actually waiting');
-}
-
-{
-  eq(markAll(['b', 'a', 'a']), ['b', 'a'], 'pressing הצג marks everything waiting, once each');
-  is(same(['a', 'b'], ['b', 'a']), 'order is not a difference — otherwise every 30-second poll would rewrite storage and re-render');
-  is(!same(['a'], ['a', 'b']), 'but a different membership is');
-  is(!same(['a', 'b'], ['a', 'c']), 'including one swapped id at the same length');
-}
-
-/* ------------------------------------------------------------------ *
- * Storage, and every way it can hand back something that is not a set.
+ * Storage, and every way it can hand back something that is not an instant.
  * ------------------------------------------------------------------ */
 {
   const store = new Map<string, string>();
@@ -88,24 +67,46 @@ const eq = (a: unknown, b: unknown, msg: string) => {
     setItem: (k: string, v: string) => void store.set(k, v),
   };
 
-  eq(readSeen(), [], 'an untouched browser has been shown nothing');
-  writeSeen(['a', 'b']);
-  eq(readSeen(), ['a', 'b'], 'and what was written comes back');
-  writeSeen([]);
-  eq(readSeen(), [], 'an emptied set is emptied, not left behind');
+  eq(readSeenUntil(), null, 'an untouched browser has dismissed nothing');
+  writeSeenUntil('2026-11-13T09:00:00.000Z');
+  eq(readSeenUntil(), '2026-11-13T09:00:00.000Z', 'and what was written comes back');
 
-  for (const junk of ['not json', '"a"', '{"dismissed":true}', '42', 'null', '["a",7,null,"b"]']) {
-    store.set('social:waiting:seen', junk);
-    const got = readSeen();
-    is(Array.isArray(got), `a stored value of ${junk} still reads as a list`);
-    is(got.every((v) => typeof v === 'string'), `and holds only ids — ${junk}`);
+  /* A ROW THAT ARRIVED AFTERWARDS IS STILL UNSEEN. This is the whole
+     difference from a "dismissed" flag, and it is the half of the old ID
+     mechanism that was load-bearing. */
+  is(unseenAfter(readSeenUntil(), '2026-11-13T09:00:01.000Z'), 'a row stamped after the watermark is unseen — the bar comes back');
+  is(!unseenAfter(readSeenUntil(), '2026-11-13T08:59:59.000Z'), 'and one stamped before it is answered');
+  is(!unseenAfter(readSeenUntil(), '2026-11-13T09:00:00.000Z'), 'including one stamped exactly at it — the read is gt, so the watermark itself is covered');
+
+  /* NEVER BACKWARDS. Two tabs poll independently and the older one's "newest
+     waiting row" can be a minute behind the other's. */
+  writeSeenUntil('2026-11-13T08:00:00.000Z');
+  eq(readSeenUntil(), '2026-11-13T09:00:00.000Z', 'AN OLDER INSTANT CANNOT UN-DISMISS — a second tab mid-poll may not reopen what was answered');
+  writeSeenUntil('2026-11-13T10:00:00.000Z');
+  eq(readSeenUntil(), '2026-11-13T10:00:00.000Z', 'but a newer one moves it on');
+
+  /* Nothing that is not a usable instant may become one. */
+  for (const junk of ['not json', '42', 'null', 'true', '{"dismissed":true}', '["a","b"]', '"nonsense"', '""']) {
+    store.set('social:waiting:seen-until', junk);
+    eq(readSeenUntil(), null, `a stored value of ${junk} reads as nothing dismissed`);
+    is(unseenAfter(readSeenUntil(), '2020-01-01T00:00:00.000Z'), `and hides nothing at all — ${junk}`);
   }
-  eq(readSeen(), ['a', 'b'], 'a mixed array keeps its ids and drops the rest rather than throwing the lot away');
 
-  /* An older shape of this key — the boolean this feature deliberately is not
-     — must read as "nothing shown", never as "everything shown". */
-  store.set('social:waiting:seen', '{"dismissed":true}');
-  eq(unseen(['x'], readSeen()), ['x'], 'a dismissal flag left by any earlier version hides nothing');
+  /*
+   * THE OLD SHAPE, EXPLICITLY. Until 13.11.2026 this feature wrote an ARRAY of
+   * ids, under its own key. A device upgrading mid-session has that array
+   * sitting there, and the one thing it may never do is read as a dismissal of
+   * everything.
+   */
+  store.set('social:waiting:seen', '["abc","def"]');
+  store.delete('social:waiting:seen-until');
+  eq(readSeenUntil(), null, "the old ID key is not read at all, so an upgraded device starts from 'nothing dismissed'");
+
+  /* A write of nonsense is refused rather than stored, so a bad value cannot
+     survive in the key and be read back by a later version. */
+  store.set('social:waiting:seen-until', JSON.stringify('2026-11-13T10:00:00.000Z'));
+  writeSeenUntil('not a date');
+  eq(readSeenUntil(), '2026-11-13T10:00:00.000Z', 'and a nonsense write changes nothing');
 }
 
 {
@@ -118,42 +119,53 @@ const eq = (a: unknown, b: unknown, msg: string) => {
       throw new Error('denied');
     },
   };
-  eq(readSeen(), [], 'storage that throws reads as nothing shown');
-  writeSeen(['a']);
-  checks += 1;
-  eq(unseen(['a'], readSeen()), ['a'], 'SO THE BAR KEEPS SHOWING — the safe direction for a warning nobody has answered');
+  eq(readSeenUntil(), null, 'storage that throws reads as nothing dismissed');
+  writeSeenUntil('2026-11-13T09:00:00.000Z');
+  eq(readSeenUntil(), null, 'and a write that throws is not pretended to have worked');
+  is(unseenAfter(readSeenUntil(), '2020-01-01T00:00:00.000Z'), 'SO THE BAR KEEPS SHOWING — the safe direction for a warning nobody has answered');
 }
 
 /* ------------------------------------------------------------------ *
- * The wiring. Every one of these is a way the pure code above could be
- * correct and the screen still wrong.
+ * The wiring. Every one of these is a way the code above could be correct
+ * and the screen still wrong.
  * ------------------------------------------------------------------ */
 {
   const page = readFileSync(new URL('../../src/app/social/page.tsx', import.meta.url), 'utf8');
 
+  /* The count is read against the STORED watermark, not against a constant and
+     not against the browser's clock — so what the database counts and what the
+     screen dismissed can never be two different questions. */
+  is(/waitingForYouSince\(readSeenUntil\(\)\)/.test(page), 'the read is filtered by the watermark this device stored');
   is(
-    /waitingCovered = !!data && waitingIds\.length === summary\.needsHuman/.test(page),
-    'the screen checks that the ID list covers the counted total',
+    /const waitingForYou = data && !\(seenUntil && data\.waitingNewest && data\.waitingNewest <= seenUntil\) \? data\.waitingUnseen : 0;/.test(page),
+    'and the bar prints the UNSEEN count, with the tap biting before the next poll agrees with it',
   );
-  is(
-    /const waitingForYou = waitingCovered \? unseen\(waitingIds, seen\)\.length : summary\.needsHuman/.test(page),
-    'A CAPPED READ FALLS BACK TO THE FULL COUNT — otherwise one tap hides rows that were never on screen',
-  );
-  is(/onAction: waitingCovered \? markWaitingSeen : undefined/.test(page), 'and the bar cannot be dismissed at all while the list is short');
+  /*
+   * THE TAP STORES THE DATABASE'S INSTANT. `Date.now()` or an instant stamped
+   * by this browser would dismiss rows that arrived in the skew between the
+   * two clocks — rows nobody has ever been shown.
+   */
+  const mark = page.slice(page.indexOf('const markWaitingSeen'), page.indexOf('const markWaitingSeen') + 400);
+  is(/const at = data\?\.waitingNewest;/.test(mark), "pressing הצג stores the newest counted row's own updated_at");
+  is(/if \(!at\) return;/.test(mark), 'and does nothing at all when there is nothing waiting');
+  is(!/Date\.now\(\)|new Date\(\)/.test(mark), 'NEVER THIS BROWSER’S CLOCK — a fast PC clock would hide rows that have not arrived yet');
+  is(/useEffect\(\(\) => \{\s*setSeenUntil\(readSeenUntil\(\)\);\s*\}, \[\]\);/.test(page), 'storage is read on mount, not during render — the server has no localStorage');
 
   is(/waitingForYou > 0 \|\|/.test(page), 'the system state is raised by the UNSEEN ones');
   is(
     !/summary\.needsHuman > 0 \|\|/.test(page),
     'and not by every row that exists — that left the header amber and the panel headline reading "נדרשת פעולה שלכם" with nothing under it',
   );
-
-  is(/const next = keepSeen\(seen, data\.waitingForYou\)/.test(page), 'the stored set is pruned against what is really waiting, on every load');
-  is(/if \(sameSeen\(next, seen\)\) return;/.test(page), 'and only written when it changed, so a 30-second poll is not a write');
-  is(/useEffect\(\(\) => \{\s*setSeen\(readSeen\(\)\);\s*\}, \[\]\);/.test(page), 'storage is read on mount, not during render — the server has no localStorage');
+  /* NOTHING IS DELETED AND NO ROW IS MOVED. A dismissal is about one person's
+     attention; a status write would release the only brake holding that post
+     out of the next round (see schedule-readout.ts). */
+  const dismissal = page.slice(page.indexOf('const [seenUntil'), page.indexOf('const markWaitingSeen') + 400);
+  is(!/updateQueueItem|status: '/.test(dismissal), 'dismissing writes nothing to the queue — not a status, not a skip, nothing');
 
   /* The four warnings that a person cannot answer by reading anything. */
   const bar = page.slice(page.indexOf('const intervention ='), page.indexOf('return (\n    <SocialShell'));
   eq((bar.match(/onAction:/g) ?? []).length, 1, 'ONLY the "ממתינים לכם" bar is dismissible — a sleeping PC has to keep saying so until the PC wakes up');
+  is(/onAction: markWaitingSeen,/.test(bar), 'and it is always answerable now, whatever the number — which is the whole point of the rewrite');
   for (const permanent of ['הפרסום עומד — המחשב לא מחובר', 'התוכנה במחשב לא פועלת', 'פייסבוק מבקשת אימות במחשב']) {
     const at = bar.indexOf(permanent);
     is(at > 0, `the bar for "${permanent}" is still built`);
@@ -167,13 +179,19 @@ const eq = (a: unknown, b: unknown, msg: string) => {
 
 {
   const client = readFileSync(new URL('../../src/lib/social/client.ts', import.meta.url), 'utf8');
-  const fn = client.slice(client.indexOf('export async function listWaitingForYouIds'));
-  is(/\.select\('id'\)/.test(fn.slice(0, 500)), 'the read takes one column — no join, no media, no target, on a poll that runs every 30 seconds');
-  is(/\.in\('status', NEEDS_HUMAN_STATUSES\)/.test(fn.slice(0, 500)), 'and exactly the statuses the bar counts, from the one list in status.ts');
-  is(/\.limit\(WAITING_FOR_YOU_LIMIT\)/.test(fn.slice(0, 500)), 'bounded, like every other read on this screen');
+  const fn = client.slice(client.indexOf('export async function waitingForYouSince'));
+  const body = fn.slice(0, 900);
+  is(/\.in\('status', NEEDS_HUMAN_STATUSES\)/.test(body), 'the read counts exactly the statuses the bar counts, from the one list in status.ts');
+  is(/count: 'exact'/.test(body), 'the number is a counted total and not the length of a capped list');
+  is(/\.limit\(1\)/.test(body), 'while only one row is carried back — the watermark, on a poll that runs every 30 seconds');
+  is(/\.order\('updated_at', \{ ascending: false \}\)/.test(body), 'and that row is the NEWEST, which is what makes it a watermark over all of them');
+  is(/if \(since\) q = q\.gt\('updated_at', since\)/.test(body), 'a stored watermark narrows the count to what arrived after it');
+  is(!/WAITING_FOR_YOU_LIMIT/.test(client), 'AND THE CAP IS GONE — it is what made the bar un-dismissable at 347 rows');
 
-  /* The link has to open the rows being marked, or a tap hides publications
-     the screen behind it never listed. */
+  /* The link has to open the rows being marked. It can no longer list all of
+     them in one screen — that is the explicit trade above — but it must open
+     the same SET, or the tap answers one question and the screen shows
+     another. */
   const history = readFileSync(new URL('../../src/app/social/history/page.tsx', import.meta.url), 'utf8');
   const groups = history.slice(history.indexOf('const STATUS_GROUPS'), history.indexOf('const RANGES'));
   const manual = groups.slice(groups.indexOf("value: 'manual'"));

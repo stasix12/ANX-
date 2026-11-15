@@ -190,6 +190,28 @@ export function CourseDetail({ product }: { product: Product }) {
             ))}
           </ul>
 
+          {product.demo && (
+            <section aria-labelledby="demo-title" className="mt-2 border-t border-x-line pt-6">
+              <h2 id="demo-title" className="text-[20px] leading-tight font-black sm:text-[24px]">
+                {product.demo.title}
+              </h2>
+              <div className="mx-auto mt-4 w-[78%] max-w-[320px] overflow-hidden rounded-[18px] bg-black shadow-x-card">
+                <video
+                  src={src(`${product.demo.video}.mp4`)}
+                  poster={src(`${product.demo.video}.jpg`)}
+                  controls
+                  playsInline
+                  preload="none"
+                  aria-label={product.demo.title}
+                  onPlay={(e) => {
+                    document.querySelectorAll('video').forEach((v) => v !== e.currentTarget && v.pause());
+                  }}
+                  className="aspect-[9/16] w-full bg-black object-cover"
+                />
+              </div>
+            </section>
+          )}
+
           {!!product.reels?.length && <Reels reels={product.reels} />}
         </div>
       </div>

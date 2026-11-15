@@ -390,6 +390,71 @@ export function CourseDetail({ product }: { product: Product }) {
           {product.demo && <Demo demo={product.demo} />}
 
           {!!product.reels?.length && <Reels reels={product.reels} />}
+
+          {/* Closing call to action */}
+          <section
+            aria-labelledby="final-title"
+            className="relative isolate mt-2 mb-8 overflow-hidden rounded-[24px] bg-[#071430] px-5 pt-7 pb-6 text-center text-white shadow-[0_12px_32px_rgba(7,20,48,0.35)]"
+          >
+            <div className="absolute inset-0 -z-10 bg-[radial-gradient(90%_70%_at_50%_0%,rgba(47,107,255,0.45),transparent_70%)]" />
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-[#4d7dff] bg-[#0f2a6b] px-3 py-1 text-[12.5px] font-extrabold">
+              {I.user(15)}
+              {product.badge ?? "קורס איתי 1-1"}
+            </span>
+            <h2
+              id="final-title"
+              className="mt-3 text-[25px] leading-[1.3] font-black sm:text-[30px]"
+            >
+              מוכן להפסיק לבזבז
+              <span className="block bg-linear-to-b from-[#8cc4ff] to-[#4d93ff] bg-clip-text text-transparent">
+                על אבקות יקרות?
+              </span>
+            </h2>
+            <p className="mx-auto mt-2 max-w-[330px] text-[14.5px] leading-relaxed text-white/80">
+              הפעם אתה לא לבד מול הכתם. תאם הדרכה אישית{" "}
+              <span className="whitespace-nowrap">1-1</span> ותצא לעבודה הבאה עם
+              שיטה שעובדת בשטח.
+            </p>
+            <ul className="mx-auto mt-4 w-fit space-y-2 text-right text-[14.5px] font-bold">
+              {[
+                "רק 2 חומרים שנלמד לשלב ולדלל נכון",
+                "בלי אבקות יקרות מספקי חומרים",
+                "ליווי אישי צעד אחר צעד",
+              ].map((t) => (
+                <li key={t} className="flex items-center gap-2">
+                  <span className="grid size-5 shrink-0 place-items-center rounded-full bg-x-blue">
+                    {I.check(12)}
+                  </span>
+                  {t}
+                </li>
+              ))}
+            </ul>
+            {product.price != null && (
+              <p className="mt-5 text-[15px] font-bold text-white/80">
+                מחיר הקורס:{" "}
+                <span className="text-[26px] font-black text-white">
+                  {product.price} ₪
+                </span>
+              </p>
+            )}
+            <a
+              href={book}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-3 flex h-[54px] items-center justify-center gap-3 rounded-[16px] bg-white text-[19px] font-black text-[#0f2a6b] shadow-[0_8px_22px_rgba(47,107,255,0.45)] transition hover:brightness-95 active:scale-[0.99]"
+            >
+              לתיאום קורס אישי 1-1
+              {I.calendar(24)}
+            </a>
+            <ul className="-mx-2 mt-4 flex justify-center gap-x-2.5 text-[clamp(10px,2.75vw,12px)] font-bold whitespace-nowrap text-white/70">
+              {trust.map((t) => (
+                <li key={t.text} className="flex items-center gap-1">
+                  {t.icon}
+                  {t.text}
+                </li>
+              ))}
+            </ul>
+          </section>
         </div>
       </div>
     </ShopFrame>
@@ -513,7 +578,7 @@ function Reels({ reels }: { reels: string[] }) {
   return (
     <section
       aria-labelledby="reels-title"
-      className="mt-2 border-t border-x-line pt-6 pb-8"
+      className="mt-2 border-t border-x-line pt-6 pb-6"
     >
       <h2
         id="reels-title"

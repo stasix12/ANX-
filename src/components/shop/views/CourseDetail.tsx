@@ -451,12 +451,21 @@ function Reels({ reels }: { reels: string[] }) {
     >
       <h2
         id="reels-title"
-        className="text-[20px] leading-tight font-black sm:text-[24px]"
+        className="text-center text-[25px] leading-[1.35] font-black sm:text-[28px]"
       >
-        קצת מהקורסים אצל הלקוחות המרוצים שלנו
+        קצת מהקורסים אצל
+        <span className="relative mx-auto mt-1 block w-fit max-w-full">
+          <span
+            aria-hidden="true"
+            className="absolute inset-0 -skew-x-[8deg] rounded-[10px] bg-gradient-to-l from-x-blue to-[#1238c9] shadow-[0_6px_16px_rgba(47,93,251,0.35)]"
+          />
+          <span className="relative block px-4 py-1 text-[clamp(16px,5.4vw,22px)] whitespace-nowrap text-white sm:text-[26px]">
+            הלקוחות המרוצים שלנו
+          </span>
+        </span>
       </h2>
-      <p className="mt-1 text-[14px] text-x-muted">
-        שחוסכים אלפי שקלים על אבקות יקרות שלא מביאות לתוצאות
+      <p className="mx-auto mt-3 max-w-[340px] text-center text-[16px] leading-snug font-bold text-x-ink">
+        שחוסכים <span className="font-black text-x-blue">אלפי שקלים</span> על אבקות יקרות שלא מביאות לתוצאות
       </p>
       <div className="x-noscrollbar -mx-4 mt-4 flex snap-x gap-2.5 overflow-x-auto px-4 lg:mx-0 lg:px-0">
         {reels.map((r, i) => (

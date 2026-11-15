@@ -50,12 +50,40 @@ const DESKTOP_LINKS = [
   { href: '/shop/favorites', label: 'מועדפים' },
 ];
 
+/** Thin running strip above the header, as on retail sites. */
+const ANNOUNCEMENT = 'משלוחים מהירים לכל חלקי הארץ';
+
+function AnnouncementBar() {
+  const group = (hidden: boolean) => (
+    <div aria-hidden={hidden || undefined} className="flex shrink-0 items-center">
+      {Array.from({ length: 4 }, (_, i) => (
+        <span key={i} dir="rtl" className="flex items-center gap-2 px-6">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.9} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M3 6.5h11v9H3zM14 9.5h3.6l3.4 3.4v2.6h-7" />
+            <circle cx="7" cy="17.5" r="1.8" />
+            <circle cx="17" cy="17.5" r="1.8" />
+          </svg>
+          {ANNOUNCEMENT}
+        </span>
+      ))}
+    </div>
+  );
+  return (
+    <div className="h-8 overflow-hidden bg-linear-to-l from-[#1d4fe0] via-x-blue to-[#1d4fe0] text-[13px] leading-8 font-bold text-white">
+      <p className="sr-only">{ANNOUNCEMENT}</p>
+      <div dir="ltr" className="x-marquee flex w-max">
+        {group(true)}
+        {group(true)}
+      </div>
+    </div>
+  );
+}
+
 export function ShopHeader({
   tone = 'light',
   back,
   title,
   onMenu,
-  uprightLogo,
 }: {
   tone?: HeaderTone;
   uprightLogo?: boolean;
@@ -87,6 +115,7 @@ export function ShopHeader({
 
   return (
     <header className={`${bar} z-40 pt-[env(safe-area-inset-top)]`}>
+      <AnnouncementBar />
       {/* Mobile / tablet: menu|back · wordmark · search + cart — positions as in the design. */}
       <div dir="ltr" className="mx-auto grid h-14 max-w-3xl grid-cols-[1fr_auto_1fr] items-center px-4 lg:hidden">
         <div className="flex">
@@ -106,7 +135,7 @@ export function ShopHeader({
               {title}
             </span>
           ) : (
-            <Logo tone={dark ? 'light' : 'dark'} upright={uprightLogo} className={uprightLogo ? 'text-[30px] tracking-[-0.02em]' : 'text-[29px]'} />
+            <Logo tone={dark ? 'light' : 'dark'} upright className="text-[30px] tracking-[-0.02em]" />
           )}
         </Link>
         <div className="flex items-center justify-end gap-1">
@@ -125,7 +154,7 @@ export function ShopHeader({
       {/* Desktop: a real top bar instead of a stretched phone header. */}
       <div className="mx-auto hidden h-18 max-w-7xl items-center gap-8 px-8 lg:flex">
         <Link href="/shop" aria-label="ANX3D — דף הבית">
-          <Logo tone={dark ? 'light' : 'dark'} upright={uprightLogo} className="text-[32px]" />
+          <Logo tone={dark ? 'light' : 'dark'} upright className="text-[32px] tracking-[-0.02em]" />
         </Link>
         <nav aria-label="ניווט ראשי" className="flex items-center gap-1">
           {DESKTOP_LINKS.map((l) => {
@@ -325,7 +354,6 @@ export function ShopFrame({
   title,
   hideHeader,
   dark,
-  uprightLogo,
 }: {
   children: React.ReactNode;
   /** Bottom-nav tab to highlight; `false` hides the bar (product, checkout, search). */
@@ -342,7 +370,7 @@ export function ShopFrame({
   const close = useState(() => () => setMenu(false))[0];
   return (
     <div className={`relative min-h-dvh ${dark ? 'bg-x-night text-white' : 'bg-white'}`}>
-      {!hideHeader && <ShopHeader tone={header} back={back} title={title} uprightLogo={uprightLogo} onMenu={() => setMenu(true)} />}
+      {!hideHeader && <ShopHeader tone={header} back={back} title={title} onMenu={() => setMenu(true)} />}
       <main id="main" className={nav === false ? 'pb-8' : 'pb-[calc(92px+env(safe-area-inset-bottom))] lg:pb-16'}>
         {children}
       </main>

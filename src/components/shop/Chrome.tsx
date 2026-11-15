@@ -277,19 +277,10 @@ function Drawer({ open, onClose }: { open: boolean; onClose: () => void }) {
           <button type="button" onClick={onClose} aria-label="סגירה" className="-ml-2 grid size-10 place-items-center">
             <IconClose size={24} />
           </button>
-          <Logo className="text-[26px]" />
+          <Logo upright className="text-[26px] tracking-[-0.02em]" />
           <span className="size-10" />
         </div>
         <div className="px-3 pb-6">
-          <Link href={user ? '/shop/account' : '/shop/login'} className="mb-3 flex items-center gap-3 rounded-2xl bg-x-soft p-3">
-            <span className="grid size-11 place-items-center rounded-full bg-linear-to-br from-[#5b8bff] to-x-blue text-white">
-              <IconUser size={22} />
-            </span>
-            <span className="min-w-0">
-              <span className="block truncate font-bold">{user ? user.name : 'התחברות / הרשמה'}</span>
-              <span className="block truncate text-xs text-x-muted">{user ? user.email : 'לשמירת הזמנות, כתובות ומועדפים'}</span>
-            </span>
-          </Link>
           <nav aria-label="תפריט ראשי">
             <Link href="/shop" className={row}>
               <IconHome size={22} /> דף הבית

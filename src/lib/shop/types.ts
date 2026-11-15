@@ -121,7 +121,7 @@ export interface ShippingMethod {
   freeFrom: number | null;
 }
 
-export type PaymentMethodId = 'card' | 'bit' | 'paypal';
+export type PaymentMethodId = 'card' | 'bit' | 'paybox' | 'paypal';
 
 export interface Coupon {
   code: string;

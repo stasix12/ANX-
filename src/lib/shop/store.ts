@@ -1,5 +1,6 @@
 'use client';
 
+import { newOrderNumber } from './payments';
 import { useSyncExternalStore } from 'react';
 import { buildSeedDB, DB_VERSION } from './seed';
 import { inStock, isEmail, isPhone, lineKey, maxQty, priceCart } from './logic';
@@ -304,8 +305,9 @@ export const actions = {
   /* ----------------------------------------------------------- orders */
   /**
    * Validates the cart against live stock and prices and records the order
-   * as pending_payment. The order is NOT considered placed until the payment
-   * provider confirms it (confirmPayment) — the success screen checks that.
+   * as pending_payment with a random order number, then empties the cart.
+   * The customer sends the number on WhatsApp and pays with Bit / PayBox;
+   * the owner marks it paid (confirmPayment) from the admin.
    */
   createOrder(input: CheckoutInput): Result<Order> {
     const s = get();
@@ -322,7 +324,7 @@ export const actions = {
     const at = now();
     const order: Order = {
       id: uid('o'),
-      number: settings.nextOrderNumber,
+      number: newOrderNumber(s.db.orders.map((o) => o.number)),
       userId: s.userId,
       email: input.email.trim().toLowerCase(),
       customer: { fullName: input.fullName.trim(), phone: input.phone.trim() },
@@ -370,7 +372,8 @@ export const actions = {
         ),
       };
     }
-    commit({ db });
+    // The order is placed; payment follows on WhatsApp (Bit / PayBox).
+    commit({ db, cart: { lines: [], coupon: null } });
     return ok(order);
   },
   /** Called only with a reference the payment provider returned. */

@@ -5,11 +5,11 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { CITIES } from '@/lib/shop/cities';
 import { ils, isEmail, isPhone, priceCart } from '@/lib/shop/logic';
-import { activeProvider, demoReference, PAYMENT_METHODS } from '@/lib/shop/payments';
+import { PAYMENT_METHODS } from '@/lib/shop/payments';
 import { actions, useCurrentUser, useShop, type CheckoutInput } from '@/lib/shop/store';
-import type { Order, PaymentMethodId, ShippingMethodId } from '@/lib/shop/types';
+import type { PaymentMethodId, ShippingMethodId } from '@/lib/shop/types';
 import { ShopFrame } from '../Chrome';
-import { IconBox, IconCart, IconCheck, IconChevron, IconLock, IconWallet } from '../icons';
+import { IconBox, IconCart, IconCheck, IconChevron, IconWallet } from '../icons';
 import { btn, EmptyState, Img, inputCls, Price } from '../ui';
 
 type Step = 'shipping' | 'payment';
@@ -64,14 +64,15 @@ export function CheckoutView() {
     zip: '',
     notes: '',
     shippingMethod: 'standard',
-    paymentMethod: 'card',
+    paymentMethod: 'bit',
     saveAddress: true,
   });
   const [cityChoice, setCityChoice] = useState('');
   const [errors, setErrors] = useState<Partial<Record<keyof CheckoutInput, string>>>({});
   const [formError, setFormError] = useState<string | null>(null);
   const [agree, setAgree] = useState(false);
-  const [pending, setPending] = useState<Order | null>(null);
+  // Set once the order exists: the cart is already empty while we navigate to it.
+  const [placed, setPlaced] = useState(false);
 
   // Prefill from the signed-in account (and its first saved address).
   useEffect(() => {
@@ -96,7 +97,7 @@ export function CheckoutView() {
     setErrors((e) => ({ ...e, [k]: undefined }));
   };
 
-  if (s.ready && !totals.lines.length && !pending) {
+  if (s.ready && !totals.lines.length && !placed) {
     return (
       <ShopFrame nav={false} back="/shop/cart" title="תשלום">
         <EmptyState icon={<IconCart size={34} />} title="העגלה ריקה" text="אין מה לשלם עליו עדיין." action={{ label: 'לחנות', href: '/shop/c/all' }} />
@@ -120,8 +121,9 @@ export function CheckoutView() {
     if (!agree) return setFormError('יש לאשר את תנאי השימוש ומדיניות הפרטיות');
     const r = actions.createOrder(form);
     if (!r.ok) return setFormError(r.error);
-    // Real provider: redirect to its hosted page here. Demo: an explicit step.
-    setPending(r.value);
+    // The order number screen hands the order to WhatsApp for Bit / PayBox.
+    setPlaced(true);
+    router.replace(`/shop/order?id=${encodeURIComponent(r.value.id)}`);
   };
 
   return (
@@ -280,15 +282,21 @@ export function CheckoutView() {
                     })}
                   </div>
                 </fieldset>
-                <p className="flex items-start gap-2 text-[13px] text-x-muted">
-                  <IconLock size={18} className="mt-0.5 shrink-0 text-x-green" />
-                  פרטי כרטיס האשראי מוזנים רק בעמוד המאובטח של חברת הסליקה ואינם נשמרים באתר.
-                </p>
-                {!activeProvider.live && (
-                  <p className="rounded-2xl border border-dashed border-x-violet/50 bg-[#f5f2ff] px-4 py-3 text-[13px] font-semibold text-x-violet-600">
-                    {activeProvider.label}. עד לחיבור ספק סליקה מאושר, אישור התשלום מתבצע בחלון הדגמה.
-                  </p>
-                )}
+                <div className="rounded-2xl bg-x-blue-50 px-4 py-3.5">
+                  <p className="text-[14px] font-black">איך משלמים?</p>
+                  <ol className="mt-2 space-y-1.5 text-[13.5px] leading-snug text-x-ink-2">
+                    {[
+                      'לוחצים על "קבלת מספר הזמנה" ומקבלים מספר הזמנה',
+                      'שולחים לנו את ההזמנה בוואטסאפ בלחיצה אחת',
+                      'משלמים ב-Bit או ב-PayBox לפי הפרטים שנשלח לך',
+                    ].map((t, i) => (
+                      <li key={t} className="flex items-start gap-2">
+                        <span className="grid size-5 shrink-0 place-items-center rounded-full bg-x-blue text-[11px] font-black text-white">{i + 1}</span>
+                        {t}
+                      </li>
+                    ))}
+                  </ol>
+                </div>
                 <label className="flex items-start gap-2 text-[14px]">
                   <input type="checkbox" checked={agree} onChange={(e) => setAgree(e.target.checked)} className="mt-1 size-4 accent-x-blue" />
                   <span>קראתי ואני מסכים/ה לתנאי השימוש ולמדיניות הפרטיות</span>
@@ -299,8 +307,7 @@ export function CheckoutView() {
                   </p>
                 )}
                 <button type="button" onClick={pay} className={`${btn.primary} h-14 w-full text-[18px]`}>
-                  <IconLock size={20} />
-                  לתשלום מאובטח · {ils(totals.total)}
+                  קבלת מספר הזמנה · {ils(totals.total)}
                 </button>
               </div>
             )}
@@ -352,21 +359,6 @@ export function CheckoutView() {
         </div>
       </div>
 
-      {pending && (
-        <DemoPaymentDialog
-          order={pending}
-          onApprove={() => {
-            const r = actions.confirmPayment(pending.id, demoReference(pending));
-            if (r.ok) router.replace(`/shop/order?id=${encodeURIComponent(pending.id)}`);
-            else setFormError(r.error);
-          }}
-          onFail={(reason) => {
-            actions.cancelPendingOrder(pending.id);
-            setPending(null);
-            setFormError(reason);
-          }}
-        />
-      )}
     </ShopFrame>
   );
 }
@@ -396,51 +388,5 @@ function Input({
       />
       {error && <span className="mt-1 block text-xs font-medium text-x-red">{error}</span>}
     </label>
-  );
-}
-
-/**
- * Stands in for the payment provider's hosted page until one is connected.
- * Nothing here collects card data; it only lets the tester approve or
- * decline, exactly as the provider's callback would.
- */
-function DemoPaymentDialog({ order, onApprove, onFail }: { order: Order; onApprove: () => void; onFail: (reason: string) => void }) {
-  const [busy, setBusy] = useState(false);
-  return (
-    <div className="fixed inset-0 z-50 grid place-items-center bg-x-ink/50 p-4 animate-x-fade" role="dialog" aria-modal="true" aria-labelledby="pay-title">
-      <div className="w-full max-w-sm rounded-[24px] bg-white p-6 text-center shadow-x-pop">
-        <span className="mx-auto grid size-14 place-items-center rounded-full bg-x-blue-50 text-x-blue">
-          <IconLock size={28} />
-        </span>
-        <h2 id="pay-title" className="mt-3 text-[20px] font-black">
-          עמוד תשלום מאובטח
-        </h2>
-        <p className="mt-1 text-[13px] font-semibold text-x-violet-600">מצב הדגמה — לא מתבצע חיוב אמיתי</p>
-        <p className="mt-4 text-[14px] text-x-muted">הזמנה #{order.number}</p>
-        <p className="text-[30px] font-black">
-          <span dir="rtl">{ils(order.total)}</span>
-        </p>
-        <button
-          type="button"
-          disabled={busy}
-          onClick={() => {
-            setBusy(true);
-            // Simulates the provider's round-trip before its callback arrives.
-            setTimeout(onApprove, 900);
-          }}
-          className={`${btn.primary} mt-5 h-13 w-full text-[16px]`}
-        >
-          {busy ? 'מאשר תשלום…' : 'אישור תשלום (הדגמה)'}
-        </button>
-        <div className="mt-3 flex gap-2">
-          <button type="button" disabled={busy} onClick={() => onFail('התשלום נדחה על ידי חברת הסליקה (בדיקה). לא בוצע חיוב — אפשר לנסות שוב.')} className={`${btn.ghost} h-11 flex-1 text-[14px]`}>
-            סירוב (בדיקה)
-          </button>
-          <button type="button" disabled={busy} onClick={() => onFail('התשלום בוטל. ההזמנה לא בוצעה.')} className={`${btn.ghost} h-11 flex-1 text-[14px]`}>
-            ביטול
-          </button>
-        </div>
-      </div>
-    </div>
   );
 }

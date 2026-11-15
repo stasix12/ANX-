@@ -9,6 +9,7 @@ import { actions, newProductDraft, ORDER_STATUS_LABEL, useCurrentUser, useShop }
 import type { Category, CategoryIcon, ColorOption, Coupon, OrderStatus, Product, ShippingMethod } from '@/lib/shop/types';
 import { CategoryGlyph, IconEdit, IconTrash, IconUpload } from '../icons';
 import { Logo } from '../Logo';
+import { PAYMENT_LABEL } from '@/lib/shop/payments';
 import { btn, Img, inputCls, Swatch, toast } from '../ui';
 
 /**
@@ -589,7 +590,7 @@ function OrdersTab() {
             {o.lines.map((l) => `${l.name}${l.colorName ? ` (${l.colorName})` : ''}${l.optionsText ? ` [${l.optionsText}]` : ''} ×${l.qty}`).join(' · ')}
           </p>
           <p className="mt-1 text-[12px] text-x-faint">
-            {o.address.street ? `${o.address.street}, ${o.address.city}` : 'ללא משלוח'} · תשלום: {o.paymentMethod} · אסמכתא: {o.paymentRef ?? '—'}
+            {o.address.street ? `${o.address.street}, ${o.address.city}` : 'ללא משלוח'} · תשלום: {PAYMENT_LABEL[o.paymentMethod]} · אסמכתא: {o.paymentRef ?? '—'}
           </p>
         </li>
       ))}

@@ -365,6 +365,29 @@ export const SEED_PRODUCTS: Product[] = [
   },
   {
     ...base,
+    id: 'p-sabrina-easy-trigger',
+    slug: 'sabrina-easy-trigger',
+    name: 'טריגר לחיצה קלה',
+    subtitle: 'לידית המקורית של מכונת סברינה',
+    description:
+      'הלחצן המקורי בידית של סברינה נתפס בצינור ההזרקה, קשה ללחיצה והיד מתעייפת. טריגר הלחיצה הקלה של ANX3D מחליף אותו: ידית לחיצה עם חריצים לאצבעות, שנלחצת בקלות ונותנת שליטה מלאה בהתזה של המים — שעות ארוכות של עבודה בלי להתעייף.',
+    categories: ['parts'],
+    price: null,
+    images: [1, 2, 3].map((n) => real('sabrina-easy-trigger', n)),
+    highlights: [
+      'לחיצה קלה במקום הלחצן המקורי הקשה',
+      'חריצים לאצבעות — שעות של עבודה בלי להתעייף',
+      'שליטה מלאה בהתזה של המים',
+      'לא נתפס בצינור ההזרקה',
+    ],
+    compatibility: ['הידית המקורית של מכונת סברינה'],
+    madeInIsrael: true,
+    tags: ['trigger', 'טריגר', 'לחצן', 'הדק', 'ידית', 'סברינה', 'sabrina', 'לחיצה', 'התזה', 'חלק חילוף'],
+    createdAt: created(-10),
+    sortOrder: 11.2,
+  },
+  {
+    ...base,
     id: 'p-wand-of-troy',
     slug: 'wand-of-troy',
     name: 'Wand of Troy',
@@ -582,7 +605,7 @@ const DEMO_ADMIN: User = {
 };
 
 /** Bumped when the seed changes shape, so browsers drop the old demo catalogue. */
-export const DB_VERSION = 27;
+export const DB_VERSION = 28;
 
 export function buildSeedDB(): ShopDB {
   return {

@@ -348,13 +348,13 @@ export const SEED_PRODUCTS: Product[] = [
     id: 'p-mattress-course',
     slug: 'mattress-cleaning-course',
     name: 'קורס ניקוי מזרנים',
-    subtitle: 'הדרכה אישית ומעשית – צעד אחר צעד',
+    subtitle: 'עם סטס מ"הפתרון המבריק" – שהביא את השיטה המיוחדת עם הריאקציה המדוברת',
     description:
       'הדרכה אישית 1-1 שבה תלמד איך לנקות מזרנים בצורה מקצועית, להשיג תוצאה נקייה ורעננה ולעבוד בשיטה מעשית ויעילה עם ציוד וחומרים פשוטים.',
     categories: ['courses'],
     price: 1480,
     bookingOnly: true,
-    badge: 'קורס איתי 1-1',
+    badge: 'קורס 1-1 עם סטס',
     story: [
       '**מכיר את זה?',
       'כמה פעמים כבר הלכת לקנות עוד חומר? ועוד בוסטר, ועוד חומר "מיוחד" להשחמות שמכרו לך עם הבטחה שהפעם זה בטוח יעבוד. אמרו לך להוציא את המזרן לשמש, לחכות, לנסות שוב – ועוד אלף ואחד סיפורים.',
@@ -376,7 +376,7 @@ export const SEED_PRODUCTS: Product[] = [
     },
     reels: Array.from({ length: 16 }, (_, i) => `/video/course-clients/${String(i + 1).padStart(2, '0')}`),
     images: [1, 2, 3, 4].map((n) => real('mattress-course', n)),
-    highlights: ['תוצאה מקצועית תוך 20 דקות', 'רק 2 חומרים יעילים', 'מתאים גם לניקוי ספות', 'הדרכה מעשית בשטח'],
+    highlights: ['תוצאה מקצועית תוך 20 דקות', 'רק 2 חומרים יעילים', 'מתאים גם לניקוי ספות', 'אונליין 1-1 כולל הדגמה בלייב', 'כולל ליווי עד ההצלחה'],
     tags: ['course', 'mattress', 'קורס', 'מזרן', 'מזרנים', 'ניקוי מזרנים', 'הדרכה', '1-1', 'אישי', 'כתמים'],
     featured: true,
     createdAt: created(-8),
@@ -624,7 +624,7 @@ const DEMO_ADMIN: User = {
 };
 
 /** Bumped when the seed changes shape, so browsers drop the old demo catalogue. */
-export const DB_VERSION = 34;
+export const DB_VERSION = 35;
 
 export function buildSeedDB(): ShopDB {
   return {

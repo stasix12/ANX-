@@ -223,7 +223,7 @@ export function CourseDetail({ product }: { product: Product }) {
         {/* Hero: copy on the left, the real photo on the right. */}
         <section
           dir="ltr"
-          className="relative isolate h-[214px] overflow-hidden bg-[#071430] sm:h-[300px] lg:mt-6 lg:h-[380px] lg:rounded-[22px]"
+          className="relative isolate h-[236px] overflow-hidden bg-[#071430] sm:h-[300px] lg:mt-6 lg:h-[380px] lg:rounded-[22px]"
         >
           <Img
             path={photo}
@@ -251,16 +251,16 @@ export function CourseDetail({ product }: { product: Product }) {
               </span>
             </h1>
             {product.badge && (
-              <span className="mt-2.5 inline-flex h-[26px] items-center justify-center gap-1.5 rounded-[9px] px-3.5 sm:px-5 border border-[#5d8dff] bg-linear-to-l from-[#1d4fe0] to-[#1a3fb0] text-[14px] font-black shadow-[0_0_14px_rgb(70_120_255/0.75)] sm:h-9 sm:text-[18px]">
+              <span className="mt-2.5 inline-flex h-[26px] items-center justify-center gap-1.5 rounded-[9px] px-2.5 whitespace-nowrap sm:px-5 border border-[#5d8dff] bg-linear-to-l from-[#1d4fe0] to-[#1a3fb0] text-[clamp(12px,3.6vw,14px)] font-black shadow-[0_0_14px_rgb(70_120_255/0.75)] sm:h-9 sm:text-[18px]">
                 {product.badge}
                 {I.user(15)}
               </span>
             )}
             <ul className="mt-2.5 space-y-[5px] sm:space-y-2">
-              {product.highlights.slice(0, 4).map((h) => (
+              {product.highlights.slice(0, 5).map((h) => (
                 <li
                   key={h}
-                  className="flex items-center justify-start gap-1.5 text-[10.5px] leading-tight font-semibold sm:text-[14px] lg:text-[16px]"
+                  className="flex items-center justify-start gap-1.5 text-[clamp(9.5px,2.75vw,10.5px)] leading-tight font-semibold whitespace-nowrap sm:text-[14px] lg:text-[16px]"
                 >
                   <span className="shrink-0">{I.check()}</span>
                   {h}
@@ -399,7 +399,7 @@ export function CourseDetail({ product }: { product: Product }) {
             <div className="absolute inset-0 -z-10 bg-[radial-gradient(90%_70%_at_50%_0%,rgba(47,107,255,0.45),transparent_70%)]" />
             <span className="inline-flex items-center gap-1.5 rounded-full border border-[#4d7dff] bg-[#0f2a6b] px-3 py-1 text-[12.5px] font-extrabold">
               {I.user(15)}
-              {product.badge ?? "קורס איתי 1-1"}
+              {product.badge ?? "קורס 1-1"}
             </span>
             <h2
               id="final-title"
@@ -419,7 +419,7 @@ export function CourseDetail({ product }: { product: Product }) {
               {[
                 "רק 2 חומרים שנלמד לשלב ולדלל נכון",
                 "בלי אבקות יקרות מספקי חומרים",
-                "ליווי אישי צעד אחר צעד",
+                "ליווי אישי עד ההצלחה",
               ].map((t) => (
                 <li key={t} className="flex items-center gap-2">
                   <span className="grid size-5 shrink-0 place-items-center rounded-full bg-x-blue">

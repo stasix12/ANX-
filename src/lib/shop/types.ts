@@ -80,7 +80,7 @@ export interface Product {
   reviewCount: number;
   featured: boolean;
   /** A featured clip with its own heading (path without extension: .mp4 video, .jpg poster). */
-  demo?: { video: string; title: string; highlight?: string; badge?: string; duration?: string };
+  demo?: { title: string; highlight?: string; clips: { video: string; badge?: string; duration?: string; label: string }[] };
   /** Customer clips shown on the page (paths without extension: .mp4 video, .jpg poster). */
   reels?: string[];
   /** Not sold through the cart: the page books it by WhatsApp (e.g. a 1-1 course). */

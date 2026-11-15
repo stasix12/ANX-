@@ -372,7 +372,7 @@ export const SEED_PRODUCTS: Product[] = [
     description:
       'הלחצן המקורי בידית של סברינה נתפס בצינור ההזרקה, קשה ללחיצה והיד מתעייפת. טריגר הלחיצה הקלה של ANX3D מחליף אותו: ידית לחיצה עם חריצים לאצבעות, שנלחצת בקלות ונותנת שליטה מלאה בהתזה של המים — שעות ארוכות של עבודה בלי להתעייף.',
     categories: ['parts'],
-    price: null,
+    price: 219,
     images: [1, 2, 3].map((n) => real('sabrina-easy-trigger', n)),
     highlights: [
       'לחיצה קלה במקום הלחצן המקורי הקשה',
@@ -605,7 +605,7 @@ const DEMO_ADMIN: User = {
 };
 
 /** Bumped when the seed changes shape, so browsers drop the old demo catalogue. */
-export const DB_VERSION = 28;
+export const DB_VERSION = 29;
 
 export function buildSeedDB(): ShopDB {
   return {

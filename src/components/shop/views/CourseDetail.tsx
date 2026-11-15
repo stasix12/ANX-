@@ -190,27 +190,7 @@ export function CourseDetail({ product }: { product: Product }) {
             ))}
           </ul>
 
-          {product.demo && (
-            <section aria-labelledby="demo-title" className="mt-2 border-t border-x-line pt-6">
-              <h2 id="demo-title" className="text-[20px] leading-tight font-black sm:text-[24px]">
-                {product.demo.title}
-              </h2>
-              <div className="mx-auto mt-4 w-[78%] max-w-[320px] overflow-hidden rounded-[18px] bg-black shadow-x-card">
-                <video
-                  src={src(`${product.demo.video}.mp4`)}
-                  poster={src(`${product.demo.video}.jpg`)}
-                  controls
-                  playsInline
-                  preload="none"
-                  aria-label={product.demo.title}
-                  onPlay={(e) => {
-                    document.querySelectorAll('video').forEach((v) => v !== e.currentTarget && v.pause());
-                  }}
-                  className="aspect-[9/16] w-full bg-black object-cover"
-                />
-              </div>
-            </section>
-          )}
+          {product.demo && <Demo demo={product.demo} />}
 
           {!!product.reels?.length && <Reels reels={product.reels} />}
         </div>
@@ -220,6 +200,70 @@ export function CourseDetail({ product }: { product: Product }) {
 }
 
 /** Clips from courses given to customers: a swipeable row, one plays at a time. */
+function Demo({ demo }: { demo: NonNullable<Product['demo']> }) {
+  const [playing, setPlaying] = useState(false);
+  const label = demo.highlight ? `${demo.title} ${demo.highlight}` : demo.title;
+  return (
+    <section aria-labelledby="demo-title" className="mt-2 border-t border-x-line pt-6">
+      <h2 id="demo-title" className="text-center text-[25px] leading-[1.35] font-black sm:text-[28px]">
+        {demo.title}
+        {demo.highlight && (
+          <span className="relative mx-auto mt-1 block w-fit max-w-full">
+            <span
+              aria-hidden="true"
+              className="absolute inset-0 -skew-x-[8deg] rounded-[10px] bg-gradient-to-l from-x-blue to-[#1238c9] shadow-[0_6px_16px_rgba(47,93,251,0.35)]"
+            />
+            <span className="relative block px-4 py-1 text-[clamp(16px,5.4vw,22px)] whitespace-nowrap text-white sm:text-[26px]">{demo.highlight}</span>
+          </span>
+        )}
+      </h2>
+      <div className="mx-auto mt-5 w-[84%] max-w-[340px] rounded-[22px] bg-gradient-to-b from-[#7fa2ff] via-x-blue to-[#1d4cf0] p-[3px] shadow-[0_0_22px_rgba(47,93,251,0.55),0_0_6px_rgba(47,93,251,0.6)]">
+        <div className="relative aspect-[10/13] overflow-hidden rounded-[19px] bg-black">
+          {playing ? (
+            <video
+              src={src(`${demo.video}.mp4`)}
+              poster={src(`${demo.video}.jpg`)}
+              controls
+              autoPlay
+              playsInline
+              aria-label={label}
+              onPlay={(e) => {
+                document.querySelectorAll('video').forEach((v) => v !== e.currentTarget && v.pause());
+              }}
+              className="h-full w-full bg-black object-cover"
+            />
+          ) : (
+            <button type="button" onClick={() => setPlaying(true)} aria-label={`הפעלת הסרטון: ${label}`} className="group absolute inset-0 block">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={src(`${demo.video}.jpg`)} alt="" className="h-full w-full object-cover" />
+              {demo.badge && (
+                <span className="absolute top-3 right-3 inline-flex items-center gap-1.5 rounded-full border-2 border-white/85 bg-[#0b1d5c] px-3 py-1 text-[13px] font-extrabold text-white">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                    <rect x="2" y="6" width="14" height="12" rx="3" />
+                    <path d="M17 10.5 22 7.5v9l-5-3z" />
+                    <circle cx="9" cy="12" r="2.6" fill="#0b1d5c" />
+                  </svg>
+                  {demo.badge}
+                </span>
+              )}
+              <span className="absolute top-1/2 left-1/2 grid size-16 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full border-[3px] border-white bg-black/45 transition group-hover:bg-black/60">
+                <svg width="26" height="26" viewBox="0 0 24 24" fill="#fff" aria-hidden="true" className="ml-1">
+                  <path d="M6 4.5v15a1 1 0 0 0 1.5.86l12.5-7.5a1 1 0 0 0 0-1.72L7.5 3.64A1 1 0 0 0 6 4.5z" />
+                </svg>
+              </span>
+              {demo.duration && (
+                <span dir="ltr" className="absolute bottom-3 left-3 rounded-full bg-black/75 px-2.5 py-1 text-[13px] font-bold text-white">
+                  {demo.duration}
+                </span>
+              )}
+            </button>
+          )}
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function Reels({ reels }: { reels: string[] }) {
   return (
     <section aria-labelledby="reels-title" className="mt-2 border-t border-x-line pt-6 pb-8">

@@ -374,6 +374,34 @@ async function main(): Promise<void> {
              sentence than "this is switched off". */
           is((await page.locator('.anxc-off').count()) === 1, `${w}: an off mechanism says so in words`);
           eq(seen.rest, 0, `${w}: and holds nothing`);
+          /*
+           * ─── AND THE NUMBER ON A DORMANT CARD IS TODAY'S, NOT A CORPSE ──
+           *
+           * "המחזור פרסום קבוצות תקוע על 76 כבר יומיים, אני רוצה שזה יתעדכן
+           *  כל יום."
+           *
+           * It was not stuck, it was dead: with the switch off the database
+           * function returns before counting and leaves the row untouched, so
+           * `cycle_count` keeps the value it had when the switch was thrown.
+           * His read 76, written 13.11 at 15:40, still 76 two days later over
+           * an account that published 252 and 250 times in between — drawn as
+           * a big number above a 76%-full bar with "המנגנון כבוי" losing the
+           * argument underneath.
+           *
+           * The fixture hands this card BOTH numbers — a frozen round of 76
+           * and a real day of 41 — so these assertions can only pass if the
+           * meter is reading the live one.
+           */
+          eq(seen.count, '41', `${w}: a dormant meter counts the day, not the round it stopped in — got "${seen.count}"`);
+          is(!seen.count.includes('76'), `${w}: THE FROZEN ROUND MAY NOT BE ON SCREEN — it is two days old`);
+          is(!seen.count.includes('/'), `${w}: and it carries no ceiling, because no round is running`);
+          eq(seen.barPct, -1, `${w}: the round's bar goes with the round — a 76%-full track under a day's figure is the corpse's last footprint`);
+          is(
+            (document_title => document_title.includes('היום'))(
+              await page.locator('.anxc-mtitle').first().innerText(),
+            ),
+            `${w}: and the heading names the number under it`,
+          );
         }
         await page.close();
       }

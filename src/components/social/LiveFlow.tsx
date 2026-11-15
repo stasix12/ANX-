@@ -297,6 +297,7 @@ export function LiveFlow({
   rows,
   windowNote = null,
   cycle = null,
+  publishedToday = null,
   onCycleToggle,
   cycleBusy = false,
 }: {
@@ -306,6 +307,10 @@ export function LiveFlow({
   /** The publication going out right now, or null when none is. */
   now: { name: string; step: QueueStep | null; cover: string | null; image?: string | null } | null;
   rows: readonly FlowRow[];
+  /** Straight through to <CycleCard>: what this account published since local
+      midnight, which is what its meter counts while the pause mechanism is
+      off. Null means the caller does not know — see the prop's own note. */
+  publishedToday?: number | null;
   /**
    * ─── WHAT THE WINDOW SHOWS, AT EACH END ─────────────────────────────────
    *
@@ -561,7 +566,7 @@ export function LiveFlow({
           suite to save a line of CSS. The shell below copies .anxf-qcard's
           radius, border, background and shadow by VALUE, so the two cards are
           the same object to the eye and independent to the tests. */}
-      {cycle && <CycleCard cycle={cycle} onToggle={onCycleToggle} busy={cycleBusy} />}
+      {cycle && <CycleCard cycle={cycle} publishedToday={publishedToday} onToggle={onCycleToggle} busy={cycleBusy} />}
 
       {/* ── 6: the queue ──────────────────────────────────────────────── */}
       {rows.length > 0 && (

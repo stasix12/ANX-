@@ -1462,6 +1462,10 @@ export function LiveQueueHero({
         /* The 100-publication cycle, straight through. null on an installation
            where v41 has not been run, and the card then does not draw at all. */
         cycle={cycle}
+        /* The day's own figure, which the panel is already handed for the
+           headline above — so the cycle card's meter and the "פורסמו היום"
+           tile can never be two different numbers. */
+        publishedToday={publishedToday}
         onCycleToggle={onCycleToggle}
         cycleBusy={cycleBusy}
       />

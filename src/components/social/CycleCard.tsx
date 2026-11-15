@@ -38,7 +38,44 @@ import { CYCLE_REST_HOURS, cycleCountdown, cycleRestLeftMs, cycleResting, type P
  * "זמן ההפסקה חייב להישמר בצד השרת ובמסד הנתונים, ולא להסתמך על טיימר מקומי
  * בדפדפן" asks for, and the only honest way to show a clock at all.
  */
-export function CycleCard({ cycle, onToggle, busy }: { cycle: PublishCycle; onToggle?: (on: boolean) => void; busy?: boolean }) {
+export function CycleCard({
+  cycle,
+  publishedToday = null,
+  onToggle,
+  busy,
+}: {
+  cycle: PublishCycle;
+  /**
+   * ─── WHAT THE METER SHOWS WHEN THERE IS NO ROUND TO SHOW ────────────────
+   *
+   * "המחזור פרסום קבוצות תקוע על 76 כבר יומיים, אני רוצה שזה יתעדכן כל יום."
+   *
+   * HE WAS RIGHT AND IT WAS NOT STUCK — it was DEAD. With the switch off,
+   * social_publish_cycle_tick() returns before it counts anything and leaves
+   * the row exactly as it was (v41, "Off: nothing is counted and nothing is
+   * held"), so `cycle_count` freezes at whatever it held the moment the
+   * switch was thrown. His row: 76, written 13.11 at 15:40, unchanged for two
+   * days while the account published 252, 250 and 59 times on the days after.
+   *
+   * The card drew that 76 as a big number over a 76%-full bar, with the words
+   * "המנגנון כבוי" underneath — and the words lost, as words beside a big
+   * number do. A dormant round is not a small print problem; it is a figure
+   * that must not be on screen at all.
+   *
+   * SO WITH THE MECHANISM OFF THE METER COUNTS THE DAY instead: an exact head
+   * count of what this account published since local midnight, which is the
+   * number that answers "יתעדכן כל יום" literally — it moves with every
+   * publication and starts again at midnight, on its own, with no mechanism
+   * to switch on.
+   *
+   * Null means the caller does not know (the campaign screen, the test that
+   * mounts this card alone), and then the meter says so rather than inventing
+   * a figure.
+   */
+  publishedToday?: number | null;
+  onToggle?: (on: boolean) => void;
+  busy?: boolean;
+}) {
   /*
    * ONE TICK A SECOND, AND ONLY WHILE SOMETHING IS HOLDING. A card that is
    * not counting down must not keep a timer alive: this screen re-renders on
@@ -59,6 +96,9 @@ export function CycleCard({ cycle, onToggle, busy }: { cycle: PublishCycle; onTo
      is the one way this card could look broken. */
   const pct = Math.max(0, Math.min(100, Math.round((cycle.count / Math.max(1, cycle.limit)) * 100)));
   const resumeAt = cycle.restUntil ? new Date(cycle.restUntil) : null;
+  /* The day's figure is only drawn when the caller really has it — see the
+     prop's note. A dash is a better answer than a zero nobody counted. */
+  const dayKnown = cycle.enabled || typeof publishedToday === 'number';
 
   return (
     <>
@@ -80,25 +120,45 @@ export function CycleCard({ cycle, onToggle, busy }: { cycle: PublishCycle; onTo
 
         {/* ── the meter ── */}
         <div className="anxc-meter">
-          <p className="anxc-mtitle">מחזור פרסום קבוצות</p>
+          {/*
+            THE TITLE NAMES WHICHEVER NUMBER IS UNDER IT. A heading that says
+            "מחזור פרסום קבוצות" over a figure that is not a round was half of
+            why the dead 76 read as a live one.
+          */}
+          <p className="anxc-mtitle">{cycle.enabled ? 'מחזור פרסום קבוצות' : 'פרסומים היום בקבוצות'}</p>
           <p className="anxc-count">
-            {cycle.count} / {cycle.limit}
+            {cycle.enabled ? (
+              <>
+                {cycle.count} / {cycle.limit}
+              </>
+            ) : (
+              /* NO CEILING BESIDE IT. The day's limit on this account is 2000
+                 — a bar against it would sit at 12% on a full day's work and
+                 say nothing — and "/ 100" would be the round again, which is
+                 exactly what is not running. */
+              <>{dayKnown ? publishedToday : '—'}</>
+            )}
           </p>
           {/*
-            A FROZEN 0 / 100 NEEDS A SENTENCE. With the mechanism off, the
-            meter is dormant by design — but "0 / 100" under the words
-            "פרסומים במחזור הנוכחי" reads as "nothing has published today",
-            which is a far more alarming thing to tell the owner than the
-            truth. So the label itself says which of the two it is.
+            AND THE STATE IN WORDS UNDER IT, both ways round: what the number
+            counts while the mechanism runs, and that nothing is being held
+            while it does not.
           */}
           {cycle.enabled ? (
             <p className="anxc-label">פרסומים במחזור הנוכחי</p>
           ) : (
             <p className="anxc-label anxc-off">המנגנון כבוי — אין הפסקות אוטומטיות</p>
           )}
-          <span className="anxc-track">
-            <span className="anxc-bar" style={{ width: `${pct}%` }} />
-          </span>
+          {/*
+            THE BAR IS THE ROUND'S, so it goes with the round. Left drawn at
+            76% under a day's figure it would be the frozen number's last
+            footprint on the card.
+          */}
+          {cycle.enabled && (
+            <span className="anxc-track">
+              <span className="anxc-bar" style={{ width: `${pct}%` }} />
+            </span>
+          )}
         </div>
 
         <span aria-hidden className="anxc-div" />

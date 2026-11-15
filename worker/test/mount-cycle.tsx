@@ -38,15 +38,29 @@ const which = params.get('s') ?? 'running';
  * read the SAME stored instant and show LESS time left.
  */
 const until = params.get('until');
+/*
+ * THE OFF ROW CARRIES A COUNT ON PURPOSE, and 76 is his own.
+ *
+ * social_publish_cycle_tick() leaves `cycle_count` exactly as it was while the
+ * switch is off, so a real off row is not a zero — it is whatever stood there
+ * when the switch was thrown. His froze at 76 on 13.11 and was still 76 two
+ * days later, over a card that drew it as a live round. A fixture with 0 here
+ * could not tell the two apart.
+ */
 const cycle: PublishCycle =
   which === 'resting'
     ? { ...base, count: 0, resting: true, restUntil: until ?? new Date(Date.now() + 7 * 3600_000 + 59 * 60_000 + 59_000).toISOString() }
     : which === 'off'
-      ? { ...base, enabled: false }
+      ? { ...base, enabled: false, count: 76 }
       : { ...base, count: 37 };
+
+/* What the account really published since local midnight — the number the
+   meter counts while the mechanism is off. 41 so it cannot be mistaken for
+   the frozen 76, for the round's 37, or for a zero. */
+const today = Number(params.get('today') ?? 41);
 
 createRoot(document.getElementById('root') as HTMLElement).render(
   <div className="social-theme" style={{ padding: 12 }}>
-    <LiveFlow mode="idle" headline="" now={null} rows={[]} cycle={cycle} onCycleToggle={() => undefined} />
+    <LiveFlow mode="idle" headline="" now={null} rows={[]} cycle={cycle} publishedToday={today} onCycleToggle={() => undefined} />
   </div>,
 );

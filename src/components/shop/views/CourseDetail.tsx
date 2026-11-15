@@ -122,6 +122,57 @@ const I = {
       <path d="M12 12c-1.8-2.6-3.4-4-5.3-4a4 4 0 0 0 0 8c1.9 0 3.5-1.4 5.3-4Zm0 0c1.8 2.6 3.4 4 5.3 4a4 4 0 0 0 0-8c-1.9 0-3.5 1.4-5.3 4Z" />
     </svg>
   ),
+  noPowder: (s = 26) => (
+    <svg
+      width={s}
+      height={s}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.8}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <circle cx="12" cy="12" r="9" />
+      <path d="M5.6 5.6 18.4 18.4" />
+      <path d="M9 9.5h6l-1 6h-4z" />
+    </svg>
+  ),
+  coins: (s = 26) => (
+    <svg
+      width={s}
+      height={s}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.8}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <ellipse cx="9" cy="7" rx="5" ry="2.5" />
+      <path d="M4 7v4c0 1.4 2.2 2.5 5 2.5s5-1.1 5-2.5V7" />
+      <path d="M10 15.4c.6 1.2 2.6 2.1 5 2.1 2.8 0 5-1.1 5-2.5v-4c0-1.4-2.2-2.5-5-2.5-.4 0-.7 0-1 .05" />
+      <path d="M20 15v4c0 1.4-2.2 2.5-5 2.5-2.4 0-4.4-.8-4.9-2" />
+    </svg>
+  ),
+  shieldCheck: (s = 26) => (
+    <svg
+      width={s}
+      height={s}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.8}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M12 3 4.5 6v5.5c0 4.6 3.2 8.4 7.5 9.5 4.3-1.1 7.5-4.9 7.5-9.5V6z" />
+      <path d="m8.5 12 2.5 2.5 4.5-5" />
+    </svg>
+  ),
   lock: (s = 26) => (
     <svg
       width={s}
@@ -147,10 +198,14 @@ export function CourseDetail({ product }: { product: Product }) {
   const words = product.name.split(" ");
   const last = words.pop();
   const strip = [
-    { icon: I.infinity(), text: "ללא הגבלת זמן" },
-    { icon: I.sofa(), text: "מתאים גם לספות" },
-    { icon: I.flask(), text: "רק 2 חומרים" },
-    { icon: I.timer(), text: "תוך 20 דק'" },
+    { icon: I.flask(21), text: "רק 2 חומרים", sub: "נלמד לשלב ולדלל נכון" },
+    {
+      icon: I.noPowder(21),
+      text: "בלי אבקות יקרות",
+      sub: "בלי ספקי חומרים",
+    },
+    { icon: I.coins(21), text: "חוסכים אלפי ₪", sub: "בכל חודש" },
+    { icon: I.shieldCheck(21), text: "תוצאות מובטחות", sub: "שיטה שעובדת בשטח" },
   ];
   const trust = [
     { icon: I.calendar(20), text: "תיאום מועד גמיש" },
@@ -267,15 +322,22 @@ export function CourseDetail({ product }: { product: Product }) {
           </div>
 
           {/* Benefits strip */}
-          <ul className="mt-3 grid grid-cols-4 rounded-[16px] bg-[#e9f1ff] py-2.5 text-center">
+          <ul className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
             {strip.map((b) => (
               <li
                 key={b.text}
-                className="flex flex-col items-center gap-1 border-[#c9d8f5] px-1 not-first:border-s"
+                className="flex items-center gap-2 rounded-[16px] border border-[#d4e1fb] bg-[#eef4ff] px-2 py-2.5 text-right"
               >
-                <span className="text-[#2a66f0]">{b.icon}</span>
-                <span className="text-[11.5px] leading-tight font-extrabold">
-                  {b.text}
+                <span className="grid size-9 shrink-0 place-items-center rounded-full bg-white text-[#2a66f0] shadow-[0_2px_8px_rgba(42,102,240,0.15)]">
+                  {b.icon}
+                </span>
+                <span className="min-w-0">
+                  <span className="block text-[clamp(12.5px,3.7vw,14.5px)] leading-tight font-black whitespace-nowrap">
+                    {b.text}
+                  </span>
+                  <span className="mt-0.5 block text-[clamp(10.5px,3.05vw,12px)] leading-tight font-semibold text-x-muted">
+                    {b.sub}
+                  </span>
                 </span>
               </li>
             ))}
@@ -284,7 +346,7 @@ export function CourseDetail({ product }: { product: Product }) {
           {product.story?.length ? (
             <div className="mt-4 space-y-3 text-center text-[14.5px] leading-relaxed text-x-ink">
               {product.story.map((t) =>
-                t.startsWith('**') ? (
+                t.startsWith("**") ? (
                   <p key={t} className="text-[17px] font-black">
                     {t.slice(2)}
                   </p>
@@ -465,7 +527,8 @@ function Reels({ reels }: { reels: string[] }) {
         </span>
       </h2>
       <p className="mx-auto mt-3 max-w-[340px] text-center text-[16px] leading-snug font-bold text-x-ink">
-        שחוסכים <span className="font-black text-x-blue">אלפי שקלים</span> על אבקות יקרות שלא מביאות לתוצאות
+        שחוסכים <span className="font-black text-x-blue">אלפי שקלים</span> על
+        אבקות יקרות שלא מביאות לתוצאות
       </p>
       <div className="x-noscrollbar -mx-4 mt-4 flex snap-x gap-2.5 overflow-x-auto px-4 lg:mx-0 lg:px-0">
         {reels.map((r, i) => (

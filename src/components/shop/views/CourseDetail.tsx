@@ -205,7 +205,11 @@ export function CourseDetail({ product }: { product: Product }) {
       sub: "בלי ספקי חומרים",
     },
     { icon: I.coins(21), text: "חוסכים אלפי ₪", sub: "בכל חודש" },
-    { icon: I.shieldCheck(21), text: "תוצאות מובטחות", sub: "שיטה שעובדת בשטח" },
+    {
+      icon: I.shieldCheck(21),
+      text: "תוצאות מובטחות",
+      sub: "שיטה שעובדת בשטח",
+    },
   ];
   const trust = [
     { icon: I.calendar(20), text: "תיאום מועד גמיש" },
@@ -530,26 +534,28 @@ function Reels({ reels }: { reels: string[] }) {
         שחוסכים <span className="font-black text-x-blue">אלפי שקלים</span> על
         אבקות יקרות שלא מביאות לתוצאות
       </p>
-      <div className="x-noscrollbar -mx-4 mt-4 flex snap-x gap-2.5 overflow-x-auto px-4 lg:mx-0 lg:px-0">
+      <div className="x-noscrollbar -mx-4 mt-2 flex snap-x scroll-px-4 gap-3 overflow-x-auto px-4 py-3 lg:mx-0 lg:px-2">
         {reels.map((r, i) => (
           <div
             key={r}
-            className="w-[46%] max-w-[220px] shrink-0 snap-start overflow-hidden rounded-[16px] bg-black shadow-x-card sm:w-[30%]"
+            className="w-[46%] max-w-[220px] shrink-0 snap-start rounded-[18px] bg-gradient-to-b from-[#7fa2ff] via-x-blue to-[#1d4cf0] p-[3px] shadow-[0_0_14px_rgba(47,93,251,0.5),0_0_4px_rgba(47,93,251,0.6)] sm:w-[30%]"
           >
-            <video
-              src={src(`${r}.mp4`)}
-              poster={src(`${r}.jpg`)}
-              controls
-              playsInline
-              preload="none"
-              aria-label={`סרטון מקורס ${i + 1}`}
-              onPlay={(e) => {
-                document
-                  .querySelectorAll("video")
-                  .forEach((v) => v !== e.currentTarget && v.pause());
-              }}
-              className="aspect-[9/16] w-full bg-black object-cover"
-            />
+            <div className="overflow-hidden rounded-[15px] bg-black">
+              <video
+                src={src(`${r}.mp4`)}
+                poster={src(`${r}.jpg`)}
+                controls
+                playsInline
+                preload="none"
+                aria-label={`סרטון מקורס ${i + 1}`}
+                onPlay={(e) => {
+                  document
+                    .querySelectorAll("video")
+                    .forEach((v) => v !== e.currentTarget && v.pause());
+                }}
+                className="aspect-[9/16] w-full bg-black object-cover"
+              />
+            </div>
           </div>
         ))}
       </div>

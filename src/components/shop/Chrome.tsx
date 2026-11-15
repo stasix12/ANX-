@@ -69,7 +69,7 @@ function AnnouncementBar() {
     </div>
   );
   return (
-    <div className="h-8 overflow-hidden bg-linear-to-l from-[#1d4fe0] via-x-blue to-[#1d4fe0] text-[13px] leading-8 font-bold text-white">
+    <div dir="ltr" className="h-8 overflow-hidden bg-linear-to-l from-[#1d4fe0] via-x-blue to-[#1d4fe0] text-[13px] leading-8 font-bold text-white">
       <p className="sr-only">{ANNOUNCEMENT}</p>
       <div dir="ltr" className="x-marquee flex w-max">
         {group(true)}

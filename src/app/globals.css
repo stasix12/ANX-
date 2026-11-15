@@ -1112,11 +1112,16 @@
 }
 
 /* Running announcement strip in the shop header. */
+/* Moves rightwards so each Hebrew line enters with its first word; two identical
+   halves make the loop seamless. Kept running even with reduced motion (owner's request). */
 @keyframes x-marquee {
-  from { transform: translateX(0); }
-  to { transform: translateX(-50%); }
+  from { transform: translate3d(-50%, 0, 0); }
+  to { transform: translate3d(0, 0, 0); }
 }
-.x-marquee { animation: x-marquee 24s linear infinite; }
+.x-marquee { animation: x-marquee 22s linear infinite; will-change: transform; }
 @media (prefers-reduced-motion: reduce) {
-  .x-marquee { animation: none; }
+  .x-marquee.x-marquee {
+    animation-duration: 22s !important;
+    animation-iteration-count: infinite !important;
+  }
 }

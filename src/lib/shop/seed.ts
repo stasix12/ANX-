@@ -355,6 +355,7 @@ export const SEED_PRODUCTS: Product[] = [
     price: 1480,
     bookingOnly: true,
     badge: 'קורס איתי 1-1',
+    reels: Array.from({ length: 16 }, (_, i) => `/video/course-clients/${String(i + 1).padStart(2, '0')}`),
     images: [1, 2, 3, 4].map((n) => real('mattress-course', n)),
     highlights: ['תוצאה מקצועית תוך 20 דקות', 'רק 2 חומרים יעילים', 'מתאים גם לניקוי ספות', 'הדרכה מעשית בשטח'],
     tags: ['course', 'mattress', 'קורס', 'מזרן', 'מזרנים', 'ניקוי מזרנים', 'הדרכה', '1-1', 'אישי', 'כתמים'],
@@ -581,7 +582,7 @@ const DEMO_ADMIN: User = {
 };
 
 /** Bumped when the seed changes shape, so browsers drop the old demo catalogue. */
-export const DB_VERSION = 26;
+export const DB_VERSION = 27;
 
 export function buildSeedDB(): ShopDB {
   return {

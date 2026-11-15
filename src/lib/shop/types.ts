@@ -79,6 +79,8 @@ export interface Product {
   rating: number;
   reviewCount: number;
   featured: boolean;
+  /** Customer clips shown on the page (paths without extension: .mp4 video, .jpg poster). */
+  reels?: string[];
   /** Not sold through the cart: the page books it by WhatsApp (e.g. a 1-1 course). */
   bookingOnly?: boolean;
   /** Short highlight label on the card and product page, e.g. "הנמכרת ביותר". */

@@ -5,7 +5,7 @@ import { whatsappLink } from '@/lib/site';
 import type { Product } from '@/lib/shop/types';
 import { ShopFrame } from '../Chrome';
 import { FavoriteButton } from '../ProductCard';
-import { Img } from '../ui';
+import { Img, src } from '../ui';
 
 /**
  * Product page of a 1-1 course (bookingOnly): dark hero with the photo,
@@ -189,8 +189,40 @@ export function CourseDetail({ product }: { product: Product }) {
               </li>
             ))}
           </ul>
+
+          {!!product.reels?.length && <Reels reels={product.reels} />}
         </div>
       </div>
     </ShopFrame>
+  );
+}
+
+/** Clips from courses given to customers: a swipeable row, one plays at a time. */
+function Reels({ reels }: { reels: string[] }) {
+  return (
+    <section aria-labelledby="reels-title" className="mt-2 border-t border-x-line pt-6 pb-8">
+      <h2 id="reels-title" className="text-[20px] leading-tight font-black sm:text-[24px]">
+        קצת מהקורסים אצל הלקוחות המרוצים שלנו
+      </h2>
+      <p className="mt-1 text-[14px] text-x-muted">שחוסכים אלפי שקלים על אבקות יקרות שלא מביאות לתוצאות</p>
+      <div className="x-noscrollbar -mx-4 mt-4 flex snap-x gap-2.5 overflow-x-auto px-4 lg:mx-0 lg:px-0">
+        {reels.map((r, i) => (
+          <div key={r} className="w-[46%] max-w-[220px] shrink-0 snap-start overflow-hidden rounded-[16px] bg-black shadow-x-card sm:w-[30%]">
+            <video
+              src={src(`${r}.mp4`)}
+              poster={src(`${r}.jpg`)}
+              controls
+              playsInline
+              preload="none"
+              aria-label={`סרטון מקורס ${i + 1}`}
+              onPlay={(e) => {
+                document.querySelectorAll('video').forEach((v) => v !== e.currentTarget && v.pause());
+              }}
+              className="aspect-[9/16] w-full bg-black object-cover"
+            />
+          </div>
+        ))}
+      </div>
+    </section>
   );
 }

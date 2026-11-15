@@ -45,7 +45,7 @@ export function fromPrice(p: Product): { price: number | null; varies: boolean }
 
 /** Has a price, is published and in stock — i.e. can go into the cart. */
 export function purchasable(p: Product): boolean {
-  return p.published && p.price !== null && inStock(p);
+  return p.published && p.price !== null && !p.bookingOnly && inStock(p);
 }
 
 export function cardImage(p: Product): string {

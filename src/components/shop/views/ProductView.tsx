@@ -12,6 +12,7 @@ import { IconBox, IconCart, IconChevron, IconSearch, IconShield, IconTruck } fro
 import { MadeInIsrael } from '../MadeInIsrael';
 import { addProductToCart, FavoriteButton, ProductGrid } from '../ProductCard';
 import { btn, EmptyState, Img, Price, QtyStepper, src, Stars, Swatch, toast } from '../ui';
+import { CourseDetail } from './CourseDetail';
 import { ShopFooter } from './HomeView';
 
 export function ProductView({ slug }: { slug: string | null }) {
@@ -32,6 +33,7 @@ export function ProductView({ slug }: { slug: string | null }) {
       </ShopFrame>
     );
   }
+  if (product.bookingOnly) return <CourseDetail key={product.id} product={product} />;
   return <ProductDetail key={product.id} product={product} />;
 }
 

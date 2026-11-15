@@ -79,6 +79,8 @@ export interface Product {
   rating: number;
   reviewCount: number;
   featured: boolean;
+  /** Not sold through the cart: the page books it by WhatsApp (e.g. a 1-1 course). */
+  bookingOnly?: boolean;
   /** Short highlight label on the card and product page, e.g. "הנמכרת ביותר". */
   badge?: string;
   /** Shows the "מיוצר בישראל" badge on the card and product page. */

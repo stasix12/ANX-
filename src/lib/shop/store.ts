@@ -177,6 +177,7 @@ export const actions = {
     const p = s.db.products.find((x) => x.id === productId);
     if (!p || !p.published) return fail('המוצר אינו זמין');
     if (p.price === null) return fail('המחיר טרם נקבע — אפשר לברר ולהזמין בוואטסאפ');
+    if (p.bookingOnly) return fail('את המוצר הזה מתאמים ישירות — בוואטסאפ');
     if (!inStock(p)) return fail('המוצר אזל מהמלאי');
     const missing = p.variants.find((v) => !options[v.id]);
     if (missing) return fail(`יש לבחור ${missing.label}`);

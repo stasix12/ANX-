@@ -281,9 +281,23 @@ export function CourseDetail({ product }: { product: Product }) {
             ))}
           </ul>
 
-          <p className="mt-4 text-center text-[14.5px] leading-relaxed text-x-ink">
-            {product.description}
-          </p>
+          {product.story?.length ? (
+            <div className="mt-4 space-y-3 text-center text-[14.5px] leading-relaxed text-x-ink">
+              {product.story.map((t) =>
+                t.startsWith('**') ? (
+                  <p key={t} className="text-[17px] font-black">
+                    {t.slice(2)}
+                  </p>
+                ) : (
+                  <p key={t}>{t}</p>
+                ),
+              )}
+            </div>
+          ) : (
+            <p className="mt-4 text-center text-[14.5px] leading-relaxed text-x-ink">
+              {product.description}
+            </p>
+          )}
 
           <a
             href={book}

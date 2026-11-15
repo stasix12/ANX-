@@ -38,6 +38,8 @@ export interface VariantGroup {
    * has one, it replaces the product price (e.g. kit with / without pump).
    */
   prices?: (number | null)[];
+  /** Optional gallery per value, aligned with `values`; replaces the product photos once chosen. */
+  images?: (string[] | null)[];
 }
 
 export interface SpecRow {

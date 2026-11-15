@@ -119,11 +119,11 @@ export function HomeView() {
         {/* Promo band under the featured row — the ANACONDA set, from real photos. */}
         <section className="px-4 pt-4 lg:px-0 lg:pt-10">
           <Link href="/shop/p/anaconda-set" className="relative flex h-[150px] items-center overflow-hidden rounded-[20px] bg-[#111827] lg:h-[220px]">
-            <Img path="/products/anx-anaconda-set/1.webp" alt="" className="absolute inset-y-0 left-0 h-full w-[55%] object-cover object-[50%_40%]" />
+            <Img path="/products/anaconda-hose-set/4.webp" alt="" className="absolute inset-y-0 left-0 h-full w-[55%] bg-white object-cover object-[50%_45%]" />
             <div className="absolute inset-0 bg-[linear-gradient(270deg,rgba(10,16,40,0.96)_0%,rgba(10,16,40,0.8)_45%,rgba(10,16,40,0.05)_100%)]" />
             <div className="relative ms-5 me-auto max-w-[58%] text-white lg:ms-10">
               <p className="text-xs font-bold text-[#8fb4ff]">סט מלא</p>
-              <p className="mt-1 text-[19px] leading-tight font-black lg:text-3xl">ANACONDA — ידית, צינור משולב ומחבר 360°</p>
+              <p className="mt-1 text-[19px] leading-tight font-black lg:text-3xl">ANACONDA — צינור בתוך צינור, עם ידית או בלי</p>
               <span className="mt-2 inline-flex items-center gap-1 text-[13px] font-bold text-white/90">
                 לפרטים <IconArrow dir="right" size={15} />
               </span>

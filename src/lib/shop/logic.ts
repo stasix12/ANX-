@@ -52,7 +52,11 @@ export function cardImage(p: Product): string {
   return p.cardImage ?? p.images[0] ?? '';
 }
 
-export function galleryFor(p: Product, colorId: string | null): string[] {
+export function galleryFor(p: Product, colorId: string | null, options: Record<string, string> = {}): string[] {
+  for (const v of p.variants) {
+    const own = v.images?.[v.values.indexOf(options[v.id])];
+    if (own?.length) return own;
+  }
   const c = p.colors.find((x) => x.id === colorId);
   return c?.images?.length ? c.images : p.images;
 }
@@ -268,7 +272,7 @@ export function priceCart(
       product,
       colorName: color?.name ?? null,
       optionsText: optionsText(product, l.options ?? {}),
-      image: color?.images?.[0] ?? cardImage(product),
+      image: (product.variants.some((v) => v.images?.[v.values.indexOf((l.options ?? {})[v.id])]?.length) ? galleryFor(product, l.colorId, l.options ?? {})[0] : undefined) ?? color?.images?.[0] ?? cardImage(product),
       unitPrice: unitPriceFor(product, l.options ?? {}) ?? 0,
       lineTotal: (unitPriceFor(product, l.options ?? {}) ?? 0) * l.qty,
       problem,

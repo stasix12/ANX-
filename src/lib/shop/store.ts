@@ -420,9 +420,17 @@ export const actions = {
       variants: p.variants
         .map((v) => {
           // Keep each option's price aligned with it while empty options drop out.
-          const keep = v.values.map((val, i) => ({ val: val.trim(), price: v.prices?.[i] ?? null })).filter((x) => x.val);
+          const keep = v.values
+            .map((val, i) => ({ val: val.trim(), price: v.prices?.[i] ?? null, images: v.images?.[i] ?? null }))
+            .filter((x) => x.val);
           const prices = keep.map((x) => x.price);
-          return { ...v, values: keep.map((x) => x.val), ...(prices.some((x) => x !== null) ? { prices } : { prices: undefined }) };
+          const images = keep.map((x) => x.images);
+          return {
+            ...v,
+            values: keep.map((x) => x.val),
+            prices: prices.some((x) => x !== null) ? prices : undefined,
+            images: images.some((x) => x?.length) ? images : undefined,
+          };
         })
         .filter((v) => v.label.trim() && v.values.length),
     };

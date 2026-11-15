@@ -42,7 +42,7 @@ function ProductDetail({ product }: { product: Product }) {
   const [qty, setQty] = useState(1);
   const [index, setIndex] = useState(0);
   const track = useRef<HTMLDivElement>(null);
-  const photos = galleryFor(product, colorId);
+  const photos = galleryFor(product, colorId, options);
   // The demo clip rides as the last slide, like the play tile in the design.
   const slides: { kind: 'img' | 'video'; src: string }[] = [
     ...photos.map((src) => ({ kind: 'img' as const, src })),
@@ -68,7 +68,7 @@ function ProductDetail({ product }: { product: Product }) {
   useEffect(() => {
     setIndex(0);
     track.current?.scrollTo({ left: 0, behavior: 'instant' as ScrollBehavior });
-  }, [colorId]);
+  }, [colorId, options]);
 
   const go = (i: number) => {
     const n = (i + slides.length) % slides.length;

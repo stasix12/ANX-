@@ -493,29 +493,34 @@ export const SEED_PRODUCTS: Product[] = [
     ...base,
     id: 'p-anaconda-set',
     slug: 'anaconda-set',
-    name: 'סט ANACONDA מלא',
-    subtitle: 'ידית, צינור משולב ומחבר 360°',
+    name: 'סט ANACONDA — צינור בתוך צינור',
+    subtitle: 'צינור שאיבה והזרקה משולב, עם ידית או בלי',
     description:
-      'הסט המלא של ANACONDA: ידית השאיבה, צינור הזרקה שעובר בתוך צינור השאיבה, ומחבר מסתובב 360° בין הידית לצינור. צינור אחד במקום שניים מקבילים — פחות סיבוכים מתחת לרגליים ופחות מה לגרור בין חדר לחדר.',
+      'סט צינור בתוך צינור של ANX3D: צינור השאיבה וקו ההזרקה עובדים כקו אחד, עם מחברי ANX בשני הקצוות ומחבר מהיר לקו המים. צינור אחד במקום שניים מקבילים — פחות סיבוכים מתחת לרגליים ופחות מה לגרור בין חדר לחדר. אפשר להזמין את הצינור לבד, או כסט מלא עם ידית ANACONDA.',
     categories: ['handles', 'accessories'],
-    price: 1600,
-    images: [1, 2, 3, 4].map((n) => real('anx-anaconda-set', n)),
-    colors: [{ ...COLORS.jungle }, { ...COLORS.black }],
+    price: 1250,
+    images: [1, 2, 3, 4].map((n) => real('anaconda-hose-set', n)),
+    variants: [
+      {
+        id: 'kit',
+        label: 'בחירת סט',
+        values: ['צינור בתוך צינור, ללא ידית', 'כולל ידית ANACONDA'],
+        prices: [1250, 1650],
+        images: [[1, 2].map((n) => real('anaconda-hose-set', n)), [3, 4].map((n) => real('anaconda-hose-set', n))],
+      },
+    ],
     highlights: [
-      'ידית ANACONDA כלולה בסט',
-      'צינור הזרקה עובר בתוך צינור השאיבה',
-      'מחבר מסתובב 360° לתנועה חופשית של הידית',
-      'חיבור מהיר — מתחבר ומתנתק בלי כלים',
+      'צינור בתוך צינור — שאיבה והזרקה בקו אחד',
+      'פחות סיבוכים ופחות מה לגרור בין חדר לחדר',
+      'מחברי ANX ומחבר מהיר לקו המים',
+      'לבחירה: צינור בלבד או סט מלא עם ידית ANACONDA',
     ],
-    specs: [
-      { label: 'כולל', value: 'ידית · צינור שאיבה עם צינור הזרקה פנימי · מחבר 360°' },
-      { label: 'צבעי הידית', value: 'ירוק ג׳ונגל · שחור' },
-      { label: 'ייצור', value: 'מיוצר בישראל · עמיד לחום ולשחיקה' },
-    ],
+    specs: [{ label: 'מחיר', value: 'ללא ידית 1,250 ₪ · כולל ידית ANACONDA 1,650 ₪' }],
     compatibility: ['Sabrina — סט שאיבה והזרקה לניקוי ספות וריפודים'],
-    tags: ['anaconda', 'set', 'סט', 'ערכה', 'צינור', 'ידית'],
+    featured: true,
+    tags: ['anaconda', 'set', 'hose', 'סט', 'ערכה', 'צינור', 'צינור בתוך צינור', 'צינור משולב', 'ידית', 'הזרקה', 'שאיבה'],
     madeInIsrael: true,
-    createdAt: created(6),
+    createdAt: created(-9),
     sortOrder: 8,
   },
   {
@@ -586,7 +591,7 @@ const DEMO_ADMIN: User = {
 };
 
 /** Bumped when the seed changes shape, so browsers drop the old demo catalogue. */
-export const DB_VERSION = 24;
+export const DB_VERSION = 25;
 
 export function buildSeedDB(): ShopDB {
   return {

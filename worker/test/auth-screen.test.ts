@@ -172,8 +172,17 @@ const src = (p: string) => readFileSync(new URL(`../../${p}`, import.meta.url), 
   eq(untouched, [], 'no entry is its own translation — that renders Hebrew while looking done');
 
   /* Cyrillic, not Latin transliteration and not Hebrew left behind. */
-  const notRussian = entries.filter(([, ru]) => !/[\u0400-\u04FF]/.test(ru)).map(([he]) => he);
-  eq(notRussian, [], 'every translation is actually in Cyrillic');
+  /* A brand name is the one honest reason to have no Cyrillic, and each is
+     named in LATIN_OK rather than the rule being relaxed for everybody. */
+  const latinOk = new Set(
+    [...dict.matchAll(/export const LATIN_OK[^=]*=\s*\[([^\]]*)\]/g)]
+      .flatMap((m) => [...m[1].matchAll(/'([^']+)'/g)].map((x) => x[1])),
+  );
+  is(latinOk.size > 0, 'the brand-name exception list is readable from the dictionary');
+  const notRussian = entries
+    .filter(([he, ru]) => !/[\u0400-\u04FF]/.test(ru) && !latinOk.has(he))
+    .map(([he]) => he);
+  eq(notRussian, [], 'every translation is in Cyrillic, unless it is a brand name listed in LATIN_OK');
 
   const dupes = entries.map(([he]) => he).filter((he, i, all) => all.indexOf(he) !== i);
   eq(dupes, [], 'no Hebrew sentence is listed twice — the second would silently win');

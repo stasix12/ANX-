@@ -1074,7 +1074,17 @@
  * on the PC — it translates a rendered page — but src/lib/social ships with
  * the installer, so the stamp moves.
  */
-export const WORKER_VERSION = '4.75.0';
+/*
+ * 4.75.0 → 4.76.0 — 579 ערכים נוספו למילון.
+ *
+ * v4.75.0 published 16.11 at 05:37 (asked, not assumed), so 4.76.0 is free.
+ *
+ * NOTHING HERE CHANGES THE ENGINE. The dictionary is a lookup table the
+ * WEBSITE reads; the worker never renders a screen. It moves the stamp only
+ * because src/lib/social ships whole with the installer. The PC is not
+ * behind in any way that affects publishing while it sits on an older one.
+ */
+export const WORKER_VERSION = '4.76.0';
 
 /**
  * A FINGERPRINT OF EVERYTHING THE INSTALLER CARRIES.
@@ -1825,4 +1835,4 @@ export const WORKER_VERSION = '4.75.0';
  * worker/facebook/join.ts and written by worker/social-worker.ts, both of
  * which run only on his PC. Numbers under WORKER_VERSION above.
  */
-export const WORKER_FINGERPRINT = '66a5eaaa1009ddf0';
+export const WORKER_FINGERPRINT = 'c1868792cd77806c';

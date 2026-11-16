@@ -39,7 +39,7 @@ import { translate, type Lang } from './i18n';
 const ATTRS = ['placeholder', 'aria-label', 'title'] as const;
 const SKIP_TAGS = new Set(['SCRIPT', 'STYLE', 'TEXTAREA', 'CODE', 'PRE']);
 
-type Marked = Text & { __anxHe?: string | null };
+type Marked = Text & { __anxHe?: string | null; __anxOut?: string; __anxPre?: string; __anxPost?: string };
 type MarkedEl = Element & { [k: string]: unknown };
 
 let lang: Lang = 'he';
@@ -49,15 +49,42 @@ function tidy(s: string): string {
   return s.replace(/\s+/g, ' ').trim();
 }
 
-/** The Hebrew this node was born with, or null if it is not ours to touch. */
-function original(node: Marked): string | null {
-  if (node.__anxHe === undefined) {
-    const txt = tidy(node.nodeValue ?? '');
-    /* Only sentences the dictionary can actually answer are remembered. A
-       live counter or a name would otherwise be stored and re-written on
-       every tick, fighting React for no gain. */
-    node.__anxHe = txt && translate('ru', txt) !== txt ? txt : null;
+/**
+ * ─── RE-READING A NODE REACT HAS REWRITTEN ──────────────────────────────
+ *
+ * Remembering each node's Hebrew once was right while the dictionary only
+ * answered fixed sentences: those never change, so a cached original was
+ * always the current one. Patterns break that. `נשארו 7 דקות` becomes
+ * `נשארו 6 דקות` a minute later, and a cache would keep painting "7" over
+ * React's "6" for as long as the page stayed open — a stale number is worse
+ * than an untranslated one.
+ *
+ * So the node remembers BOTH sides: the Hebrew it was read from, and the
+ * exact string we wrote out. On every visit, a value equal to what we wrote
+ * is our own paint and the cache stands; anything else is React writing new
+ * source text, and the Hebrew is read again from it.
+ */
+function source(node: Marked): string | null {
+  const cur = node.nodeValue ?? '';
+  if (node.__anxHe !== undefined && node.__anxOut !== undefined && cur === node.__anxOut) {
+    return node.__anxHe;
   }
+  const txt = tidy(cur);
+  /*
+   * ─── THE SPACE AROUND THE WORDS IS NOT DECORATION ─────────────────────
+   *
+   * JSX splits `{n} קבוצות היום` into separate text nodes, and one of them
+   * is the string " קבוצות היום" — leading space and all. That space is the
+   * only thing between the number and the word on screen. Translating the
+   * trimmed core and writing it back bare would render "5групп", so the
+   * whitespace the node came with is kept and put back around whatever is
+   * written into it.
+   */
+  node.__anxPre = txt ? (/^\s*/.exec(cur)?.[0] ?? '') : '';
+  node.__anxPost = txt ? (/\s*$/.exec(cur)?.[0] ?? '') : '';
+  /* Only sentences the dictionary can actually answer are remembered, so a
+     bare name or a lone number is never stored and never fought over. */
+  node.__anxHe = txt && translate('ru', txt) !== txt ? txt : null;
   return node.__anxHe;
 }
 
@@ -65,24 +92,29 @@ function paintText(node: Marked) {
   const parent = node.parentNode as Element | null;
   if (parent && SKIP_TAGS.has(parent.nodeName)) return;
   if (parent && parent.closest && parent.closest('[data-no-translate]')) return;
-  const he = original(node);
+  const he = source(node);
   if (!he) return;
-  const want = lang === 'he' ? he : translate(lang, he);
+  const core = lang === 'he' ? he : translate(lang, he);
+  const want = (node.__anxPre ?? '') + core + (node.__anxPost ?? '');
   if (node.nodeValue !== want) node.nodeValue = want;
+  node.__anxOut = want;
 }
 
 function paintAttrs(el: MarkedEl) {
   for (const name of ATTRS) {
     if (!el.hasAttribute?.(name)) continue;
     const store = `__anxAttr_${name}`;
-    if (el[store] === undefined) {
-      const txt = tidy(el.getAttribute(name) ?? '');
+    const out = `__anxOut_${name}`;
+    const cur = el.getAttribute(name) ?? '';
+    if (el[store] === undefined || el[out] === undefined || cur !== el[out]) {
+      const txt = tidy(cur);
       el[store] = txt && translate('ru', txt) !== txt ? txt : null;
     }
     const he = el[store] as string | null;
     if (!he) continue;
     const want = lang === 'he' ? he : translate(lang, he);
     if (el.getAttribute(name) !== want) el.setAttribute(name, want);
+    el[out] = want;
   }
 }
 

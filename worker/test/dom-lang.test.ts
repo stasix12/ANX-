@@ -116,6 +116,33 @@ async function main(): Promise<void> {
     eq(after.typed, 'ארכיון', "what the customer typed is NEVER rewritten, even when it matches the dictionary");
     eq(after.kept, 'הגדרות', 'and nothing inside [data-no-translate] is touched');
 
+    /* ─── A VALUE INSIDE THE SENTENCE ───────────────────────────────────
+     *
+     * 1,919 of this app's sentences are fixed and a dictionary answers them.
+     * The other 404 are built around a value, and on screen each is ONE text
+     * node — `הקבוצה "ניקוי ספות באר שבע" הוסרה מהתור` — that no fixed key
+     * will ever equal. These assert the pattern form carries the value
+     * through, keeps the customer's own group name in its own language, and
+     * does not go stale when React writes a new number into the node.
+     */
+    const pat = await page.evaluate(() => ({
+      pat: document.querySelector('#pat')?.textContent,
+      live: document.querySelector('#live')?.textContent,
+      gap: document.querySelector('#gap')?.textContent,
+    }));
+    eq(
+      pat.pat,
+      'Группа "ניקוי ספות באר שבע" убрана из очереди',
+      'a sentence built around a value is translated, and the group\'s own name is left alone',
+    );
+    eq(pat.live, 'Осталось 7 минут', 'and one built around a number');
+    eq(pat.gap, '5 Группы', 'the space before a word survives translation — without it the two would run together');
+
+    await page.evaluate(() => (window as unknown as { bump: () => void }).bump());
+    await page.waitForTimeout(120);
+    const bumped = await page.evaluate(() => document.querySelector('#live')?.textContent);
+    eq(bumped, 'Осталось 6 минут', 'and when React writes a new number, the screen shows the NEW one — not a cached translation of the old');
+
     /* And back. */
     await page.click('.anxl-btn[lang="he"]');
     await page.waitForTimeout(250);
@@ -125,6 +152,17 @@ async function main(): Promise<void> {
     }));
     eq(back.map, 'ארכיון', 'Hebrew comes back');
     eq(back.opts, ['קבוצות', 'קמפיינים', 'היסטוריה'], 'all of it');
+    const backPat = await page.evaluate(() => ({
+      pat: document.querySelector('#pat')?.textContent,
+      live: document.querySelector('#live')?.textContent,
+      gap: document.querySelector('#gap')?.textContent,
+    }));
+    eq(backPat.pat, 'הקבוצה "ניקוי ספות באר שבע" הוסרה מהתור', 'including a sentence built around a value');
+    /* 7, not 6, and that is correct: LangBoundary remounts the subtree on a
+       language change, so a component's own state starts over. The staleness
+       guard is the assertion above — 6 appeared in Russian without a remount. */
+    eq(backPat.live, 'נשארו 7 דקות', 'and a counter starts over, because switching language remounts the screen');
+    eq(backPat.gap, '5 קבוצות', 'and the space is still there');
 
     await page.close();
   } finally {

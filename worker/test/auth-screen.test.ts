@@ -161,7 +161,7 @@ const src = (p: string) => readFileSync(new URL(`../../${p}`, import.meta.url), 
  */
 {
   const dict = src('src/lib/social/i18n.ts');
-  const body = dict.slice(dict.indexOf('const RU:'), dict.indexOf('/** The Hebrew sentence'));
+  const body = dict.slice(dict.indexOf('const RU:'), dict.indexOf('export const LATIN_OK'));
   const entries = [...body.matchAll(/^\s*'((?:[^'\\]|\\.)*)':\s*'((?:[^'\\]|\\.)*)',?$/gm)].map((m) => [m[1], m[2]]);
   is(entries.length >= 30, `the dictionary has entries — found ${entries.length}`);
 
@@ -186,6 +186,53 @@ const src = (p: string) => readFileSync(new URL(`../../${p}`, import.meta.url), 
 
   const dupes = entries.map(([he]) => he).filter((he, i, all) => all.indexOf(he) !== i);
   eq(dupes, [], 'no Hebrew sentence is listed twice — the second would silently win');
+
+  /* ── THE PATTERNS, WHERE A VALUE SITS INSIDE THE SENTENCE ──────────────
+   *
+   * A pattern carries § where the value goes. Three ways it can be wrong and
+   * still look right in the file:
+   *
+   *   · fewer § on the Russian side  → the value is dropped on the floor
+   *   · more § on the Russian side   → an empty hole where a value should be
+   *   · almost no literal text       → the shape matches sentences it should
+   *                                    not, and translates them wrongly
+   *
+   * None of those shows up by reading the dictionary, so each is measured.
+   */
+  const pbody = dict.slice(dict.indexOf('const RU_PAT:'), dict.indexOf('type Compiled'));
+  const pats = [...pbody.matchAll(/^\s*'((?:[^'\\]|\\.)*)':\s*'((?:[^'\\]|\\.)*)',?$/gm)].map((m) => [m[1], m[2]]);
+  is(pats.length >= 1, `the pattern table is readable — found ${pats.length}`);
+
+  const count = (s: string) => (s.match(/§/g) ?? []).length;
+  const mismatched = pats.filter(([he, ru]) => count(he) !== count(ru)).map(([he]) => he);
+  eq(mismatched, [], 'every pattern has the same number of § on both sides — otherwise a value is lost or a hole is left');
+
+  const noSlot = pats.filter(([he]) => count(he) === 0).map(([he]) => he);
+  eq(noSlot, [], 'every pattern actually has a slot — one without belongs in the plain dictionary');
+
+  const longestLiteral = (pattern: string) =>
+    pattern.split('§').reduce((best, part) => (part.length > best.length ? part : best), '');
+  const tooVague = pats
+    .filter(([he]) => (longestLiteral(he).match(/[֐-׿]/g) ?? []).length < 2)
+    .map(([he]) => he);
+  eq(tooVague, [], 'every pattern has at least two Hebrew letters in one run — less than that matches sentences it should not');
+
+  const patEmpty = pats.filter(([, ru]) => ru.replace(/§/g, '').trim().length === 0).map(([he]) => he);
+  eq(patEmpty, [], 'no pattern translates to nothing but slots');
+
+  const patSame = pats.filter(([he, ru]) => he.trim() === ru.trim()).map(([he]) => he);
+  eq(patSame, [], 'no pattern is its own translation');
+
+  const patLatin = pats.filter(([, ru]) => !/[Ѐ-ӿ]/.test(ru)).map(([he]) => he);
+  eq(patLatin, [], 'every pattern translation is in Cyrillic');
+
+  const patDupes = pats.map(([he]) => he).filter((he, i, all) => all.indexOf(he) !== i);
+  eq(patDupes, [], 'no pattern is listed twice');
+
+  /* A pattern must not be reachable by the plain dictionary too — the exact
+     entry would always win and the pattern would be dead code. */
+  const shadowed = pats.filter(([he]) => entries.some(([k]) => k === he)).map(([he]) => he);
+  eq(shadowed, [], 'no pattern is shadowed by an identical plain entry');
 }
 
 /* ══════════════ 4c. EVERY t() HAS A RUSSIAN ═══════════════════════════ */
@@ -220,7 +267,7 @@ const src = (p: string) => readFileSync(new URL(`../../${p}`, import.meta.url), 
   walk(path.join(root, 'src/components/social'));
 
   const dict = src('src/lib/social/i18n.ts');
-  const body = dict.slice(dict.indexOf('const RU:'), dict.indexOf('/** The Hebrew sentence'));
+  const body = dict.slice(dict.indexOf('const RU:'), dict.indexOf('export const LATIN_OK'));
   const keys = new Set([...body.matchAll(/^\s*'((?:[^'\\]|\\.)*)':/gm)].map((m) => m[1]));
 
   is(used.size > 300, `the app really does call t() — ${used.size} sentences`);

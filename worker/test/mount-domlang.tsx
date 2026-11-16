@@ -7,6 +7,7 @@
  * two thousand like them across the app. If they turn Russian, the DOM
  * translator is doing the job t() cannot.
  */
+import { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { LangBoundary } from '@/components/social/LangBoundary';
 import { LangSwitch } from '@/components/social/LangSwitch';
@@ -19,10 +20,30 @@ function describe(): string {
   return 'אין עדיין קבוצות';
 }
 
+/*
+ * A LIVE COUNTER INSIDE A SENTENCE — the shape patterns exist for, and the
+ * one that can go stale. `#live` re-renders with a new number on demand.
+ */
+function Live() {
+  const [n, setN] = useState(7);
+  useEffect(() => {
+    (window as unknown as { bump: () => void }).bump = () => setN((v) => v - 1);
+  }, []);
+  return <p id="live">{`נשארו ${n} דקות`}</p>;
+}
+
 function Screen() {
   return (
     <div>
       <LangSwitch />
+      <Live />
+      {/* a template literal with a name in it — one text node, not three */}
+      <p id="pat">{`הקבוצה "ניקוי ספות באר שבע" הוסרה מהתור`}</p>
+      {/* JSX splits this: the space before the word is all that separates them */}
+      <p id="gap">
+        {5}
+        <span> קבוצות</span>
+      </p>
       <p id="map">{STATUS.a}</p>
       <p id="map2">{STATUS.b}</p>
       <p id="fn">{describe()}</p>

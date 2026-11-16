@@ -115,12 +115,36 @@ async function main(): Promise<void> {
   /*
    * THE CEILING, PER WIDTH.
    *
-   * Measured when this landed: 737 / 725 / 749 at 390 / 360 / 430, against
-   * 843 / 831 / 855 before it. The allowance below is ~4% of head room — enough
-   * that a line of Hebrew rewrapping does not fail the suite, tight enough that
-   * a padding class put back does.
+   * Measured when the compaction landed: 737 / 725 / 749 at 390 / 360 / 430,
+   * against 843 / 831 / 855 before it. The allowance is ~4% of head room —
+   * enough that a line of Hebrew rewrapping does not fail the suite, tight
+   * enough that a padding class put back does.
+   *
+   * ─── RE-BASED 16.11, AND WHY IT IS NOT A LOOSENING ────────────────────────
+   *
+   * The old numbers (756 / 768 / 781) were derived from a fixture that drew
+   * THREE queue rows. The product draws seven, and on 15.11 render-dash.tsx
+   * was corrected to the real shape — which is more CONTENT, not more padding,
+   * and legitimately measures 754 / 767 / 779. That left two pixels of head
+   * room, and the ~4% allowance this file is built on was gone.
+   *
+   * Two pixels is not a guard, it is a tripwire on font metrics. The proof:
+   * the SAME tree measures 754 here and 769 on GitHub's chromium-1148 — a 15px
+   * disagreement about Hebrew text, which is precisely what the allowance
+   * exists to absorb. Runs 129 and 130 both died on it (769 > 756) with
+   * everything else green, which is a test failing about its own renderer
+   * rather than about this product.
+   *
+   * So the ceilings below are the real shape's measurement plus the same ~4%,
+   * and every one of them is above the HIGHEST figure either renderer has
+   * produced on a tree that was considered correct. Re-basing the number the
+   * fixture changed under; not relaxing the rule.
+   *
+   * IF THIS HAS TO BE RE-BASED AGAIN, measure first and say which renderer
+   * produced which number — a ceiling tuned to pass on one machine is how this
+   * file came to be red on another.
    */
-  const CEILING: Record<number, number> = { 360: 756, 390: 768, 430: 781 };
+  const CEILING: Record<number, number> = { 360: 784, 390: 798, 430: 810 };
 
   for (const width of [360, 390, 430]) {
     const view = await browser.newPage({ viewport: { width, height: 1800 }, deviceScaleFactor: 1 });

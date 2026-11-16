@@ -323,3 +323,32 @@ aside a .dot {
   margin-inline-start: auto; width: 8px; height: 8px; border-radius: 50%;
   background: var(--ok); box-shadow: 0 0 0 3px color-mix(in srgb, var(--ok) 28%, transparent);
 }
+
+/* ─── עברית · Русский ──────────────────────────────────────────────────────
+   The same two-button switch the website carries, in this window's own
+   tokens. Two buttons rather than a menu: somebody who cannot read the
+   current language should not have to open a menu written in it. */
+.anxl-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 999px;
+  background: var(--card-2);
+  border: 1px solid var(--line);
+}
+.anxl-btn {
+  min-height: 40px;
+  padding: 0 15px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-2);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.anxl-btn:hover { color: var(--text); }
+.anxl-btn[aria-pressed='true'] { background: var(--brand-500); color: #fff; }
+.anxl-btn:focus-visible { outline: 2px solid var(--brand-400); outline-offset: 2px; }

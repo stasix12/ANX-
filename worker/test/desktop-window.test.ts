@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { chromium, type Page } from 'playwright-core';
 
@@ -138,6 +139,75 @@ async function main(): Promise<void> {
     await browser.close();
   }
   console.log(`desktop window tests OK — ${checks} assertions across ${WINDOWS.length} window sizes`);
+}
+
+/* ══════════ THE PROGRAM SPEAKS RUSSIAN TOO, OR SAYS SO OUT LOUD ══════════ */
+
+/*
+ * "תוסיף אופציה גם לרוסית באפליקציה גם בחיבור וגם בתוכנה עצמה."
+ *
+ * THIS IS A COVERAGE GUARD, and it is the point of the whole section. The
+ * window's translator is keyed by the Hebrew sentence, so a sentence with no
+ * entry renders in Hebrew — safe, but silent. Add a line of Hebrew UI to
+ * index.html and nothing anywhere would tell you it is now the one Hebrew
+ * line in a Russian window. This fails instead, and names it.
+ */
+{
+  const read = (rel: string) => readFileSync(new URL(`../../${rel}`, import.meta.url), 'utf8');
+  const html = read('desktop/renderer/index.html');
+  const js = read('desktop/renderer/i18n.js');
+
+  /* The dictionary's keys. */
+  const body = js.slice(js.indexOf('var RU = {'), js.indexOf('var ATTRS'));
+  const keys = new Set([...body.matchAll(/^\s*'((?:[^'\\]|\\.)*)':/gm)].map((m) => m[1]));
+  is(keys.size >= 80, `the program's dictionary is populated — ${keys.size} entries`);
+
+  /* Every Hebrew sentence the window shows, the way the translator sees it. */
+  /*
+   * THE SWITCH'S OWN LABELS ARE NOT TRANSLATED, and must not be: a language
+   * is named in its own language. "עברית" stays "עברית" in a Russian window,
+   * which is exactly how somebody who cannot read Russian finds the way back.
+   * Caught by this guard on its first run, which is the guard working.
+   */
+  const visible = html
+    .replace(/<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>|<!--[\s\S]*?-->/g, '')
+    .replace(/<div class="anxl-wrap"[\s\S]*?<\/div>/g, '');
+  const tidy = (x: string) => x.replace(/\s+/g, ' ').trim();
+  const found = new Set<string>();
+  for (const m of visible.matchAll(/>([^<>]*[\u0590-\u05FF][^<>]*)</g)) found.add(tidy(m[1]));
+  for (const m of visible.matchAll(/(?:placeholder|aria-label|title)="([^"]*[\u0590-\u05FF][^"]*)"/g)) found.add(tidy(m[1]));
+
+  const untranslated = [...found].filter((x) => x && !keys.has(x));
+  is(
+    untranslated.length === 0,
+    `every Hebrew line in the program's window has a Russian entry — these do not: ${untranslated.join(' | ')}`,
+  );
+
+  /* The same three traps the website's dictionary is held to. */
+  const entries = [...body.matchAll(/^\s*'((?:[^'\\]|\\.)*)':\s*$|^\s*'((?:[^'\\]|\\.)*)':\s*'((?:[^'\\]|\\.)*)',?$/gm)]
+    .filter((m) => m[2] !== undefined)
+    .map((m) => [m[2], m[3]] as [string, string]);
+  const selfy = entries.filter(([he, ru]) => he.trim() === ru.trim()).map(([he]) => he);
+  is(selfy.length === 0, `no entry is its own translation — ${selfy.join(' | ')}`);
+  const latin = entries.filter(([, ru]) => !/[\u0400-\u04FF]/.test(ru)).map(([he]) => he);
+  is(latin.length === 0, `every translation is in Cyrillic, not transliterated — ${latin.join(' | ')}`);
+
+  /* The translator has to be loaded, and BEFORE app.js, or the first paint is
+     Hebrew and then flickers. */
+  is(/<script src="i18n\.js"><\/script>/.test(html), 'the translator is loaded');
+  /* The SCRIPT TAGS, not any mention: a comment above talks about app.js and
+     would otherwise decide this comparison. */
+  is(
+    html.indexOf('<script src="i18n.js">') < html.indexOf('<script src="app.js">'),
+    'and before app.js, so the window opens already in the chosen language',
+  );
+  /* It must ship. scripts/build-app.mjs copies the whole renderer folder, and
+     this is the assertion that notices if that ever becomes a file list. */
+  const build = read('scripts/build-app.mjs');
+  is(
+    /renderer'\), path\.join\(out, 'renderer'\), \{ recursive: true \}/.test(build),
+    'and the whole renderer folder ships, so the translator goes with it',
+  );
 }
 
 void main();

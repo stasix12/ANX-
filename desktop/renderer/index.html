@@ -25,6 +25,9 @@
   </div>
 
   <div class="form">
+    <!-- Первое, что видно: кто не читает на иврите, должен суметь это
+         изменить, не читая на иврите. -->
+    <div style="display:flex;justify-content:center;margin-bottom:var(--s4)"><div class="anxl-wrap" role="group" aria-label="בחירת שפה"><button type="button" class="anxl-btn" data-lang="he" lang="he" aria-pressed="true">עברית</button><button type="button" class="anxl-btn" data-lang="ru" lang="ru" aria-pressed="false">Русский</button></div></div>
     <div>
       <div class="logo" style="margin-bottom:var(--s7)">
         <span class="mark">A</span>
@@ -248,7 +251,7 @@
 
     <!-- ------------------------------------------------------ settings -->
     <section class="page" id="page-settings" hidden>
-      <div class="pagehead"><div class="grow"><h1>הגדרות</h1><p class="lead">ההגדרות האלה שייכות למחשב הזה בלבד.</p></div></div>
+      <div class="pagehead"><div class="grow"><h1>הגדרות</h1><p class="lead">ההגדרות האלה שייכות למחשב הזה בלבד.</p></div><div class="anxl-wrap" role="group" aria-label="בחירת שפה"><button type="button" class="anxl-btn" data-lang="he" lang="he" aria-pressed="true">עברית</button><button type="button" class="anxl-btn" data-lang="ru" lang="ru" aria-pressed="false">Русский</button></div></div>
       <div class="card"><div class="setrows" id="setrows"></div></div>
       <div class="card" style="margin-top:var(--s4)">
         <div class="cardhead"><h3>החשבון</h3></div>
@@ -343,6 +346,7 @@
   </div>
 </div>
 
+<script src="i18n.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

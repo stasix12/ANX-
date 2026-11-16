@@ -1028,7 +1028,24 @@
  * "100", and the card stops promising a daily ceiling while the mechanism is
  * switched off.
  */
-export const WORKER_VERSION = '4.71.0';
+/*
+ * 4.71.0 → 4.72.0 — רוסית, ושני קבצים חדשים שנכנסים להתקנה.
+ *
+ * v4.71.0 published 16.11 at 01:03 (asked, not assumed), so 4.72.0 is free.
+ *
+ * WHAT MOVED THE FINGERPRINT: src/lib/social/i18n.ts and
+ * desktop/renderer/i18n.js are both inside the bundled set — the first
+ * because src/lib/social is, the second because the whole desktop folder is.
+ * Two commits added them without this bump, which is the gap this constant
+ * exists to close; the version guard caught it before CI did, on the third.
+ *
+ * WHAT THE CUSTOMER GETS: the program's window speaks Russian. The switch is
+ * on its sign-in screen and in its settings, the choice is remembered on that
+ * machine, and the window turns left-to-right with it. 83 of 83 strings in
+ * the window are translated, and worker/test/desktop-window.test.ts fails if
+ * a new Hebrew line is ever added without one.
+ */
+export const WORKER_VERSION = '4.72.0';
 
 /**
  * A FINGERPRINT OF EVERYTHING THE INSTALLER CARRIES.
@@ -1779,4 +1796,4 @@ export const WORKER_VERSION = '4.71.0';
  * worker/facebook/join.ts and written by worker/social-worker.ts, both of
  * which run only on his PC. Numbers under WORKER_VERSION above.
  */
-export const WORKER_FINGERPRINT = '2d796482f360b5bf';
+export const WORKER_FINGERPRINT = '4db006109ca1bfa5';

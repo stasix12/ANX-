@@ -77,6 +77,16 @@ const RU: Record<string, string> = {
   '3. המחשב מפרסם לפי התזמון. הסיסמה של פייסבוק נשארת אצלכם.':
     '3. Компьютер публикует по расписанию. Пароль от Facebook остаётся у вас.',
   /* ── מסכי האפליקציה ── */
+  'פורסמו מתוך המתוכננים להיום': 'опубликовано из запланированных на сегодня',
+  'לפני יומיים': 'два дня назад',
+  'לפני יום': 'день назад',
+  'לפני שבוע': 'неделю назад',
+  'טופלו היום': 'обработано сегодня',
+  'טופל היום': 'обработано сегодня',
+  'מעלה מדיה…': 'Загружаем медиа…',
+  'לא עוצרים את התזמון': 'Расписание не останавливается',
+  'ימי פרסום: לא נבחר אף יום': 'Дни публикации: не выбран ни один день',
+  'א׳-ו׳': 'Вс-Пт',
   'קבוצה חופשית משלכם — למשל \'לוחות מכירה\'': 'Своя произвольная группа — например \'доски объявлений\'',
   'נסו לנקות את החיפוש או לבחור \'הכל\'.': 'Попробуйте очистить поиск или выбрать \'Все\'.',
   'סיכום סבב עבודה': 'Сводка рабочего цикла',
@@ -993,7 +1003,7 @@ const RU: Record<string, string> = {
   'המגבלה היומית (': 'Дневной лимит (',
   'המספרים של היום': 'Сегодняшние числа',
   'הסבב יתוכנן שוב': 'Цикл будет запланирован заново',
-  'הסתיים עם כשלים': 'Завершено с ошибками',
+  'הסתיים עם כשלים': 'Ошибки в цикле',
   'הקבוצה לא נפתחה': 'Группа не открылась',
   'הקטגוריה נוקתה.': 'Категория очищена.',
   'חזרה ללוח הבקרה': 'Назад на панель управления',
@@ -1071,7 +1081,7 @@ const RU: Record<string, string> = {
   'נבחרו שניים': 'Выбрано два',
   'סבב לכל יעד': 'Цикл для каждой цели',
   'סיום משוער:': 'Примерное завершение:',
-  'ספירה חלקית': 'Частичный подсчёт',
+  'ספירה חלקית': 'Частично',
   'עוד לא נבדק': 'Ещё не проверено',
   'עצור קמפיין': 'Остановить кампанию',
   'פוסט ללא שם': 'Пост без названия',
@@ -1081,7 +1091,8 @@ const RU: Record<string, string> = {
   'פרסום נוכחי': 'Текущая публикация',
   'צור קוד חדש': 'Создать новый код',
   'קבוצה נוספה': 'Группа добавлена',
-  'קבוצה קיבלה': 'Группа получила',
+  'קבוצה קיבלה': 'группа',
+  'קבוצה קיבלה היום': 'группа сегодня',
   'קבוצות ביום': 'групп в день',
   'קבוצות בתור': 'групп в очереди',
   'קבוצות מתוך': 'групп из',
@@ -1151,7 +1162,8 @@ const RU: Record<string, string> = {
   'קבוצה ממתינה': 'Группа ожидает',
   'קבוצה שנכשלה': 'Группа с ошибкой',
   'קבוצות נוספו': 'Группы добавлены',
-  'קבוצות קיבלו': 'Группы получили',
+  'קבוצות קיבלו': 'групп',
+  'קבוצות קיבלו היום': 'групп сегодня',
   'שמור שינויים': 'Сохранить изменения',
   'תאריך הפרסום': 'Дата публикации',
   'תגובה הועלתה': 'Комментарий отправлен',
@@ -1206,7 +1218,7 @@ const RU: Record<string, string> = {
   'ונסו שוב.': 'и попробуйте снова.',
   'חזר לפעול': 'Снова работает',
   'חיפוש יעד': 'Поиск цели',
-  'טרם התחיל': 'Ещё не начался',
+  'טרם התחיל': 'Не начат',
   'טרם פורסם': 'Ещё не опубликовано',
   'יום חמישי': 'Четверг',
   'יום ראשון': 'Воскресенье',
@@ -1224,7 +1236,7 @@ const RU: Record<string, string> = {
   'מצפה רמון': 'Мицпе-Рамон',
   'מתי לפרסם': 'Когда публиковать',
   'מתי מתחיל': 'Когда начинается',
-  'סבב פרסום': 'Цикл публикации',
+  'סבב פרסום': 'Цикл',
   'סווג אותן': 'Классифицировать их',
   'סיים ואפס': 'Завершить и сбросить',
   'עוד סינון': 'Ещё фильтр',
@@ -1246,7 +1258,7 @@ const RU: Record<string, string> = {
   '— לא משויך': '— не привязано',
   'אין פוסטים': 'Постов нет',
   'בוטל ידנית': 'Отменено вручную',
-  'דורש טיפול': 'Требует обработки',
+  'דורש טיפול': 'Внимание',
   'דורש פעולה': 'Требует действия',
   'דף פייסבוק': 'Страница Facebook',
   'הבאה בתור:': 'Следующая в очереди:',
@@ -1331,7 +1343,7 @@ const RU: Record<string, string> = {
   'תוזמן': 'Запланировано',
   'תזמון': 'Расписание',
   'תמונה': 'Картинка',
-  '· בוצע': '· Выполнено',
+  '· בוצע': '· Ушло',
   '+ גרסה': '+ Версия',
   '+ פוסט': '+ Пост',
   '7 ימים': '7 дней',
@@ -1361,7 +1373,12 @@ const RU: Record<string, string> = {
   'לא יצא': 'Не вышло',
   'לטיפול': 'К обработке',
   'ללא שם': 'Без названия',
-  'לתגובה': 'Для комментария',
+  /* A chip beside a group name in the comment timeline. "Для комментария" is
+     143.9px against the Hebrew chip's 76.7px, and it left the group name 0px
+     wide at 320 and 360 — the customer's own group simply vanished from the
+     row. Measured: this is 75.4px, narrower than the Hebrew it replaces, so
+     the name now gets at least as much room in Russian as in Hebrew. */
+  'לתגובה': 'Комм.',
   'מוצגות': 'Показаны',
   'מוצגים': 'Показаны',
   'מושהות': 'Приостановлены',
@@ -1436,7 +1453,7 @@ const RU: Record<string, string> = {
   'בדוק שוב': 'Проверить снова',
   'בטל ומחק': 'Отменить и удалить',
   'במקום ב-': 'вместо',
-  'בתור הבא': 'Следующий в очереди',
+  'בתור הבא': 'Следующий',
   'דקה וחצי': 'полторы минуты',
   'הוסף סבב': 'Добавить цикл',
   'הסר אותם': 'Убрать их',
@@ -1512,7 +1529,7 @@ const RU: Record<string, string> = {
   'התחל': 'Начать',
   'ועוד': 'и ещё',
   'חזור': 'Назад',
-  'טופל': 'Обработано',
+  'טופל': 'Сделано',
   'טקסט': 'Текст',
   'ידני': 'Вручную',
   'ימים': 'дней',
@@ -1532,7 +1549,7 @@ const RU: Record<string, string> = {
   'נדחו': 'Отклонены',
   'נוסף': 'Добавлено',
   'נכשל': 'Не удалось',
-  'נעצר': 'Остановлено',
+  'נעצר': 'Стоп',
   'סיום': 'Завершение',
   'עבור': 'Перейти',
   'עומר': 'Омер',
@@ -1562,13 +1579,13 @@ const RU: Record<string, string> = {
   'הוסרו': 'Удалены',
   'הועתק': 'Скопировано',
   'הושהה': 'Приостановлено',
-  'הושלם': 'Завершено',
+  'הושלם': 'Готово',
   'הערות': 'Заметки',
   'הרשמה': 'Регистрация',
   'התחיל': 'Начал',
   'וידאו': 'Видео',
   'חמישי': 'Четверг',
-  'טופלו': 'Обработаны',
+  'טופלו': 'Сделано',
   'טלפון': 'Телефон',
   'ידנית': 'вручную',
   'יידחה': 'Будет отклонено',
@@ -1851,7 +1868,7 @@ const RU: Record<string, string> = {
   'טוען…': 'Загрузка…',
   'טיוטה': 'Черновик',
   'מדויק': 'Точно',
-  'מושהה': 'Приостановлено',
+  'מושהה': 'На паузе',
   'מיון:': 'Сортировка:',
   'נכשלו': 'Не удалось',
   'סטטוס': 'Статус',
@@ -1888,7 +1905,11 @@ const RU: Record<string, string> = {
   '👍 אהבתי': '👍 Нравится',
   '💬 תגובה': '💬 Комментарий',
   'בדוק הכל': 'Проверить всё',
-  'הבא בתור': 'Следующий в очереди',
+  /* The "what is next" line puts this label, the group name and the status on
+     one row. At 320px the row has 234px; "Следующий в очереди" is 135px
+     against the Hebrew 51.2px, which left the name 0.8px. Measured at 72.7px,
+     the name keeps 63px. The queue is already stated by the line it sits on. */
+  'הבא בתור': 'Следующий',
   'המשך סבב': 'Продолжить цикл',
   'הסבב הבא': 'Следующий цикл',
   'הצג אותן': 'Показать их',
@@ -2028,6 +2049,61 @@ export const PH = '§';
 export const PH_THIN_OK: readonly string[] = ['ל-§'];
 
 const RU_PAT: Record<string, string> = {
+  /*
+   * ─── THE COMMENT QUEUE CARD, WRITTEN OUT IN FULL ──────────────────────
+   *
+   * src/components/social/CommentQueueCard.tsx builds three lines as
+   * `${n} ${agree(n, singular, plural)} <word>`. Each used to be answered by
+   * a two-slot shape with one short word of its own — `§ § היום`,
+   * `§ § טיפול`, `§ § לתגובה` — and those shapes matched almost anything:
+   * on the dashboard one of them produced "126 Группы ожидают к комментарию",
+   * a capital mid-sentence, a plural that ignores the numeral and the wrong
+   * case after the verb.
+   *
+   * Written out, each line is one shape with its own literal text, the
+   * numeral governs the noun, and the Russian reads as Russian. The singular
+   * forms need no braces: the Hebrew helper only reaches them when n is 1.
+   */
+  '§ תגובה הועלתה היום': '§ комментарий добавлен сегодня',
+  '§ תגובות הועלו היום': '§ {комментарий добавлен|комментария добавлено|комментариев добавлено} сегодня',
+  '§ תגובה דורשת טיפול': '§ комментарий требует обработки',
+  '§ תגובות דורשות טיפול': '§ {комментарий требует|комментария требуют|комментариев требуют} обработки',
+  '§ קבוצה ממתינה לתגובה': '§ группа ждёт комментария',
+  '§ קבוצות ממתינות לתגובה': '§ {группа ждёт|группы ждут|групп ждут} комментария',
+  'לפרסום האחרון: §': 'К последней публикации: §',
+  'הוסף את § הקבוצות לרשימת הפרסום': 'Добавить § групп в список публикации',
+  'הוסף לרשימה את § הקבוצות שאתה כבר חבר בהן': 'Добавить в список § групп, в которых вы уже состоите',
+  'עבור החיפוש “§”': 'Для поиска «§»',
+  'ב-§ קבוצות תוצאות החיפוש לא אמרו אם אתם חברים. פתחו אותן כדי לראות.': 'В § группах результаты поиска не сообщили, состоите ли вы в них. Откройте их, чтобы увидеть.',
+  '§ תגובות קודמות לא מוצגות כאן': '§ предыдущих комментариев здесь не показаны',
+  'פורסם ל-§ מתוך § קבוצות': 'Опубликовано в § из § групп',
+  'פורסם ל-§ מתוך § קבוצות היום': 'Опубликовано в § из § групп сегодня',
+  'פורסם לפחות ל-§ מתוך § קבוצות': 'Опубликовано минимум в § из § групп',
+  'פורסם לפחות ל-§ מתוך § קבוצות היום': 'Опубликовано минимум в § из § групп сегодня',
+  '§ קבוצות עוד לא קיבלו פרסום': '§ групп ещё не получили публикацию',
+  '§ פרסומים דולגו': '§ публикаций пропущено',
+  '§ פרסומים נכשלו': '§ публикаций не удались',
+  '§ פרסומים עוד לא יצאו': '§ публикаций ещё не вышли',
+  '§ מתוך § פורסמו': '§ из § опубликовано',
+  '§ דולגו': '§ пропущено',
+  '§ נכשלו': '§ не удались',
+  '§ פרסומים ממתינים לכם': '§ публикаций ждут вас',
+  '§ פרסומים ממתינים להחלטה שלכם': '§ публикаций ждут вашего решения',
+  'בעוד § שעות ו-§ דקות': 'через § ч § мин',
+  'בעוד שעה ו-§ דקות': 'через час § мин',
+  'בעוד § דקות': 'через § мин',
+  '§% — § מתוך § טופלו היום': '§% — § из § обработано сегодня',
+  '§% — פורסם ל-§ מתוך § קבוצות היום': '§% — опубликовано в § из § групп сегодня',
+  '§% — פורסם לפחות ל-§ מתוך § קבוצות היום': '§% — опубликовано минимум в § из § групп сегодня',
+  '§ חברים · ציבורית': '§ {участник|участника|участников} · открытая',
+  '§ חברים · פרטית': '§ {участник|участника|участников} · закрытая',
+  'קמפיין #§': 'Кампания #§',
+  'ימי פרסום: §': 'Дни публикации: §',
+  'יום הפרסום הבא: §': 'Следующий день публикации: §',
+  'המגבלה היומית (§) היא מספר שאתם קובעים בהגדרות — היא לא מכסה רשמית של פייסבוק.': 'Дневной лимит (§) — это число, которое вы задаёте в настройках, а не официальная квота Facebook.',
+  'מהיר — פרסום כל § שניות, כ-§ פרסומים בשעה': 'Быстро — публикация каждые § секунд, около § публикаций в час',
+  'בינוני — פרסום כל § וחצי, כ-§ פרסומים בשעה': 'Средне — публикация каждые § с половиной, около § публикаций в час',
+  'איטי — פרסום כל § דקות, כ-§ פרסומים בשעה': 'Медленно — публикация каждые § минут, около § публикаций в час',
   'ל-§': 'до §',
   'פרסום אחד הוזז ל§': 'Одна публикация перенесена на §',
   'פרסומים הוזזו ל§': 'Публикации перенесены на §',
@@ -2332,17 +2408,12 @@ const RU_PAT: Record<string, string> = {
   '§ / § טופלו': '§ / § обработано',
   '§ § בהיסטוריה — המסך הזה טוען רק את הראשונות.': '§ § в истории — этот экран загружает только первые.',
   '§ § בלי אישור מפייסבוק. פתחו את הפוסט ובדקו לפני שתוסיפו שוב — ייתכן שהן כבר שם.': '§ § без подтверждения от Facebook. Откройте пост и проверьте, прежде чем добавлять снова — возможно, они уже там.',
-  '§ § היום': '§ § сегодня',
-  '§ § טיפול': '§ § обработка',
-  '§ § לכם': '§ § вам',
   '§ § לסוף התור.': '§ § в конец очереди.',
   '§ § לרשימת הקבוצות שלך.': '§ § в ваш список групп.',
-  '§ § לתגובה': '§ § к комментарию',
   '§ § לתור.': '§ § в очередь.',
   '§ § מהתור.': '§ § из очереди.',
   '§ § מחדש, מרווח של § ביניהם.': '§ § заново, с интервалом § между ними.',
   '§ § עד שתפעילו.': '§ § пока вы не включите.',
-  '§ § תגובה': '§ § комментарий',
   '§ § — הן כבר לא קיימות ברשימת הקבוצות.': '§ § — их больше нет в списке групп.',
   '§ § — התגובה תתווסף רק למה שכבר פורסם. אפשר ללחוץ שוב כשהסבב יסתיים.': '§ § — комментарий добавится только к тому, что уже опубликовано. Можно нажать снова, когда цикл закончится.',
   '§ § — זה מה שהתוכנה דיווחה': '§ § — это то, что сообщила программа',
@@ -2438,7 +2509,7 @@ const RU_PAT: Record<string, string> = {
   'הקבוצה "§" הוסרה מהתור': 'Группа "§" убрана из очереди',
 };
 
-type Compiled = { re: RegExp; out: string };
+type Compiled = { re: RegExp; out: string; countOnly: boolean };
 
 let compiled: Compiled[] | null = null;
 let anchorRe: RegExp | null = null;
@@ -2454,14 +2525,56 @@ function longestLiteral(pattern: string): string {
   return best;
 }
 
+/*
+ * ─── WHAT A § MAY AND MAY NOT SWALLOW ───────────────────────────────────
+ *
+ * A § used to be `[\s\S]*?` — anything at all — and that let one thin
+ * pattern eat a whole sentence. Measured on the real dashboard:
+ *
+ *   on screen   · פורסם ל-204 מתוך 252 קבוצות היום · 48 קבוצות עוד לא קיבלו…
+ *   came out    · פורסם ל-204 из 252 קבוצות היום · 48 קבוצות ещё не Получили…
+ *
+ * `§ מתוך §` matched the entire line, took "· פורסם ל-204" as one value and
+ * everything after "252" as the other, and printed Hebrew and Russian
+ * interleaved. Five patterns matched that one line.
+ *
+ * The app joins separate facts with " · " and " | ". A value never spans
+ * them — a value is a number, a time, a percentage or a name — so a § may
+ * not cross one. That is what stops a pattern meant for "5 מתוך 12" from
+ * claiming a line of six facts, and it costs nothing: a group name has no
+ * bullet in it.
+ */
+const SLOT = '([^·|\\n]*?)';
+
 function compile(): Compiled[] {
   if (compiled) return compiled;
   const rows = Object.entries(RU_PAT)
     /* Longest literal text first: the most specific shape wins a tie. */
     .sort((a, b) => b[0].replace(/§/g, '').length - a[0].replace(/§/g, '').length);
   compiled = rows.map(([he, ru]) => ({
-    re: new RegExp('^' + he.split(PH).map(esc).join('([\\s\\S]*?)') + '$'),
+    re: new RegExp('^' + he.split(PH).map(esc).join(SLOT) + '$'),
     out: ru,
+    /*
+     * ─── A COUNT IS A NUMBER, NEVER A WORD ──────────────────────────────
+     *
+     * `§ שניות` is "N seconds", and its literal half is one short noun. On
+     * the real dashboard it matched a CAMPAIGN NAME that happens to end the
+     * same way — "סבב כל 30 שניות" — and printed half of the customer's own
+     * name back as "סבב כל 30 секунд". Nothing about the dictionary looked
+     * wrong; the shape simply fitted.
+     *
+     * WHICH PATTERNS ARE COUNTS IS ALREADY WRITTEN DOWN, in the Russian: a
+     * counted noun carries its three forms in braces, and a noun only needs
+     * three forms because a number stands in front of it. So there is no
+     * second list to keep in step — a pattern that picks a plural form is a
+     * pattern whose value is a number, and its value may not contain a
+     * Hebrew word.
+     *
+     * Everything else is left alone, because a slot is often MEANT to hold
+     * the customer's words: a group name in one, the name of a day in
+     * another.
+     */
+    countOnly: HAS_PLURAL.test(ru),
   }));
   const anchors = [...new Set(rows.map(([he]) => longestLiteral(he)).filter((a) => a.trim().length >= 1))];
   anchorRe = anchors.length ? new RegExp(anchors.map(esc).join('|')) : null;
@@ -2482,15 +2595,42 @@ function compile(): Compiled[] {
  *
  * ONE LEVEL ONLY, so a value can never send the matcher round again.
  */
-function translateValue(value: string): string {
+/*
+ * A dictionary entry is written as it appears on its own — "Завтра",
+ * "Получили" — so it is capitalised. Dropped into the middle of a sentence
+ * that reads as one, the capital is wrong, and it was visible on the real
+ * campaign card: "следующий цикл откроется Завтра (שלישי)". Only a Cyrillic
+ * word is lowered, and only when the rest of it is already lowercase, so
+ * "Facebook" and "Meta" are never touched.
+ */
+function midSentence(ru: string): string {
+  const first = ru.charAt(0);
+  if (!/[А-ЯЁ]/.test(first)) return ru;
+  const rest = ru.slice(1);
+  if (rest !== rest.toLowerCase()) return ru;
+  return first.toLowerCase() + rest;
+}
+
+function translateValue(value: string, atStart: boolean, depth = 1): string {
   const trimmed = value.trim();
   if (!trimmed) return value;
   const exact = RU[trimmed];
-  const inner = exact ?? matchPattern(trimmed, false);
+  /*
+   * ONE MORE LEVEL, and no further. "הסבב הבא ייפתח מחר (שלישי)," puts a
+   * date inside a sentence and the name of a day inside the date; without
+   * the second level the screen read "откроется завтра (שלישי)". The depth is
+   * counted rather than trusted, so a dictionary that one day pointed at
+   * itself could not spin here.
+   */
+  const inner =
+    exact ??
+    (depth > 0 ? matchPattern(trimmed, true, depth - 1) : matchPattern(trimmed, false)) ??
+    translateCommaList(trimmed) ??
+    withoutDecoration(trimmed);
   if (inner === null || inner === undefined) return value;
   const pre = /^\s*/.exec(value)?.[0] ?? '';
   const post = /\s*$/.exec(value)?.[0] ?? '';
-  return pre + inner + post;
+  return pre + (atStart ? inner : midSentence(inner)) + post;
 }
 
 /*
@@ -2512,6 +2652,8 @@ function translateValue(value: string): string {
  * the one Russian uses with "сколько" and reads correctly on its own.
  */
 const PLURAL = /\{([^{}|]*)\|([^{}|]*)\|([^{}|]*)\}/g;
+/* The same shape without /g, so .test() does not carry a lastIndex between calls. */
+const HAS_PLURAL = /\{[^{}|]*\|[^{}|]*\|[^{}|]*\}/;
 
 /** Russian's own rule, by the last digits of the number. */
 function plural(forms: [string, string, string], value: string): string {
@@ -2548,18 +2690,153 @@ function fill(out: string, values: string[]): string {
  * `deep` translates the captured values too, and is false when this is
  * already running on a captured value.
  */
-function matchPattern(hebrew: string, deep: boolean): string | null {
+function matchPattern(hebrew: string, deep: boolean, depth = 1): string | null {
   const rows = compile();
   /* One regex decides whether any pattern is even worth trying. Without this
      a DOM walk would run 400 regexes over every text node on the page. */
   if (!anchorRe || !anchorRe.test(hebrew)) return null;
-  for (const { re, out } of rows) {
+  for (const { re, out, countOnly } of rows) {
     const m = re.exec(hebrew);
     if (!m) continue;
-    const values = m.slice(1).map((v) => (deep ? translateValue(v) : v));
+    if (countOnly && /[\u0590-\u05FF]/.test(m[1] ?? '')) continue;
+    /* Where each value lands in the Russian decides whether it keeps its
+       capital: at the very start of the line, or after a full stop, it does. */
+    const parts = out.split(PH);
+    const values = m.slice(1).map((v, i) => {
+      if (!deep) return v;
+      const before = parts[i] ?? '';
+      const atStart = before.trim() === '' || /[.!?:]\s*$/.test(before);
+      return translateValue(v, atStart, depth);
+    });
     return fill(out, values);
   }
   return null;
+}
+
+/*
+ * ─── A BULLET IN FRONT, A COMMA BEHIND ──────────────────────────────────
+ *
+ * The screens glue decoration onto sentences they already hold:
+ *
+ *   on screen   "· אין פרסומים מתוכננים"      dictionary   "אין פרסומים מתוכננים"
+ *   on screen   "מחר (שלישי),"                pattern      "מחר (§)"
+ *
+ * Both came out in Hebrew in the middle of a Russian screen, because one
+ * bullet or one comma is enough for a key to miss. Rather than list every
+ * decorated variant, the decoration is set aside, the sentence inside is
+ * translated, and the decoration is put back exactly as it was. The inside
+ * still has to be a sentence the dictionary knows, so nothing is guessed.
+ */
+const DECORATED = /^([·•*\-\s]*)([\s\S]*?)([,.:;\s]*)$/;
+
+function withoutDecoration(hebrew: string): string | null {
+  const m = DECORATED.exec(hebrew);
+  if (!m) return null;
+  const [, lead, core, tail] = m;
+  if (!core || (!lead && !tail)) return null;
+  const inner = RU[core] ?? matchPattern(core, true);
+  if (inner === null || inner === undefined) return null;
+  return lead + inner + tail;
+}
+
+/*
+ * ─── A LINE OF FACTS IS A LIST, NOT A SENTENCE ──────────────────────────
+ *
+ * The dashboard's summary line is built by joining separate facts:
+ *
+ *   · פורסם ל-204 מתוך 252 קבוצות היום · 48 קבוצות עוד לא קיבלו פרסום ·
+ *     271 פרסומים דולגו · 3 פרסומים נכשלו · 252 פרסומים עוד לא יצאו
+ *
+ * On screen that is ONE text node, and as one sentence it is hopeless: the
+ * numbers change, the facts come and go, and no dictionary could hold every
+ * combination. As a LIST it is easy — each fact between the bullets is a
+ * sentence the dictionary already knows or can match.
+ *
+ * So a bulleted line is split, each fact is translated on its own, and the
+ * line is put back together with its bullets where they were. A fact nobody
+ * knows stays in Hebrew, which is the same fallback as everywhere else: part
+ * of the line in Russian is honest, and nothing is mangled, because a § can
+ * no longer cross a bullet either.
+ */
+/* The two separators the screens join independent facts with. */
+const SEPARATORS = [' · ', ' | '];
+
+function translateList(hebrew: string): string | null {
+  for (const sep of SEPARATORS) {
+    if (!hebrew.includes(sep)) continue;
+    let changed = false;
+    const out = hebrew.split(sep).map((fact) => {
+      /* A fact may itself be a list joined with the other separator. */
+      const one = translateList(fact) ?? translateOne(fact);
+      if (one !== fact) changed = true;
+      return one;
+    });
+    if (changed) return out.join(sep);
+  }
+  return null;
+}
+
+/*
+ * A comma-joined list of things the dictionary knows, all or nothing. The
+ * weekday row is written "א׳, ב׳, ג׳, ד׳, ה׳" and every part of it has an
+ * entry; translating some and not others would read worse than leaving it.
+ */
+function translateCommaList(hebrew: string): string | null {
+  if (!hebrew.includes(', ')) return null;
+  const parts = hebrew.split(', ');
+  if (parts.length < 2) return null;
+  const out: string[] = [];
+  for (const part of parts) {
+    const hit = RU[part.trim()];
+    if (hit === undefined) return null;
+    out.push(hit);
+  }
+  return out.join(', ');
+}
+
+/*
+ * ─── THE SCREEN HAS QUOTES; THE SOURCE HAS &quot; ─────────────────────────
+ *
+ * Some of these sentences are written in JSX as HTML entities, because that
+ * is how a quote inside JSX text is spelled:
+ *
+ *   source   חוץ מ&quot;בתור&quot;, שהוא התור כפי שהוא עכשיו
+ *   screen   חוץ מ"בתור", שהוא התור כפי שהוא עכשיו
+ *
+ * The dictionary is keyed by the source, so the key and the screen differ by
+ * five characters and the line stayed Hebrew. The entities are expanded and
+ * the sentence is looked up again, so both spellings reach the same entry.
+ */
+const ENTITIES: [RegExp, string][] = [
+  [/&quot;/g, '"'],
+  [/&apos;/g, "'"],
+  [/&amp;/g, '&'],
+  [/&nbsp;/g, '\u00a0'],
+  [/&ndash;/g, '\u2013'],
+  [/&mdash;/g, '\u2014'],
+];
+
+function byEntityKey(hebrew: string): string | null {
+  for (const [key, value] of Object.entries(RU)) {
+    if (!key.includes('&')) continue;
+    let expanded = key;
+    for (const [re, ch] of ENTITIES) expanded = expanded.replace(re, ch);
+    if (expanded === hebrew) return value;
+  }
+  return null;
+}
+
+/** One sentence: exactly, by shape, as a comma list, or with its decoration set aside. */
+function translateOne(hebrew: string): string {
+  const exact = RU[hebrew];
+  if (exact !== undefined) return exact;
+  const byPattern = matchPattern(hebrew, true);
+  if (byPattern !== null) return byPattern;
+  const byList = translateCommaList(hebrew);
+  if (byList !== null) return byList;
+  const byEntity = byEntityKey(hebrew);
+  if (byEntity !== null) return byEntity;
+  return withoutDecoration(hebrew) ?? hebrew;
 }
 
 /** The Hebrew sentence when there is no Russian for it — never an empty slot. */
@@ -2567,7 +2844,19 @@ export function translate(lang: Lang, hebrew: string): string {
   if (lang === 'he') return hebrew;
   const exact = RU[hebrew];
   if (exact !== undefined) return exact;
-  return matchPattern(hebrew, true) ?? hebrew;
+  /*
+   * A PATTERN FOR THE WHOLE LINE COMES FIRST, before the line is taken apart.
+   * "§ חברים · ציבורית" is written as one shape on purpose — the words after
+   * the bullet belong to the same phrase and read lowercase there — and
+   * splitting first translated each half on its own and capitalised the
+   * second. Safe to try first, because a § can no longer cross a bullet: a
+   * pattern reaches a bulleted line only when it carries the bullet itself.
+   */
+  const whole = matchPattern(hebrew, true);
+  if (whole !== null) return whole;
+  const asList = translateList(hebrew);
+  if (asList !== null) return asList;
+  return translateOne(hebrew);
 }
 
 /** Every Hebrew sentence this dictionary can answer. Read by the tests. */

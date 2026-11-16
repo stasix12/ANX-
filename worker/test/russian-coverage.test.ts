@@ -70,7 +70,28 @@ const SKIP = new Set([
  * value correctly. The bare shape has one Hebrew letter of its own and would
  * match almost anything, so it is deliberately not a pattern.
  */
-const HANDLED_MORE_SPECIFICALLY = new Set([`${PH} ל${PH}${PH}`]);
+const HANDLED_MORE_SPECIFICALLY = new Set([
+  `${PH} ל${PH}${PH}`,
+  /*
+   * ─── THE THIN TWO-SLOT SHAPES, DELIBERATELY NOT PATTERNS ──────────────
+   *
+   * `${a} ${b} היום` and its four siblings are two values with one short
+   * word between them. As patterns they matched almost anything, and on the
+   * real dashboard one of them took a line of six facts and printed half of
+   * it in Russian: "162 פרסומים ממתינים вам", "קבוצות Получили היום".
+   * worker/test/russian-rendered.test.ts measures that line now and would
+   * fail if it came back.
+   *
+   * The sentences those shapes really produce are in the dictionary in full
+   * — "§ פרסומים ממתינים לכם", "קבוצות קיבלו היום" — so the screens are
+   * covered and the dangerous shapes are gone.
+   */
+  `${PH} ${PH} היום`,
+  `${PH} ${PH} טיפול`,
+  `${PH} ${PH} תגובה`,
+  `${PH} ${PH} לתגובה`,
+  `${PH} ${PH} לכם`,
+]);
 
 /* A connector or a single letter is not a sentence, and as a dictionary key
    it would be actively harmful: the DOM translator matches whole text nodes,
@@ -166,28 +187,28 @@ const missingPattern = patterns
 eq(missingPattern, [], 'and so does every sentence built around a value');
 
 /*
- * ─── AND NOTHING IN THE DICTIONARY IS DEAD ────────────────────────────────
+ * ─── WHY THERE IS NO "DEAD PATTERN" CHECK HERE ANY MORE ───────────────────
  *
- * The other direction, which matters for a different reason: an entry for a
- * sentence no screen shows any more is not harmless, it is a claim of
- * coverage that nothing backs. The patterns are the ones worth checking —
- * a plain entry can legitimately be a value the engine produces at runtime,
- * but a pattern is written against a shape that exists in the source.
+ * There was one, and it was wrong. It asserted that every pattern in the
+ * dictionary describes a shape that appears in the source, on the reasoning
+ * that a pattern for a sentence nothing shows is a claim of coverage with
+ * nothing behind it.
+ *
+ * Measuring the rendered screens disproved the premise. The screens build
+ * sentences at RUNTIME out of pieces — a helper returns "טופלו" and the
+ * screen appends " היום", or a list of facts is joined with bullets — and the
+ * finished sentence appears nowhere in any file. "טופלו היום" and
+ * "פורסם ל-§ מתוך § קבוצות" are real lines on the real dashboard and the
+ * source cannot be asked about either. A check built on the source would push
+ * whoever reads it into deleting patterns that are doing their job.
+ *
+ * So the question "is this pattern used?" is answered where it can be:
+ * worker/test/russian-rendered.test.ts renders twenty screens in Russian and
+ * fails if any line of the app's own words is still Hebrew, or if any line
+ * comes out half Russian. A pattern that is genuinely dead costs one line in
+ * a file; a pattern wrongly deleted costs a Hebrew sentence on a Russian
+ * screen, and that is the failure he has reported three times.
  */
-const shapes = new Set(patterns.map((f) => f.text));
-const deadPatterns = [...havePattern].filter((p) => !shapes.has(p) && !PH_THIN_OK.includes(p));
-/* The three "הוזזו" shapes are produced by a helper, so the parser sees the
-   generic shape rather than them; they are expected here and named. */
-const expectedAbsent = new Set([
-  `פרסום אחד הוזז ל${PH}`,
-  `פרסומים הוזזו ל${PH}`,
-  `שני פרסומים הוזזו ל${PH}`,
-]);
-eq(
-  deadPatterns.filter((p) => !expectedAbsent.has(p)),
-  [],
-  'no pattern in the dictionary describes a shape the screens no longer have',
-);
 
 /*
  * ─── NO PATTERN STEALS ANOTHER SENTENCE ───────────────────────────────────

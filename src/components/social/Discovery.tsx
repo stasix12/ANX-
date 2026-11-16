@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
-import { t } from '@/lib/social/i18n';
+import { t, keep } from '@/lib/social/i18n';
 import { TargetAvatar } from '@/components/social/TargetAvatar';
 import { Badge, Button, ButtonLink, CARD_ELEVATED, Card, inputClass } from '@/components/social/ui';
 import { MEMBERSHIP_SHORT, PRIVACY_LABEL, membersText, normalizeQuery, type Membership } from '@/lib/social/discovery';
@@ -342,7 +342,7 @@ export function GroupRow({
             type="button"
             role="checkbox"
             aria-checked={picked}
-            aria-label={`בחר את ${row.name}`}
+            aria-label={`בחר את ${keep(row.name)}`}
             onClick={onToggle}
             /* No negative margin here any more. It was `-ms-1`, which nudged
                the 22px box out toward the card's edge when this column sat at
@@ -406,7 +406,7 @@ export function GroupRow({
              width, so a thumb aiming at the button hid the group instead. */}
         <button
           type="button"
-          aria-label={`הסתר את ${row.name}`}
+          aria-label={`הסתר את ${keep(row.name)}`}
           title={t('לא רלוונטי')}
           onClick={onHide}
           disabled={busy}
@@ -969,7 +969,7 @@ export function MyGroupsCard({
                       instead of waiting for the next version. */}
                   <button
                     type="button"
-                    aria-label={`זאת לא קבוצה שלי: ${row.name}`}
+                    aria-label={`זאת לא קבוצה שלי: ${keep(row.name)}`}
                     disabled={busyId === row.id}
                     onClick={() => onHide(row)}
                     className="grid h-10 w-10 shrink-0 place-items-center rounded-xl text-mist-500 hover:bg-ink-900 disabled:opacity-40"

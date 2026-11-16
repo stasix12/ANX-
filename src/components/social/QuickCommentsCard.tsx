@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { t } from '@/lib/social/i18n';
+import { t, keep } from '@/lib/social/i18n';
 import Link from 'next/link';
 import { listRecentPosts } from '@/lib/social/client';
 import type { Campaign, MediaItem, Post } from '@/lib/social/types';
@@ -276,7 +276,7 @@ export function QuickCommentsCard({
               <button
                 type="button"
                 onClick={() => onComment(campaign)}
-                aria-label={`הוסף תגובה לפרסום "${campaign.name}"`}
+                aria-label={`הוסף תגובה לפרסום "${keep(campaign.name)}"`}
                 className="block w-full rounded-lg text-start transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-300"
               >
                 <span className="relative block">
@@ -327,7 +327,7 @@ export function QuickCommentsCard({
                 </span>
               </button>
               <OverflowMenu
-                label={`פעולות לפרסום "${campaign.name}"`}
+                label={`פעולות לפרסום "${keep(campaign.name)}"`}
                 className="absolute end-1 top-1"
                 actions={[
                   { label: 'הוסף תגובה', icon: <MessageIcon aria-hidden className="h-4 w-4" />, onSelect: () => onComment(campaign) },

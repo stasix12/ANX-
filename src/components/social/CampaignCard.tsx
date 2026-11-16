@@ -1,7 +1,7 @@
 'use client';
 
 import { useId, useState } from 'react';
-import { t } from '@/lib/social/i18n';
+import { t, keep } from '@/lib/social/i18n';
 import Link from 'next/link';
 import { canPauseRun, canResumeRun, groupProgress, neverLaunched, runBadge, runProgress, type CampaignState } from '@/lib/social/campaign';
 import { type CampaignRepeat, type CampaignRound, type CampaignSchedule } from '@/lib/social/campaign-schedule';
@@ -597,7 +597,7 @@ export function CampaignCard({
               * number rather than the intention.
               */}
             <OverflowMenu
-              label={`עוד פעולות ל${campaign.name}`}
+              label={`עוד פעולות ל${keep(campaign.name)}`}
               actions={menu}
               className="-ms-1 -mt-1 shrink-0 !rounded-xl border border-ink-600 bg-ink-900 !text-mist-300"
             />
@@ -627,7 +627,7 @@ export function CampaignCard({
               onClick={() => setOpen((v) => !v)}
               aria-expanded={open}
               aria-controls={panelId}
-              aria-label={open ? `סגור את פרטי ${campaign.name}` : `פתח את פרטי ${campaign.name}`}
+              aria-label={open ? `סגור את פרטי ${keep(campaign.name)}` : `פתח את פרטי ${keep(campaign.name)}`}
               className="grid h-11 w-11 shrink-0 -mt-1 -me-1 place-items-center rounded-xl border border-ink-600 bg-ink-900 text-mist-300 transition-colors hover:bg-ink-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-300"
             >
               <ChevronDownIcon aria-hidden className={`h-5 w-5 transition-transform duration-200 ${open ? 'rotate-180' : ''}`} />
@@ -718,7 +718,7 @@ export function CampaignCard({
         */}
         <Link
           href={link}
-          aria-label={`פתח את ${campaign.name}`}
+          aria-label={`פתח את ${keep(campaign.name)}`}
           className="relative aspect-square w-[30%] min-w-[92px] shrink-0 overflow-hidden rounded-[20px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-300"
         >
           {cover(media) ? (
@@ -1071,7 +1071,7 @@ export function CampaignCard({
                resolves to window.name, a string, so every card would have
                announced 'מחק את הקמפיין ""' and tsc would never have said a
                word. unit.test.ts pins the campaign's own name here. */
-            aria-label={`מחק את הקמפיין "${campaign.name}"`}
+            aria-label={`מחק את הקמפיין "${keep(campaign.name)}"`}
             disabled={busy}
             onClick={onDelete}
             className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl border-[1.5px] border-error-400/60 bg-ink-850 text-error-400 transition-colors hover:bg-error-300/12 disabled:pointer-events-none disabled:text-ink-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-error-400 focus-visible:ring-offset-2 focus-visible:ring-offset-ink-950"

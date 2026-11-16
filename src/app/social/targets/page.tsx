@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { keep } from '@/lib/social/i18n';
 import { useSearchParams } from 'next/navigation';
 import { Suspense, useCallback, useEffect, useState } from 'react';
 import { SocialShell } from '@/components/social/SocialShell';
@@ -261,7 +262,7 @@ function TargetsScreen() {
                       </p>
                     )}
                   </div>
-                  <Toggle checked={t.enabled} onChange={(v) => act(t.id, () => updateTarget(t.id, { enabled: v }))} label={`הפעל ${t.name}`} />
+                  <Toggle checked={t.enabled} onChange={(v) => act(t.id, () => updateTarget(t.id, { enabled: v }))} label={`הפעל ${keep(t.name)}`} />
                 </li>
               ))}
             </ul>

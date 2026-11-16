@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { t } from '@/lib/social/i18n';
+import { t, keep } from '@/lib/social/i18n';
 import { useState } from 'react';
 import type { CommentTotals, QueueRow } from '@/lib/social/client';
 import { retryComment, retryFailedComments } from '@/lib/social/client';
@@ -306,7 +306,7 @@ export function CommentQueueCard({
                           href={href}
                           target="_blank"
                           rel="noreferrer"
-                          aria-label={`פתח את הפוסט ב${r.target?.name ?? 'קבוצה'} ואת התגובה שעליו`}
+                          aria-label={`פתח את הפוסט ב${r.target?.name ? keep(r.target.name) : 'קבוצה'} ואת התגובה שעליו`}
                           className="inline-flex h-8 shrink-0 items-center gap-1 rounded-lg border border-ink-600 px-2.5 text-[11.5px] font-bold text-mist-100 transition-colors hover:bg-ink-700"
                         >
                           <ShareIcon aria-hidden className="h-3 w-3" />
@@ -477,7 +477,7 @@ export function CommentQueueCard({
                             href={href}
                             target="_blank"
                             rel="noreferrer"
-                            aria-label={`פתח את ${r.target?.name ?? 'הקבוצה'} בפייסבוק`}
+                            aria-label={`פתח את ${r.target?.name ? keep(r.target.name) : 'הקבוצה'} בפייסבוק`}
                             className="inline-flex h-8 shrink-0 items-center gap-1 rounded-lg border border-ink-600 px-2.5 text-[11.5px] font-bold text-mist-100 transition-colors hover:bg-ink-700"
                           >
                             <ShareIcon aria-hidden className="h-3 w-3" />

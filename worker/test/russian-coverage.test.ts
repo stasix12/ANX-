@@ -30,7 +30,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 import ts from 'typescript';
 
-import { translate, translatedKeys, translatedPatterns, translatedPatternValue, translatedValue, PH, PH_THIN_OK } from '../../src/lib/social/i18n';
+import { translate, translatedKeys, translatedPatterns, translatedPatternValue, translatedValue, keep, PH, PH_THIN_OK } from '../../src/lib/social/i18n';
 
 const NAME = 'russian coverage';
 let checks = 0;
@@ -369,5 +369,82 @@ eq(notACount.includes('{'), false, 'a value that is not a count never leaves a b
    carries the measurement. What this line guards is unchanged: a value that
    is not a whole number still comes out as a plain string. */
 eq(notACount, '08:30 мин', 'and falls back to the form Russian uses when the count is unknown');
+
+/*
+ * ─── A NAME BUILT INTO AN ATTRIBUTE ───────────────────────────────────────
+ *
+ * data-no-translate protects what is painted, because an element can carry an
+ * attribute. An aria-label cannot: it is ONE string, and some of them are our
+ * words and the customer's joined together —
+ *
+ *     aria-label={`בחר את ${group.name}`}
+ *
+ * — so the dictionary answered the whole thing and a group the customer
+ * really called "באר שבע ביחד" was announced to a screen reader, and shown in
+ * a desktop tooltip, as "Выбрать наш район". keep() marks the customer's part
+ * (i18n.ts), and this is what stops the next such attribute from being
+ * written without it.
+ *
+ * The rule is narrow on purpose: a template inside an attribute that reads
+ * .name, .query or .base_text is reading the customer's words, and those
+ * three are never ours. A Card's own `title` is not in the list, because a
+ * card title IS ours.
+ */
+const ATTR_DATA = /\.(name|query|base_text)\b/;
+const ATTRS_WITH_TEXT = new Set(['aria-label', 'title', 'label', 'placeholder', 'alt']);
+function unkeptNames(): string[] {
+  const out: string[] = [];
+  const walk = (dir: string): void => {
+    for (const e of readdirSync(dir, { withFileTypes: true })) {
+      const full = path.join(dir, e.name);
+      if (e.isDirectory()) {
+        walk(full);
+        continue;
+      }
+      if (!e.name.endsWith('.tsx')) continue;
+      const text = readFileSync(full, 'utf8');
+      if (!/\$\{/.test(text)) continue;
+      const src = ts.createSourceFile(full, text, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+      const visit = (n: ts.Node): void => {
+        if (
+          ts.isJsxAttribute(n) &&
+          ATTRS_WITH_TEXT.has(n.name.getText(src)) &&
+          n.initializer &&
+          ts.isJsxExpression(n.initializer) &&
+          n.initializer.expression
+        ) {
+          const whole = n.initializer.expression;
+          const spans: ts.Node[] = [];
+          const collect = (x: ts.Node): void => {
+            if (ts.isTemplateExpression(x)) for (const sp of x.templateSpans) spans.push(sp.expression);
+            ts.forEachChild(x, collect);
+          };
+          collect(whole);
+          for (const sp of spans) {
+            const code = sp.getText(src);
+            if (!ATTR_DATA.test(code)) continue;
+            if (code.includes('keep(')) continue;
+            const line = src.getLineAndCharacterOfPosition(sp.getStart(src)).line + 1;
+            out.push(`${path.relative(process.cwd(), full)}:${line}  ${code.slice(0, 60)}`);
+          }
+        }
+        ts.forEachChild(n, visit);
+      };
+      visit(src);
+    }
+  };
+  walk(path.resolve('src/components/social'));
+  walk(path.resolve('src/app/social'));
+  return out.sort();
+}
+eq(unkeptNames(), [], 'every name built into an attribute goes through keep(), or the dictionary rewrites it');
+
+/* And the mechanism itself, both ways round. */
+eq(
+  translate('ru', `בחר את ${keep('באר שבע ביחד')}`),
+  'Выбрать באר שבע ביחד',
+  'a marked name comes through a translated sentence untouched',
+);
+eq(translate('he', `בחר את ${keep('באר שבע ביחד')}`), 'בחר את באר שבע ביחד', 'and the marks never reach the Hebrew screen');
 
 console.log(`${NAME} OK — ${checks} assertions over ${plain.length} sentences and ${patterns.length} value shapes`);

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { t } from '@/lib/social/i18n';
+import { t, keep } from '@/lib/social/i18n';
 import { CheckIcon, ImageIcon, PlayIcon, SendIcon } from '@/components/icons';
 import type { LibraryPost } from '@/lib/social/library';
 import { agree, formatDayMonthHe } from '@/lib/social/time';
@@ -221,7 +221,7 @@ export function ContentCard({
           <Button size="sm" className="grow" onClick={() => onPublish(item)}>
             {t('פרסם')}
           </Button>
-          {actions.length > 0 && <OverflowMenu label={title} actions={actions} />}
+          {actions.length > 0 && <OverflowMenu label={`פעולות עבור ${titleIsOwn ? keep(title) : title}`} actions={actions} />}
         </div>
       </div>
 
@@ -234,7 +234,7 @@ export function ContentCard({
       <label className="absolute end-1.5 top-1.5 grid h-11 w-11 cursor-pointer place-items-center">
         <input
           type="checkbox"
-          aria-label={`בחר את ${title}`}
+          aria-label={`בחר את ${titleIsOwn ? keep(title) : title}`}
           checked={selected}
           onChange={(e) => onSelect(post.id, e.target.checked)}
           className="peer sr-only"

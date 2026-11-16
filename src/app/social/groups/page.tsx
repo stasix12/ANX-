@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { t } from '@/lib/social/i18n';
+import { t, keep } from '@/lib/social/i18n';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { GroupCard } from '@/components/social/GroupCard';
@@ -908,7 +908,7 @@ export default function GroupsPage() {
                     <label className="grid h-11 w-11 shrink-0 cursor-pointer place-items-center">
                       <input
                         type="checkbox"
-                        aria-label={`בחר את ${g.name}`}
+                        aria-label={`בחר את ${keep(g.name)}`}
                         checked={selected.includes(g.id)}
                         onChange={(e) => toggleSelect(g.id, e.target.checked)}
                         className="h-5 w-5 accent-brand-300"
@@ -960,7 +960,7 @@ export default function GroupsPage() {
                             }),
                       )
                     }
-                    label={`הפעל את ${g.name}`}
+                    label={`הפעל את ${keep(g.name)}`}
                   />
                   {/*
                     ───── THE QUICK REMOVE, AND WHY IT IS ONLY HERE ────────────
@@ -987,7 +987,7 @@ export default function GroupsPage() {
                   */}
                   <button
                     type="button"
-                    aria-label={`הסר את ${g.name}`}
+                    aria-label={`הסר את ${keep(g.name)}`}
                     title={t('הסר מהרשימה')}
                     disabled={busy === `del-${g.id}`}
                     className="grid h-11 w-11 shrink-0 place-items-center rounded-xl text-mist-500 transition-colors hover:bg-bad-400/10 hover:text-bad-400 disabled:opacity-50"

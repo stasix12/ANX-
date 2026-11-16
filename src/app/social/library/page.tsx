@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { t } from '@/lib/social/i18n';
+import { t, keep } from '@/lib/social/i18n';
 import { useRouter } from 'next/navigation';
 import { BoxIcon, ChevronDownIcon, ClipboardListIcon, CopyIcon, EyeIcon, ImageIcon, PencilIcon, PlusIcon, SearchIcon, TagIcon, TextIcon, VideoIcon } from '@/components/icons';
 import { ContentCard } from '@/components/social/ContentCard';
@@ -695,7 +695,7 @@ export default function LibraryPage() {
                 <label className="min-w-0 grow">
                   <input
                     className={inputClass}
-                    aria-label={`שם הקטגוריה ${c.name}`}
+                    aria-label={`שם הקטגוריה ${keep(c.name)}`}
                     value={draft}
                     onChange={(e) => setRenames((r) => ({ ...r, [c.id]: e.target.value }))}
                   />

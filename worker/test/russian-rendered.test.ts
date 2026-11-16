@@ -549,13 +549,16 @@ async function main(): Promise<void> {
          would report every post as an untranslated screen. The pinned list
          below is what stops that opt-out from spreading. */
       if (n.parentElement && n.parentElement.closest('[data-no-translate]')) continue;
-      const t = (n.nodeValue || '').replace(/\\s+/g, ' ').trim();
+      /* U+2066..U+2069 are the invisible isolate marks: ltr() uses two of them
+         for direction, keep() uses two to say "these words are the customer's".
+         Nobody sees them, so neither does this probe. */
+      const t = (n.nodeValue || '').replace(/[\\u2066-\\u2069]/g, '').replace(/\\s+/g, ' ').trim();
       if (t) out.push(t);
     }
     for (const el of document.querySelectorAll('[placeholder],[aria-label],[title]')) {
       if (el.closest('[data-no-translate]')) continue;
       for (const a of ['placeholder', 'aria-label', 'title']) {
-        const v = (el.getAttribute(a) || '').replace(/\\s+/g, ' ').trim();
+        const v = (el.getAttribute(a) || '').replace(/[\\u2066-\\u2069]/g, '').replace(/\\s+/g, ' ').trim();
         if (v) out.push(v);
       }
     }

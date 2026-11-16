@@ -1946,4 +1946,4 @@ export const WORKER_VERSION = '4.79.0';
  * his machine, so it waits for the version bump at the end of this work
  * rather than costing him a second re-install now.
  */
-export const WORKER_FINGERPRINT = '874bc83f1faef91c';
+export const WORKER_FINGERPRINT = 'b5d3a673a4b67e50';

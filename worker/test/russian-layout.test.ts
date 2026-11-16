@@ -320,7 +320,7 @@ async function main(): Promise<void> {
       }
       return parts.join('>');
     };
-    const text = (el) => (el.textContent || '').replace(/\\s+/g, ' ').trim().slice(0, 60);
+    const text = (el) => (el.textContent || '').replace(/[\\u2066-\\u2069]/g, '').replace(/\\s+/g, ' ').trim().slice(0, 60);
     const all = [...document.querySelectorAll('body *')];
     for (const el of all) {
       const cs = getComputedStyle(el);

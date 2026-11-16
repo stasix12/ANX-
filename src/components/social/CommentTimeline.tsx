@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { t } from '@/lib/social/i18n';
+import { t, keep } from '@/lib/social/i18n';
 import type { CommentTotals, QueueRow } from '@/lib/social/client';
 import type { Campaign } from '@/lib/social/types';
 import { COMMENT_TONE, commentLabel, commentNeedsHuman } from '@/lib/social/comments';
@@ -623,7 +623,7 @@ export function CommentTimeline({
                         href={href}
                         target="_blank"
                         rel="noreferrer"
-                        aria-label={`פתח את הפוסט ב${row.target?.name ?? 'קבוצה'} ואת התגובה שעליו`}
+                        aria-label={`פתח את הפוסט ב${row.target?.name ? keep(row.target.name) : 'קבוצה'} ואת התגובה שעליו`}
                         /*
                          * SMALLER, AND STILL A 48px TARGET.
                          *

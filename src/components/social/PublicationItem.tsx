@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { t } from '@/lib/social/i18n';
+import { t, keep } from '@/lib/social/i18n';
 import { getQueueItem, type QueueRow } from '@/lib/social/client';
 import { formatDayMonthHe, formatInstantHe, relativeHe, zonedDateISO } from '@/lib/social/time';
 import { CANCELLABLE_STATUSES } from '@/lib/social/status';
@@ -380,7 +380,7 @@ export function PublicationItem({
       ) : (
         <StatusPill status={row.status} />
       )}
-      <OverflowMenu label={`פעולות עבור ${row.target?.name ?? 'הפרסום'}`} actions={menu} />
+      <OverflowMenu label={`פעולות עבור ${row.target?.name ? keep(row.target.name) : 'הפרסום'}`} actions={menu} />
 
       <Sheet
         open={leaving}

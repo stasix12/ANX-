@@ -21,7 +21,7 @@ import {
   UsersIcon,
 } from '@/components/icons';
 import { signOut, useAdminSession } from '@/lib/adminAuth';
-import { useT } from '@/lib/social/i18n';
+import { useT, keep } from '@/lib/social/i18n';
 import { getControl, listWorkers, sendWorkerCommand, waitForWorkerCommand } from '@/lib/social/client';
 import { SYSTEM_STATE_LABEL, SYSTEM_STATE_TONE, type SystemState } from './systemState';
 import { InstallPrompt } from './InstallPrompt';
@@ -209,9 +209,9 @@ export function IdentityBar({
                computer is still moving, this says so. */
             aria-label={
               pending
-                ? `מעביר ל${pending.name} — החלפת פרופיל`
+                ? `מעביר ל${keep(pending.name)} — החלפת פרופיל`
                 : who
-                  ? `מפרסם בתור ${who.name} — החלפת פרופיל`
+                  ? `מפרסם בתור ${keep(who.name)} — החלפת פרופיל`
                   : 'בחירת הפרופיל שמפרסם'
             }
             className="shrink-0 rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-300"

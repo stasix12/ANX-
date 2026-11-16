@@ -3047,8 +3047,61 @@ function translateOne(hebrew: string): string {
   return withoutDecoration(hebrew) ?? hebrew;
 }
 
+/*
+ * ─── A NAME INSIDE A SENTENCE WE DO TRANSLATE ─────────────────────────────
+ *
+ * data-no-translate protects what is PAINTED, because an element can carry an
+ * attribute. An aria-label cannot: it is one string, and the screens build
+ * some of them out of our words and the customer's together —
+ *
+ *     aria-label={`בחר את ${group.name}`}
+ *
+ * — so the dictionary answered the whole thing, slot and all, and a group the
+ * customer really called "באר שבע ביחד" was announced to a screen reader, and
+ * shown in a desktop tooltip, as "Выбрать наш район". The name is in the
+ * dictionary because it is the group-name field's own placeholder.
+ *
+ * keep() marks a piece of such a string as the customer's. The marks are
+ * U+2068 and U+2069 — invisible isolate characters, the same family this file
+ * already uses for direction in ltr() — so nothing on screen changes and no
+ * call site has to know what the translator does with them.
+ *
+ * WHAT THE TRANSLATOR DOES is the trick: a marked piece becomes a § before
+ * anything is looked up, which turns "בחר את <name>" into the shape the
+ * dictionary already holds, and the piece is put back AFTER the sentence has
+ * been translated — untouched, never looked up, in the place the Russian puts
+ * its §. One mechanism, no new dictionary entries, and the matcher did not
+ * have to learn anything.
+ */
+const KEEP_OPEN = '\u2068';
+const KEEP_CLOSE = '\u2069';
+const KEEP_RE = /\u2068([^\u2069]*)\u2069/g;
+
+/** Marks a piece of a composed string as the customer's own words. */
+export function keep(text: string): string {
+  return `${KEEP_OPEN}${text}${KEEP_CLOSE}`;
+}
+
+/** The same string with the marks taken out, for anything that reads it raw. */
+export function unkeep(text: string): string {
+  return text.replace(KEEP_RE, '$1');
+}
+
 /** The Hebrew sentence when there is no Russian for it — never an empty slot. */
 export function translate(lang: Lang, hebrew: string): string {
+  if (KEEP_RE.test(hebrew)) {
+    KEEP_RE.lastIndex = 0;
+    const kept: string[] = [];
+    const masked = hebrew.replace(KEEP_RE, (_m, inner: string) => {
+      kept.push(inner);
+      return PH;
+    });
+    if (lang === 'he') return unkeep(hebrew);
+    const out = translate(lang, masked);
+    let i = 0;
+    return out.replace(/§/g, () => kept[i++] ?? '');
+  }
+  KEEP_RE.lastIndex = 0;
   if (lang === 'he') return hebrew;
   const exact = RU[hebrew];
   if (exact !== undefined) return exact;

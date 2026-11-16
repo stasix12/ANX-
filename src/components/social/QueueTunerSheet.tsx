@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState, useRef } from 'react';
+import { keep } from '@/lib/social/i18n';
 import { ClockIcon, PlusIcon, SearchIcon, SpinnerIcon, TrashIcon } from '@/components/icons';
 import {
   addTargetsToQueue,
@@ -1033,7 +1034,7 @@ export function QueueTunerSheet({
                       </p>
                     </div>
                     <IconButton
-                      label={`הסר את ${t.target.name} מהתור`}
+                      label={`הסר את ${keep(t.target.name)} מהתור`}
                       disabled={working}
                       onClick={() => void removeTarget(t.target.id, t.target.name, t.pending)}
                       className="text-error-400"

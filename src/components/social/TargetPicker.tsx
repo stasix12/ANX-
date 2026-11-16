@@ -1,6 +1,7 @@
 'use client';
 
 import { Fragment, useEffect, useMemo, useState } from 'react';
+import { keep } from '@/lib/social/i18n';
 import { StarIcon } from '@/components/icons';
 import { detectCity, sortCities } from '@/lib/social/cities';
 import { agree, counted } from '@/lib/social/time';
@@ -521,7 +522,7 @@ export function TargetPicker({
               </label>
               {on && onVariantMap && approved.length > 0 && (
                 <select
-                  aria-label={`גרסה עבור ${t.name}`}
+                  aria-label={`גרסה עבור ${keep(t.name)}`}
                   /* Was ~26px tall at text-xs: under the tap floor, and small
                      enough text that iOS Safari zooms the page on focus. */
                   className="min-h-11 max-w-28 shrink-0 rounded-xl border border-ink-600 bg-ink-900 px-2 py-1 text-base text-mist-100"

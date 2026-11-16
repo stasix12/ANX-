@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { t } from '@/lib/social/i18n';
+import { t, keep } from '@/lib/social/i18n';
 import { formatDayMonthHe } from '@/lib/social/time';
 import { isPendingShare, type SocialTarget } from '@/lib/social/types';
 import { CheckIcon, StarIcon } from '@/components/icons';
@@ -167,7 +167,7 @@ const skin = `surface flex h-full flex-col items-center rounded-tile border p-2 
   return (
     <li className="relative">
       {selectionMode ? (
-        <button type="button" aria-pressed={selected} aria-label={`בחר את ${group.name}`} onClick={() => onSelect(!selected)} className={`w-full ${skin}`}>
+        <button type="button" aria-pressed={selected} aria-label={`בחר את ${keep(group.name)}`} onClick={() => onSelect(!selected)} className={`w-full ${skin}`}>
           {body}
         </button>
       ) : (
@@ -237,7 +237,7 @@ const skin = `surface flex h-full flex-col items-center rounded-tile border p-2 
           )}
 
           <div className="absolute end-0 top-0" onClick={stop}>
-            <OverflowMenu label={group.name} actions={actions} />
+            <OverflowMenu label={`פעולות עבור ${keep(group.name)}`} actions={actions} />
           </div>
         </>
       )}

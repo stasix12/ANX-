@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { keep } from '@/lib/social/i18n';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { CheckIcon, SparklesIcon, TrashIcon } from '@/components/icons';
@@ -746,7 +747,7 @@ export function PostEditor({ postId }: { postId?: string }) {
                         onChange={(e) => setVariants((all) => all.map((x) => (x.key === v.key ? { ...x, label: e.target.value } : x)))}
                       />
                       <select
-                        aria-label={`שפת הגרסה ${v.label}`}
+                        aria-label={`שפת הגרסה ${keep(v.label)}`}
                         className="min-h-11 rounded-xl border border-ink-600 bg-ink-900 px-2.5 py-1 text-base text-mist-100"
                         value={v.language}
                         onChange={(e) => setVariants((all) => all.map((x) => (x.key === v.key ? { ...x, language: e.target.value as Language } : x)))}
@@ -785,7 +786,7 @@ export function PostEditor({ postId }: { postId?: string }) {
                         focus for any control under 16. */}
                     <textarea
                       dir="auto"
-                      aria-label={`טקסט הגרסה ${v.label}`}
+                      aria-label={`טקסט הגרסה ${keep(v.label)}`}
                       className={`${inputClass} mt-2 min-h-24`}
                       value={v.text}
                       onChange={(e) => setVariants((all) => all.map((x) => (x.key === v.key ? { ...x, text: e.target.value } : x)))}

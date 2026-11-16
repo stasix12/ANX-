@@ -29,7 +29,7 @@ function Live() {
   useEffect(() => {
     (window as unknown as { bump: () => void }).bump = () => setN((v) => v - 1);
   }, []);
-  return <p id="live">{`נשארו ${n} דקות`}</p>;
+  return <p id="live">{`לפני ${n} דקות`}</p>;
 }
 
 function Screen() {

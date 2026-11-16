@@ -135,13 +135,13 @@ async function main(): Promise<void> {
       'Группа "ניקוי ספות באר שבע" убрана из очереди',
       'a sentence built around a value is translated, and the group\'s own name is left alone',
     );
-    eq(pat.live, 'Осталось 7 минут', 'and one built around a number');
+    eq(pat.live, '7 минут назад', 'and one built around a number');
     eq(pat.gap, '5 Группы', 'the space before a word survives translation — without it the two would run together');
 
     await page.evaluate(() => (window as unknown as { bump: () => void }).bump());
     await page.waitForTimeout(120);
     const bumped = await page.evaluate(() => document.querySelector('#live')?.textContent);
-    eq(bumped, 'Осталось 6 минут', 'and when React writes a new number, the screen shows the NEW one — not a cached translation of the old');
+    eq(bumped, '6 минут назад', 'and when React writes a new number, the screen shows the NEW one — not a cached translation of the old');
 
     /* And back. */
     await page.click('.anxl-btn[lang="he"]');
@@ -161,7 +161,7 @@ async function main(): Promise<void> {
     /* 7, not 6, and that is correct: LangBoundary remounts the subtree on a
        language change, so a component's own state starts over. The staleness
        guard is the assertion above — 6 appeared in Russian without a remount. */
-    eq(backPat.live, 'נשארו 7 דקות', 'and a counter starts over, because switching language remounts the screen');
+    eq(backPat.live, 'לפני 7 דקות', 'and a counter starts over, because switching language remounts the screen');
     eq(backPat.gap, '5 קבוצות', 'and the space is still there');
 
     await page.close();

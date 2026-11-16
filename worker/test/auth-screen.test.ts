@@ -212,8 +212,15 @@ const src = (p: string) => readFileSync(new URL(`../../${p}`, import.meta.url), 
 
   const longestLiteral = (pattern: string) =>
     pattern.split('§').reduce((best, part) => (part.length > best.length ? part : best), '');
+  /* The one shape that genuinely has less is named in the dictionary, the
+     same way a brand name is, rather than the rule being loosened. */
+  const thinOk = new Set(
+    [...dict.matchAll(/export const PH_THIN_OK[^=]*=\s*\[([^\]]*)\]/g)]
+      .flatMap((m) => [...m[1].matchAll(/'([^']+)'/g)].map((x) => x[1])),
+  );
+  is(thinOk.size > 0, 'the thin-pattern exception list is readable from the dictionary');
   const tooVague = pats
-    .filter(([he]) => (longestLiteral(he).match(/[֐-׿]/g) ?? []).length < 2)
+    .filter(([he]) => (longestLiteral(he).match(/[֐-׿]/g) ?? []).length < 2 && !thinOk.has(he))
     .map(([he]) => he);
   eq(tooVague, [], 'every pattern has at least two Hebrew letters in one run — less than that matches sentences it should not');
 

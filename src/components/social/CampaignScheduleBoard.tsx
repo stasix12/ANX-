@@ -1,6 +1,7 @@
 'use client';
 
 import { CalendarIcon, ClockIcon, RocketIcon } from '@/components/icons';
+import { t } from '@/lib/social/i18n';
 import { type PaceProfile } from '@/lib/social/rules';
 import { NextPublication } from './NextPublication';
 import { type ScheduleReadout } from '@/lib/social/schedule-readout';
@@ -176,7 +177,7 @@ export function CampaignScheduleBoard({
         */}
         <div className="flex items-center gap-1.5">
           <CalendarIcon aria-hidden className="h-4 w-4 shrink-0 text-brand-400" />
-          <span className="text-[13px] font-extrabold leading-4 text-brand-400">תזמון פרסום</span>
+          <span className="text-[13px] font-extrabold leading-4 text-brand-400">{t('תזמון פרסום')}</span>
           {/*
             THE SWITCH IS GONE, AND SO IS THE WORD BESIDE IT.
 
@@ -242,7 +243,7 @@ export function CampaignScheduleBoard({
         {!editing && (
         <div className="mt-1.5 grid grid-cols-2 gap-1 [&>*]:min-w-0 @[300px]:grid-cols-[1.6fr_1.1fr_1fr]">
           <Box
-            label="ימי פרסום"
+            label={t('ימי פרסום')}
             aria={`ימי פרסום: ${daysLabel(shown)}. פתיחת עריכת התזמון של ${campaignName}`}
             onClick={onEdit}
             disabled={disabled}
@@ -324,7 +325,7 @@ export function CampaignScheduleBoard({
               block is measured at (360/390/430, dashboard-hero.test.ts) can
               only have got easier, never tighter.
             */
-            label="מצב פרסום"
+            label={t('מצב פרסום')}
             aria={`מצב פרסום: ${pace ? pace.label : 'לא נבחר'}. פתיחת עריכת התזמון של ${campaignName}`}
             onClick={onEdit}
             disabled={disabled}
@@ -339,7 +340,7 @@ export function CampaignScheduleBoard({
           </Box>
 
           <Box
-            label="שעת התחלה"
+            label={t('שעת התחלה')}
             aria={`שעת התחלה: ${shown.start}. פתיחת עריכת התזמון של ${campaignName}`}
             onClick={onEdit}
             disabled={disabled}

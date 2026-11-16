@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { t } from '@/lib/social/i18n';
 import { AlertCircleIcon, CalendarIcon, ClockIcon } from '@/components/icons';
 import { countdownTo, longWaitHe } from '@/lib/social/countdown';
 import { dayRelativeHe } from '@/lib/social/campaign-schedule';
@@ -299,7 +300,7 @@ export function NextPublication({
             ) : !left ? null : left.overdue ? (
               <span>באיחור · {relativeHe(at)}</span>
             ) : left.due ? (
-              <span>אמור לצאת עכשיו</span>
+              <span>{t('אמור לצאת עכשיו')}</span>
             ) : (
               <span>
                 בעוד{' '}
@@ -311,7 +312,7 @@ export function NextPublication({
               machine that stopped for no stated cause. */}
           {frozen && (
             <p data-frozen-why className="mt-0.5 text-[11px] font-bold leading-4 text-mist-300">
-              פייסבוק הגבילה את קצב הפרסום. אין מה לעשות — הפרסום יחזור לבד.
+              {t('פייסבוק הגבילה את קצב הפרסום. אין מה לעשות — הפרסום יחזור לבד.')}
             </p>
           )}
 
@@ -331,7 +332,7 @@ export function NextPublication({
             </p>
           )}
 
-          {offline && <Caveat>המחשב לא מחובר — הפרסום לא ייצא עד שהמחשב יחזור</Caveat>}
+          {offline && <Caveat>{t('המחשב לא מחובר — הפרסום לא ייצא עד שהמחשב יחזור')}</Caveat>}
         </>
       ) : (
         <>
@@ -441,9 +442,9 @@ function Words({
   if (neverLaunched && (readout.kind === 'window-open' || readout.kind === 'window-next' || readout.kind === 'none')) {
     return (
       <>
-        <p className="mt-0.5 text-[14px] font-extrabold leading-[17px] text-warning-400">הסבב עוד לא הושק</p>
+        <p className="mt-0.5 text-[14px] font-extrabold leading-[17px] text-warning-400">{t('הסבב עוד לא הושק')}</p>
         <p className="mt-0.5 text-[11.5px] font-bold leading-4 text-mist-300">
-          הוסיפו פוסט, בחרו קבוצות ושלחו — ומאותו רגע התזמון יעבוד לבד
+          {t('הוסיפו פוסט, בחרו קבוצות ושלחו — ומאותו רגע התזמון יעבוד לבד')}
         </p>
       </>
     );
@@ -451,7 +452,7 @@ function Words({
   if (readout.kind === 'paused') {
     return (
       <>
-        <p className="mt-0.5 text-[14px] font-extrabold leading-[17px] text-warning-400">מושהה</p>
+        <p className="mt-0.5 text-[14px] font-extrabold leading-[17px] text-warning-400">{t('מושהה')}</p>
         {/*
           THE PLANNED MINUTE, LABELLED AS PLANNED. "אם הקמפיין מושהה, יש להציג
           את המועד המתוכנן לצד סטטוס מושהה, בלי להציג אותו כפרסום שעומד
@@ -480,9 +481,9 @@ function Words({
   if (readout.kind === 'no-day') {
     return (
       <>
-        <p className="mt-0.5 text-[14px] font-extrabold leading-[17px] text-warning-400">לא נבחר יום פרסום</p>
+        <p className="mt-0.5 text-[14px] font-extrabold leading-[17px] text-warning-400">{t('לא נבחר יום פרסום')}</p>
         <p className="mt-0.5 text-[11.5px] font-bold leading-4 text-mist-300">
-          התור מוחזק — בחרו לפחות יום אחד למעלה והפרסומים יֵצאו
+          {t('התור מוחזק — בחרו לפחות יום אחד למעלה והפרסומים יֵצאו')}
         </p>
       </>
     );
@@ -578,8 +579,8 @@ function Words({
             a second one here would be the same hedge printed twice on one
             card, which is the noise the owner pointed at. What is missing
             HERE is specifically the next publication's minute. */}
-        <p className="mt-0.5 text-[14px] font-extrabold leading-[17px] text-mist-100">לא ידוע מתי הפרסום הבא</p>
-        <p className="mt-0.5 text-[11.5px] font-bold leading-4 text-mist-300">הרשימה ארוכה מכדי לחשב כאן — פתחו את הסבב כדי לראות</p>
+        <p className="mt-0.5 text-[14px] font-extrabold leading-[17px] text-mist-100">{t('לא ידוע מתי הפרסום הבא')}</p>
+        <p className="mt-0.5 text-[11.5px] font-bold leading-4 text-mist-300">{t('הרשימה ארוכה מכדי לחשב כאן — פתחו את הסבב כדי לראות')}</p>
       </>
     );
   }
@@ -595,7 +596,7 @@ function Words({
    */
   return (
     <>
-      <p className="mt-0.5 text-[14px] font-extrabold leading-[17px] text-mist-100">אין פרסומים מתוזמנים</p>
+      <p className="mt-0.5 text-[14px] font-extrabold leading-[17px] text-mist-100">{t('אין פרסומים מתוזמנים')}</p>
       <p className="mt-0.5 text-[11.5px] font-bold leading-4 text-mist-300">
         {readout.kind === 'window-next' ? (
           /* THE DAY IN WORDS FIRST, for the same reason as the repeat line

@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { t } from '@/lib/social/i18n';
 import { Button } from '@/components/social/ui';
 import { friendlyMessage } from '@/lib/social/errors';
 import { crashLine, crashReport, type CrashReport } from '@/lib/social/crash';
@@ -65,14 +66,14 @@ export default function SocialError({ error, reset }: { error: Error & { digest?
         <span aria-hidden className="mx-auto mb-3 grid h-12 w-12 place-items-center rounded-full bg-error-300/12 text-2xl font-extrabold text-error-400">
           !
         </span>
-        <h1 className="text-lg font-extrabold leading-tight text-mist-100">המסך הזה נתקע</h1>
+        <h1 className="text-lg font-extrabold leading-tight text-mist-100">{t('המסך הזה נתקע')}</h1>
         <p className="mt-2 text-sm leading-relaxed text-mist-300">{friendlyMessage(error, 'משהו השתבש בהצגת המסך.')}</p>
         <p className="mt-2 text-xs leading-relaxed text-mist-500">
-          שום פרסום לא בוטל ושום נתון לא נמחק — זו תקלת תצוגה בלבד. נסו לטעון מחדש, או חזרו ללוח הבקרה.
+          {t('שום פרסום לא בוטל ושום נתון לא נמחק — זו תקלת תצוגה בלבד. נסו לטעון מחדש, או חזרו ללוח הבקרה.')}
         </p>
         <div className="mt-5 flex flex-col gap-2 sm:flex-row sm:justify-center">
           <Button size="lg" onClick={reset} className="sm:min-w-32">
-            נסו שוב
+            {t('נסו שוב')}
           </Button>
           {/* A plain anchor, not <Link>: a client-side navigation re-uses the
               router tree that just threw, and on a repeat failure the owner
@@ -82,7 +83,7 @@ export default function SocialError({ error, reset }: { error: Error & { digest?
             href="/social"
             className="inline-flex min-h-12 items-center justify-center rounded-xl border border-ink-700 bg-ink-800 px-5 text-base font-bold text-mist-100 sm:min-w-32"
           >
-            ללוח הבקרה
+            {t('ללוח הבקרה')}
           </a>
         </div>
         {/* ALWAYS, NOT ONLY FOR A SERVER ERROR. The same fault always prints
@@ -94,7 +95,7 @@ export default function SocialError({ error, reset }: { error: Error & { digest?
             <span className="mt-0.5 block">
               מסך: <span dir="ltr" className="font-mono">{report.route}</span>
             </span>
-            <span className="mt-1 block">התקלה נרשמה במרכז הפעילות — אפשר לשלוח לי את המזהה הזה.</span>
+            <span className="mt-1 block">{t('התקלה נרשמה במרכז הפעילות — אפשר לשלוח לי את המזהה הזה.')}</span>
           </p>
         )}
       </div>

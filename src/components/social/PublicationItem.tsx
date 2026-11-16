@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { t } from '@/lib/social/i18n';
 import { getQueueItem, type QueueRow } from '@/lib/social/client';
 import { formatDayMonthHe, formatInstantHe, relativeHe, zonedDateISO } from '@/lib/social/time';
 import { CANCELLABLE_STATUSES } from '@/lib/social/status';
@@ -370,7 +371,7 @@ export function PublicationItem({
            neither busy nor disabled. size="md" for the 44px floor — it was
            measuring 48x40 in a dense row beside a 44px overflow menu. */
         <Button busy={busy} onClick={() => actions.onConfirm?.(row)}>
-          אשר
+          {t('אשר')}
         </Button>
       ) : (
         <StatusPill status={row.status} />
@@ -382,7 +383,7 @@ export function PublicationItem({
         onClose={() => setLeaving(false)}
         placement="center"
         icon={<LogOutIcon className="h-4.5 w-4.5" />}
-        title="לצאת מהקבוצה בפייסבוק?"
+        title={t('לצאת מהקבוצה בפייסבוק?')}
       >
         <div className="space-y-3">
           <p dir="auto" className="text-sm font-bold text-mist-100">
@@ -393,9 +394,9 @@ export function PublicationItem({
               shape of it: we cannot know from here which ones gate re-entry
               on an admin, so the sentence says that instead of promising. */}
           <ul className="space-y-1.5 text-sm text-mist-300">
-            <li>התוכנה תפתח את הקבוצה במחשב שלכם ותלחץ “עזיבת הקבוצה”.</li>
-            <li>אחרי שפייסבוק תאשר שיצאתם — הקבוצה תכובה ולא ייכנסו אליה פרסומים חדשים.</li>
-            <li className="font-bold text-warning-400">בחלק מהקבוצות חזרה דורשת אישור מנהל מחדש. אי אפשר לבטל את זה מהתוכנה.</li>
+            <li>{t('התוכנה תפתח את הקבוצה במחשב שלכם ותלחץ “עזיבת הקבוצה”.')}</li>
+            <li>{t('אחרי שפייסבוק תאשר שיצאתם — הקבוצה תכובה ולא ייכנסו אליה פרסומים חדשים.')}</li>
+            <li className="font-bold text-warning-400">{t('בחלק מהקבוצות חזרה דורשת אישור מנהל מחדש. אי אפשר לבטל את זה מהתוכנה.')}</li>
           </ul>
           {/* The softer action, offered HERE and not only in the menu: it is
               the thing most of these rows actually need, and a person who
@@ -409,10 +410,10 @@ export function PublicationItem({
                 actions.onLeaveGroup?.(row);
               }}
             >
-              צא מהקבוצה
+              {t('צא מהקבוצה')}
             </Button>
             <Button variant="secondary" onClick={() => setLeaving(false)}>
-              ביטול
+              {t('ביטול')}
             </Button>
           </div>
           {actions.onStopTarget && row.target?.id && (
@@ -424,7 +425,7 @@ export function PublicationItem({
                 actions.onStopTarget?.(row);
               }}
             >
-              רק הפסק לנסות — בלי לצאת מהקבוצה
+              {t('רק הפסק לנסות — בלי לצאת מהקבוצה')}
             </Button>
           )}
         </div>
@@ -444,35 +445,35 @@ export function PublicationItem({
                 campaign's gap and the account floor. Printing only the first
                 is what made the list disagree with the card; printing only the
                 second would hide that the row was moved at all. */}
-            <Detail label="מתוזמן ל"><Stamp iso={row.scheduled_at} /></Detail>
+            <Detail label={t('מתוזמן ל')}><Stamp iso={row.scheduled_at} /></Detail>
             {projectedAt && projectedAt !== row.scheduled_at && row.status === 'scheduled' && (
-              <Detail label="ייצא ב"><Stamp iso={projectedAt} /></Detail>
+              <Detail label={t('ייצא ב')}><Stamp iso={projectedAt} /></Detail>
             )}
-            <Detail label="פורסם ב">{row.published_at ? <Stamp iso={row.published_at} /> : '—'}</Detail>
-            <Detail label="פוסט">{row.post?.title || '—'}</Detail>
-            <Detail label="ניסיונות">{row.attempts}</Detail>
+            <Detail label={t('פורסם ב')}>{row.published_at ? <Stamp iso={row.published_at} /> : '—'}</Detail>
+            <Detail label={t('פוסט')}>{row.post?.title || '—'}</Detail>
+            <Detail label={t('ניסיונות')}>{row.attempts}</Detail>
           </dl>
           {(row.error || row.skip_reason) && <ErrorDetail row={row} technical />}
           {bodyText !== null && bodyText !== '' && (
             <div>
-              <p className="mb-1 text-xs font-bold text-mist-500">הטקסט שיוצא / יצא</p>
+              <p className="mb-1 text-xs font-bold text-mist-500">{t('הטקסט שיוצא / יצא')}</p>
               <p dir="auto" className="max-h-56 overflow-y-auto whitespace-pre-wrap rounded-xl border border-ink-700 bg-ink-900 p-3 text-sm leading-relaxed text-mist-100">
                 {bodyText}
               </p>
             </div>
           )}
           {open && bodyText === null && (
-            <p className="text-xs text-mist-500">טוען את הטקסט…</p>
+            <p className="text-xs text-mist-500">{t('טוען את הטקסט…')}</p>
           )}
           <div className="flex flex-wrap gap-2 pt-1">
             {row.permalink && (
               <a href={row.permalink} target="_blank" rel="noreferrer" className="inline-flex min-h-11 items-center rounded-xl bg-ink-800 px-4 text-sm font-bold text-brand-400">
-                פתח את הפוסט ↗
+                {t('פתח את הפוסט ↗')}
               </a>
             )}
             {row.target?.url && (
               <a href={row.target.url} target="_blank" rel="noreferrer" className="inline-flex min-h-11 items-center rounded-xl bg-ink-800 px-4 text-sm font-bold text-mist-100">
-                פתח את הקבוצה ↗
+                {t('פתח את הקבוצה ↗')}
               </a>
             )}
           </div>

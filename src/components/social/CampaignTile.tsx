@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { t } from '@/lib/social/i18n';
 import { campaignIdentity } from '@/components/social/CampaignCard';
 import { PACE_PROFILES, paceProfile } from '@/lib/social/rules';
 import type { PaceId } from '@/lib/social/types';
@@ -234,15 +235,15 @@ export function CampaignTile({
       <div className="anxt-figs">
         <span className="anxt-fig">
           <b>{published}</b>
-          <span>פורסמו</span>
+          <span>{t('פורסמו')}</span>
         </span>
         <span className="anxt-fig">
           <b>{scheduled}</b>
-          <span>בתור</span>
+          <span>{t('בתור')}</span>
         </span>
         <span className="anxt-fig">
           <b>{groups}</b>
-          <span>קבוצות</span>
+          <span>{t('קבוצות')}</span>
         </span>
       </div>
 
@@ -308,12 +309,12 @@ export function CampaignTile({
             <path d="m12 12 4.5-3" />
           </svg>
           <select
-            aria-label="מהירות פרסום"
+            aria-label={t('מהירות פרסום')}
             value={profile?.id ?? ''}
             disabled={busy || !onPaceChange}
             onChange={(e) => onPaceChange?.(e.target.value as PaceId)}
           >
-            {!profile && <option value="">מהירות</option>}
+            {!profile && <option value="">{t('מהירות')}</option>}
             {PACE_PROFILES.map((p) => (
               <option key={p.id} value={p.id}>{p.label}</option>
             ))}

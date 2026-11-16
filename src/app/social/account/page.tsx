@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import { t } from '@/lib/social/i18n';
 import { Stamp } from '@/components/social/DateTime';
 import { SocialShell } from '@/components/social/SocialShell';
 import { TargetAvatar } from '@/components/social/TargetAvatar';
@@ -307,14 +308,14 @@ export default function AccountPage() {
   }
 
   return (
-    <SocialShell title="חשבון הפייסבוק המפרסם" lede="באיזה חשבון פייסבוק המערכת מפרסמת לקבוצות, ואיך מחליפים אותו.">
+    <SocialShell title={t('חשבון הפייסבוק המפרסם')} lede="באיזה חשבון פייסבוק המערכת מפרסמת לקבוצות, ואיך מחליפים אותו.">
       {!loaded ? (
         <Loading />
       ) : (
         <>
           {error && <div className="mb-3"><Notice tone="error">{error}</Notice></div>}
 
-          <Card title="מי מחובר עכשיו">
+          <Card title={t('מי מחובר עכשיו')}>
             {account ? (
               <div className="flex items-center gap-3">
                 {account.avatar ? (
@@ -360,16 +361,16 @@ export default function AccountPage() {
           */}
           {challenge && (
             <div className="mb-3">
-              <Card title="פייסבוק מבקשת אימות" subtitle="זה מה שפייסבוק מציגה עכשיו. ענו כאן — אין צורך לגשת למחשב.">
+              <Card title={t('פייסבוק מבקשת אימות')} subtitle={t('זה מה שפייסבוק מציגה עכשיו. ענו כאן — אין צורך לגשת למחשב.')}>
                 {shotUrl ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img
                     src={shotUrl}
-                    alt="מה שפייסבוק מציגה כרגע בחלון ההתחברות"
+                    alt={t('מה שפייסבוק מציגה כרגע בחלון ההתחברות')}
                     className="mb-3 w-full rounded-xl border border-ink-700 bg-ink-900 object-contain"
                   />
                 ) : (
-                  <p className="mb-3 text-sm text-mist-500">טוען את מה שפייסבוק מציגה…</p>
+                  <p className="mb-3 text-sm text-mist-500">{t('טוען את מה שפייסבוק מציגה…')}</p>
                 )}
                 <form
                   onSubmit={(e) => {
@@ -377,7 +378,7 @@ export default function AccountPage() {
                     void sendCode();
                   }}
                 >
-                  <Field label="הקוד או התשובה שפייסבוק מבקשת">
+                  <Field label={t('הקוד או התשובה שפייסבוק מבקשת')}>
                     <input
                       className={inputClass}
                       dir="ltr"
@@ -390,12 +391,12 @@ export default function AccountPage() {
                   </Field>
                   <div className="mt-3">
                     <Button type="submit" busy={busy === 'verify'} disabled={!code.trim()}>
-                      שלח לפייסבוק
+                      {t('שלח לפייסבוק')}
                     </Button>
                   </div>
                 </form>
                 <p className="mt-3 text-xs text-mist-500">
-                  התמונה מצולמת מהדפדפן שמפרסם, והיא פרטית. אם עברו כמה דקות בלי תשובה — ההתחברות נסגרת וצריך להתחיל מחדש.
+                  {t('התמונה מצולמת מהדפדפן שמפרסם, והיא פרטית. אם עברו כמה דקות בלי תשובה — ההתחברות נסגרת וצריך להתחיל מחדש.')}
                 </p>
               </Card>
             </div>
@@ -403,13 +404,13 @@ export default function AccountPage() {
 
           <div className="mt-3">
             <Card
-              title="התחברות לחשבון פייסבוק"
-              subtitle="מזינים כאן את פרטי החשבון. הם נשלחים למחשב לשימוש חד-פעמי ולא נשמרים בשום מקום."
+              title={t('התחברות לחשבון פייסבוק')}
+              subtitle={t('מזינים כאן את פרטי החשבון. הם נשלחים למחשב לשימוש חד-פעמי ולא נשמרים בשום מקום.')}
             >
               {!online && (
                 <div className="mb-3">
                   <Notice tone="warn">
-                    <strong>התוכנה במחשב לא פועלת.</strong> ההתחברות מתבצעת בדפדפן שעל המחשב, אז צריך שהוא יהיה פתוח. הפעילו שם את{' '}
+                    <strong>{t('התוכנה במחשב לא פועלת.')}</strong> ההתחברות מתבצעת בדפדפן שעל המחשב, אז צריך שהוא יהיה פתוח. הפעילו שם את{' '}
                     <code dir="ltr">start-worker.cmd</code> ונסו שוב.
                   </Notice>
                 </div>
@@ -420,7 +421,7 @@ export default function AccountPage() {
                   void signIn();
                 }}
               >
-                <Field label="אימייל או טלפון של החשבון">
+                <Field label={t('אימייל או טלפון של החשבון')}>
                   <input
                     className={inputClass}
                     dir="ltr"
@@ -433,7 +434,7 @@ export default function AccountPage() {
                   />
                 </Field>
                 <div className="mt-2">
-                  <Field label="סיסמה">
+                  <Field label={t('סיסמה')}>
                     <input
                       className={inputClass}
                       dir="ltr"
@@ -449,7 +450,7 @@ export default function AccountPage() {
                 </div>
                 <div className="mt-3 flex flex-wrap gap-2">
                   <Button type="submit" busy={busy === 'signin'} disabled={!online || !user.trim() || !secret}>
-                    התחבר לחשבון הזה
+                    {t('התחבר לחשבון הזה')}
                   </Button>
                   <Button
                     variant="secondary"
@@ -457,7 +458,7 @@ export default function AccountPage() {
                     disabled={!online}
                     onClick={() => send('check', 'נשלחה בדיקת חיבור.')}
                   >
-                    בדוק חיבור
+                    {t('בדוק חיבור')}
                   </Button>
                 </div>
               </form>
@@ -467,7 +468,7 @@ export default function AccountPage() {
                 not expect that reads a half-finished login as a broken product.
               */}
               <p className="mt-3 text-xs text-mist-500">
-                אם פייסבוק תבקש קוד אימות או אישור מכשיר — הוא יופיע כאן במסך הזה, עם תמונה של מה שהיא מציגה ושדה לענות בו. אין צורך לגשת למחשב.
+                {t('אם פייסבוק תבקש קוד אימות או אישור מכשיר — הוא יופיע כאן במסך הזה, עם תמונה של מה שהיא מציגה ושדה לענות בו. אין צורך לגשת למחשב.')}
               </p>
               {lastCommand && (
                 <p className="mt-2 text-xs text-mist-500">
@@ -499,8 +500,8 @@ export default function AccountPage() {
           */}
           <div className="mt-3">
             <Card
-              title="פרופילים בחשבון הזה"
-              subtitle="לפייסבוק אחת יכולים להיות כמה פרופילים — אישי ועסקי. כאן בוחרים מי מהם מפרסם."
+              title={t('פרופילים בחשבון הזה')}
+              subtitle={t('לפייסבוק אחת יכולים להיות כמה פרופילים — אישי ועסקי. כאן בוחרים מי מהם מפרסם.')}
               action={
                 <Button variant="secondary" busy={busy === 'profiles'} disabled={!online} onClick={() => send('profiles', 'מחפשים פרופילים במחשב…')}>
                   {profilesReadAt ? 'רענן' : 'חפש פרופילים'}
@@ -517,7 +518,7 @@ export default function AccountPage() {
               */}
               {!profilesReadAt ? (
                 <p className="text-sm text-mist-300">
-                  עוד לא בדקנו אילו פרופילים יש בחשבון הזה. לחצו "חפש פרופילים" — התוכנה במחשב תפתח את תפריט החשבון בפייסבוק ותקרא מה יש בו.
+                  {t('עוד לא בדקנו אילו פרופילים יש בחשבון הזה. לחצו "חפש פרופילים" — התוכנה במחשב תפתח את תפריט החשבון בפייסבוק ותקרא מה יש בו.')}
                 </p>
               ) : profiles.length <= 1 ? (
                 <p className="text-sm text-mist-300">
@@ -569,12 +570,12 @@ export default function AccountPage() {
                             list of skipped groups.
                           */}
                           {p.kind === 'page' && (
-                            <span className="text-[11px] font-bold text-mist-500">דף עסקי</span>
+                            <span className="text-[11px] font-bold text-mist-500">{t('דף עסקי')}</span>
                           )}
                         </span>
                         {active ? (
                           <span className="shrink-0 rounded-lg bg-success-400/15 px-2 py-1 text-xs font-extrabold text-success-400">
-                            מפרסם עכשיו
+                            {t('מפרסם עכשיו')}
                           </span>
                         ) : (
                           <Button
@@ -584,7 +585,7 @@ export default function AccountPage() {
                             disabled={!online}
                             onClick={() => goToProfile(p.name)}
                           >
-                            עבור לזה
+                            {t('עבור לזה')}
                           </Button>
                         )}
                       </li>
@@ -594,21 +595,21 @@ export default function AccountPage() {
               )}
               {profiles.some((p) => p.kind === 'page') && (
                 <p className="mt-3 rounded-xl bg-warning-400/10 px-3 py-2 text-xs leading-relaxed text-warning-400">
-                  פרסום בתור <b>דף עסקי</b> אפשרי רק בקבוצות שמנהל הקבוצה אישר בהן פרסום מדפים — ברוב הקבוצות זה כבוי.
-                  קבוצה שלא מאפשרת תדולג, תופיע ברשימה עם הסיבה, <b>ותישאר פעילה</b> — היא תמשיך לעבוד כרגיל מהפרופיל האישי.
+                  פרסום בתור <b>{t('דף עסקי')}</b> אפשרי רק בקבוצות שמנהל הקבוצה אישר בהן פרסום מדפים — ברוב הקבוצות זה כבוי.
+                  קבוצה שלא מאפשרת תדולג, תופיע ברשימה עם הסיבה, <b>{t('ותישאר פעילה')}</b> — היא תמשיך לעבוד כרגיל מהפרופיל האישי.
                 </p>
               )}
               <p className="mt-3 text-xs text-mist-500">
-                המעבר נעשה בתפריט של פייסבוק עצמה, באותו חלון שבו התוכנה מפרסמת — בדיוק כמו שהייתם עושים ידנית. אם פייסבוק תבקש אימות באמצע, זה יופיע למעלה במסך הזה.
+                {t('המעבר נעשה בתפריט של פייסבוק עצמה, באותו חלון שבו התוכנה מפרסמת — בדיוק כמו שהייתם עושים ידנית. אם פייסבוק תבקש אימות באמצע, זה יופיע למעלה במסך הזה.')}
               </p>
             </Card>
           </div>
 
           <div className="mt-3">
-            <Card title="פעולות נוספות">
+            <Card title={t('פעולות נוספות')}>
               <div className="flex flex-wrap gap-2">
                 <Button variant="secondary" busy={busy === 'switch'} disabled={!online} onClick={switchAccount}>
-                  פתח חלון התחברות במחשב
+                  {t('פתח חלון התחברות במחשב')}
                 </Button>
                 <Button
                   variant="danger"
@@ -624,11 +625,11 @@ export default function AccountPage() {
                     if (ok) send('logout', 'החשבון נותק מהמחשב.');
                   }}
                 >
-                  נתק
+                  {t('נתק')}
                 </Button>
               </div>
               <p className="mt-2 text-xs text-mist-500">
-                "פתח חלון התחברות" מנתק את החשבון הנוכחי ופותח במחשב חלון על דף ההתחברות של פייסבוק, בלי להזין כאן כלום — שימושי כשיושבים ליד המחשב.
+                {t('"פתח חלון התחברות" מנתק את החשבון הנוכחי ופותח במחשב חלון על דף ההתחברות של פייסבוק, בלי להזין כאן כלום — שימושי כשיושבים ליד המחשב.')}
               </p>
             </Card>
           </div>
@@ -649,12 +650,12 @@ export default function AccountPage() {
             locked account is a surprise.
           */}
           <div className="mt-3">
-            <Card title="מה קורה עם הפרטים, ומה פייסבוק עושה">
+            <Card title={t('מה קורה עם הפרטים, ומה פייסבוק עושה')}>
               <ul className="space-y-1.5 text-sm text-mist-300">
-                <li>· הסיסמה נשלחת למחשב פעם אחת, לצורך ההתחברות, ונמחקת באותו רגע שהמחשב לוקח אותה. היא לא נשמרת בשום טבלה ולא מופיעה בשום יומן.</li>
-                <li>· מרגע שההתחברות הצליחה, מה שנשמר הוא פרופיל Chrome על המחשב בלבד — בדיוק כמו דפדפן רגיל. "נתק" מוחק אותו.</li>
-                <li>· התחברות אוטומטית עם סיסמה היא נגד תנאי השימוש של פייסבוק, והיא עלולה לגרום לנעילת החשבון או לדרישת אימות. זה סיכון שנופל על בעל החשבון.</li>
-                <li>· פייסבוק מבקשת לעיתים קרובות קוד אימות או אישור מכשיר. אי אפשר לעקוף את זה, אבל עונים עליו מכאן — השאלה מופיעה במסך הזה עם תמונה של מה שפייסבוק מציגה.</li>
+                <li>{t('· הסיסמה נשלחת למחשב פעם אחת, לצורך ההתחברות, ונמחקת באותו רגע שהמחשב לוקח אותה. היא לא נשמרת בשום טבלה ולא מופיעה בשום יומן.')}</li>
+                <li>{t('· מרגע שההתחברות הצליחה, מה שנשמר הוא פרופיל Chrome על המחשב בלבד — בדיוק כמו דפדפן רגיל. "נתק" מוחק אותו.')}</li>
+                <li>{t('· התחברות אוטומטית עם סיסמה היא נגד תנאי השימוש של פייסבוק, והיא עלולה לגרום לנעילת החשבון או לדרישת אימות. זה סיכון שנופל על בעל החשבון.')}</li>
+                <li>{t('· פייסבוק מבקשת לעיתים קרובות קוד אימות או אישור מכשיר. אי אפשר לעקוף את זה, אבל עונים עליו מכאן — השאלה מופיעה במסך הזה עם תמונה של מה שפייסבוק מציגה.')}</li>
               </ul>
             </Card>
           </div>

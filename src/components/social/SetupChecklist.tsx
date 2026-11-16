@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { t } from '@/lib/social/i18n';
 import { CheckIcon } from '@/components/icons';
 import { CARD, TONE_FILL, TONE_TEXT } from './ui';
 
@@ -65,10 +66,10 @@ export function SetupChecklist({
   const nextIndex = steps.findIndex((s) => !s.done);
 
   return (
-    <section aria-label="הצעדים הראשונים" className={`${CARD} p-4`}>
-      <h2 className="text-base font-extrabold leading-tight text-mist-100">שלושה צעדים לפרסום הראשון</h2>
+    <section aria-label={t('הצעדים הראשונים')} className={`${CARD} p-4`}>
+      <h2 className="text-base font-extrabold leading-tight text-mist-100">{t('שלושה צעדים לפרסום הראשון')}</h2>
       <p className="mt-0.5 text-xs leading-relaxed text-mist-500">
-        הכרטיס הזה נעלם מעצמו ברגע שהפרסום הראשון נכנס לתור.
+        {t('הכרטיס הזה נעלם מעצמו ברגע שהפרסום הראשון נכנס לתור.')}
       </p>
       <ol className="mt-3 space-y-3">
         {steps.map((step, i) => (
@@ -84,7 +85,7 @@ export function SetupChecklist({
             <div className="min-w-0 grow">
               <p className={`text-sm font-bold leading-snug ${step.done ? TONE_TEXT.good : 'text-mist-100'}`}>
                 {step.title}
-                {step.done && <span className="sr-only"> — הושלם</span>}
+                {step.done && <span className="sr-only"> {t('— הושלם')}</span>}
               </p>
               <p className="mt-0.5 text-xs leading-relaxed text-mist-500">{step.body}</p>
               {i === nextIndex && (

@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { t } from '@/lib/social/i18n';
 import { CampaignCard, campaignOrdinals } from '@/components/social/CampaignCard';
 import { CampaignTile } from '@/components/social/CampaignTile';
 import { CampaignHoursSheet } from '@/components/social/CampaignHoursSheet';
@@ -947,7 +948,7 @@ export default function CampaignsPage() {
        * is the slow one — it re-times every waiting publication of the round.
        */
       working={Boolean(busy) || Object.values(scheduleBusy).some(Boolean)}
-      title="קמפיינים"
+      title={t('קמפיינים')}
       lede="כל קמפיין שהפעלתם — מה יצא, מה עוד יוצא, ומה אפשר לעצור"
       /*
        * "+ קמפיין חדש" GOES TO THE POST EDITOR, and the detour it replaces is
@@ -982,7 +983,7 @@ export default function CampaignsPage() {
          radius utilities in the same layer. Same href, same destination. */
       headerAction={
         <ButtonLink href="/social/posts/new" size="lg" className="h-14 !rounded-2xl !px-5 text-[15px]">
-          + קמפיין חדש
+          {t('+ קמפיין חדש')}
         </ButtonLink>
       }
       paused={control?.paused ?? null}
@@ -1060,7 +1061,7 @@ export default function CampaignsPage() {
         {/* ── the filter, the search and the view ── */}
         <SegmentedControl
           variant="tabs"
-          label="סינון קמפיינים"
+          label={t('סינון קמפיינים')}
           value={filter}
           onChange={setFilter}
           options={[
@@ -1075,11 +1076,11 @@ export default function CampaignsPage() {
           <label className="flex h-11 min-w-0 flex-1 items-center gap-2 rounded-2xl border border-ink-700 bg-ink-850 px-3">
             <SearchIcon className="h-4 w-4 shrink-0 text-mist-500" aria-hidden />
             <input
-              aria-label="חיפוש קמפיין"
+              aria-label={t('חיפוש קמפיין')}
               dir="auto"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="חיפוש קמפיין"
+              placeholder={t('חיפוש קמפיין')}
               className="min-w-0 flex-1 bg-transparent text-[14px] font-semibold text-mist-100 placeholder:text-mist-500 focus:outline-none"
             />
           </label>
@@ -1131,7 +1132,7 @@ export default function CampaignsPage() {
                campaigns at all usually has no posts either, so the library is
                a room with nothing in it; the post editor is where the first
                campaign is actually made. */
-            action={counts.all === 0 ? <ButtonLink href="/social/posts/new">כתבו את הפוסט הראשון</ButtonLink> : undefined}
+            action={counts.all === 0 ? <ButtonLink href="/social/posts/new">{t('כתבו את הפוסט הראשון')}</ButtonLink> : undefined}
           />
         )}
 

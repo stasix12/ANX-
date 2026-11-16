@@ -1,6 +1,7 @@
 'use client';
 
 import { useRef, useState } from 'react';
+import { t } from '@/lib/social/i18n';
 import { friendlyMessage } from '@/lib/social/errors';
 import { supabase } from '@/lib/supabase';
 import { Button, Card } from '@/components/social/ui';
@@ -72,18 +73,18 @@ export function ProfileUploadCard() {
 
   return (
     <Card
-      title="העברת הפרופיל ל-worker בענן"
-      subtitle="כשמעבירים את מנוע הפרסום לשרת — הפרופיל המחובר עובר איתו, במקום התחברות חדשה שמקפיצה אימות."
+      title={t('העברת הפרופיל ל-worker בענן')}
+      subtitle={t('כשמעבירים את מנוע הפרסום לשרת — הפרופיל המחובר עובר איתו, במקום התחברות חדשה שמקפיצה אימות.')}
     >
       <ol className="list-decimal space-y-1.5 ps-5 text-sm text-mist-300">
-        <li>במחשב שבו המערכת עובדת היום — סוגרים את חלון ה-worker.</li>
+        <li>{t('במחשב שבו המערכת עובדת היום — סוגרים את חלון ה-worker.')}</li>
         <li>
           דוחסים ל-ZIP את התיקייה{' '}
           <code dir="ltr" className="rounded bg-ink-900/60 px-1.5 py-0.5 text-xs">
             %USERPROFILE%\.hapitaron-social\facebook-profile
           </code>
         </li>
-        <li>פותחים את העמוד הזה באותו מחשב ובוחרים את הקובץ כאן.</li>
+        <li>{t('פותחים את העמוד הזה באותו מחשב ובוחרים את הקובץ כאן.')}</li>
       </ol>
       <div className="mt-3 flex flex-wrap items-center gap-2">
         <input
@@ -97,15 +98,14 @@ export function ProfileUploadCard() {
           }}
         />
         <Button variant="secondary" busy={busy} onClick={() => fileRef.current?.click()}>
-          בחר קובץ ZIP להעלאה
+          {t('בחר קובץ ZIP להעלאה')}
         </Button>
       </div>
       {note && (
         <p className={`mt-2 text-sm ${note.kind === 'ok' ? 'text-green-600' : 'text-red-500'}`}>{note.text}</p>
       )}
       <p className="mt-2 text-xs text-mist-500">
-        הקובץ נשמר בתיקייה פרטית שרק החשבון שלכם רואה, ונמחק אוטומטית ברגע שה-worker מייבא אותו. אם במכונה של ה-worker כבר
-        קיים פרופיל — הקובץ שהועלה לא ידרוס אותו; נתקו שם קודם.
+        {t('הקובץ נשמר בתיקייה פרטית שרק החשבון שלכם רואה, ונמחק אוטומטית ברגע שה-worker מייבא אותו. אם במכונה של ה-worker כבר קיים פרופיל — הקובץ שהועלה לא ידרוס אותו; נתקו שם קודם.')}
       </p>
     </Card>
   );

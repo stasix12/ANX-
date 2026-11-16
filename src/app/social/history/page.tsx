@@ -1,6 +1,7 @@
 'use client';
 
 import { useSearchParams } from 'next/navigation';
+import { t } from '@/lib/social/i18n';
 import { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import { PublicationItem } from '@/components/social/PublicationItem';
 import { SocialShell } from '@/components/social/SocialShell';
@@ -91,7 +92,7 @@ export default function HistoryPage() {
   return (
     <Suspense
       fallback={
-        <SocialShell title="היסטוריה" lede="כל מה שיצא, ומה שנכשל">
+        <SocialShell title={t('היסטוריה')} lede="כל מה שיצא, ומה שנכשל">
           <Loading />
         </SocialShell>
       }
@@ -338,7 +339,7 @@ function HistoryScreen() {
   };
 
   return (
-    <SocialShell title="היסטוריה" lede="כל מה שיצא, ומה שנכשל" onRefresh={load}>
+    <SocialShell title={t('היסטוריה')} lede="כל מה שיצא, ומה שנכשל" onRefresh={load}>
       <div className="space-y-4">
         {/* A failed first read used to leave `rows` null for ever: the banner
             sat above a skeleton that shimmered indefinitely, and the only way
@@ -349,15 +350,15 @@ function HistoryScreen() {
           <input
             type="search"
             className={inputClass}
-            placeholder="חיפוש לפי קבוצה, סבב, פוסט או טקסט…"
+            placeholder={t('חיפוש לפי קבוצה, סבב, פוסט או טקסט…')}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            aria-label="חיפוש בהיסטוריה"
+            aria-label={t('חיפוש בהיסטוריה')}
           />
           <div className="mt-2.5 min-w-0 space-y-2 overflow-x-auto scrollbar-none">
             <SegmentedControl
               size="sm"
-              label="תוצאה"
+              label={t('תוצאה')}
               value={group}
               onChange={setGroup}
               options={STATUS_GROUPS.filter((g) => !g.hidden || g.value === group).map((g) => ({ value: g.value, label: g.label }))}
@@ -366,7 +367,7 @@ function HistoryScreen() {
             <div className="flex flex-wrap items-center gap-2">
               <SegmentedControl
                 size="sm"
-                label="טווח"
+                label={t('טווח')}
                 value={range}
                 onChange={setRange}
                 options={RANGES.map((r) => ({ value: r.value, label: r.label }))}
@@ -389,7 +390,7 @@ function HistoryScreen() {
                   onClick={() => setOnlyCampaign('')}
                   className="ms-auto min-h-11 shrink-0 px-1 text-xs font-extrabold text-brand-400 underline"
                 >
-                  הצג את כל הסבבים
+                  {t('הצג את כל הסבבים')}
                 </button>
               </div>
             )}
@@ -409,7 +410,7 @@ function HistoryScreen() {
         </Card>
 
         <Card
-          title="פרסומים"
+          title={t('פרסומים')}
           /* The read is capped at 500 (load()), so `filtered.length` is a
              ceiling, not a total — and the badge beside it already said "500+".
              One header cannot carry two numbers about the same rows that
@@ -427,7 +428,7 @@ function HistoryScreen() {
           {rows && filtered.length === 0 && (
             <EmptyState
               icon={<InboxIcon className="h-5 w-5" />}
-              title="אין רשומות בסינון הזה"
+              title={t('אין רשומות בסינון הזה')}
               description="נסו טווח תאריכים רחב יותר, או נקו את החיפוש."
               action={
                 <Button
@@ -438,7 +439,7 @@ function HistoryScreen() {
                     setRange('all');
                   }}
                 >
-                  נקה סינון
+                  {t('נקה סינון')}
                 </Button>
               }
             />

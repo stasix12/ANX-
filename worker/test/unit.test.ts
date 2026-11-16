@@ -1467,7 +1467,9 @@ console.log('unit tests OK');
    */
   assert.ok(/viewCount:/.test(selectorsSrc) && /צפיות/.test(selectorsSrc), 'a video post reports plays, and they are read too');
   assert.ok(/views: number \| null/.test(metricsSrc), 'and kept apart from the impressions figure');
-  assert.ok(/label="צפיות בסרטון"/.test(reachCard), 'so the tile can say which of the two it is showing');
+  /* The label is wrapped for translation now (`label={t('…')}`), so this
+     matches the sentence rather than one spelling of the attribute. */
+  assert.ok(/label=\{?t?\(?'?"?צפיות בסרטון/.test(reachCard), 'so the tile can say which of the two it is showing');
   assert.ok(
     /if \(kind !== 'ok'\) return null;/.test(metricsSrc),
     'and a login wall returns nothing at all rather than recording zeros for somebody else\'s page',
@@ -6006,7 +6008,10 @@ const scenario: { step: string; line: string }[] = [];
      הקרובים", which is only half true: this rail also carries today's finished
      rows, and with an empty queue they are all of it. */
   assert.ok(
-    /tabIndex=\{0\}[\s\S]{0,400}aria-label="סדר הפרסומים/.test(timeline),
+    /* The name is wrapped for translation now; match the NAME, not the
+       attribute's old spelling — a Russian screen-reader user may not be
+       read a Hebrew label. */
+    /tabIndex=\{0\}[\s\S]{0,400}aria-label=\{?t?\(?'?"?סדר הפרסומים/.test(timeline),
     'a scrollable region must be focusable and named, or it is unreachable with a keyboard',
   );
 

@@ -1,6 +1,7 @@
 'use client';
 
 import { runProgress } from '@/lib/social/campaign';
+import { t } from '@/lib/social/i18n';
 import type { CampaignProgress } from '@/lib/social/types';
 import { TONE_FILL, TONE_TEXT, type Tone } from './ui';
 
@@ -27,7 +28,7 @@ import { TONE_FILL, TONE_TEXT, type Tone } from './ui';
  */
 export function CampaignProgressBar({ progress }: { progress: CampaignProgress }) {
   const { total, published, failed, skipped, scheduled, running, manual } = progress;
-  if (!total) return <p className="text-sm text-mist-500">עוד לא נוצרו פרסומים לסבב הזה.</p>;
+  if (!total) return <p className="text-sm text-mist-500">{t('עוד לא נוצרו פרסומים לסבב הזה.')}</p>;
   const view = runProgress(progress);
   const pct = (n: number) => `${(n / total) * 100}%`;
 

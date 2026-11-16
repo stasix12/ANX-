@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { t } from '@/lib/social/i18n';
 import Link from 'next/link';
 import { listRecentPosts } from '@/lib/social/client';
 import type { Campaign, MediaItem, Post } from '@/lib/social/types';
@@ -208,10 +209,10 @@ export function QuickCommentsCard({
            of the box instead of ellipsing. Measured, not guessed. */
         <span className="flex min-w-0 items-center gap-2">
           <MessageIcon aria-hidden className="h-4 w-4 shrink-0 text-brand-500" />
-          <span className="truncate">תגובות מהירות</span>
+          <span className="truncate">{t('תגובות מהירות')}</span>
         </span>
       }
-      subtitle="מה שפורסם היום"
+      subtitle={t('מה שפורסם היום')}
       action={
         <Link
           href="/social/campaigns"

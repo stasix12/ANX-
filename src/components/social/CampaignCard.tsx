@@ -1,6 +1,7 @@
 'use client';
 
 import { useId, useState } from 'react';
+import { t } from '@/lib/social/i18n';
 import Link from 'next/link';
 import { canPauseRun, canResumeRun, groupProgress, neverLaunched, runBadge, runProgress, type CampaignState } from '@/lib/social/campaign';
 import { type CampaignRepeat, type CampaignRound, type CampaignSchedule } from '@/lib/social/campaign-schedule';
@@ -726,7 +727,7 @@ export function CampaignCard({
             /* The post has nothing attached. An empty corner reads as a
                picture that failed to load, so say what is missing. */
             <span
-              title="לפוסט אין תמונה או סרטון"
+              title={t('לפוסט אין תמונה או סרטון')}
               className="grid h-full w-full place-items-center rounded-[20px] border border-dashed border-ink-600 bg-ink-900 text-mist-500"
             >
               <PlusIcon aria-hidden className="h-5 w-5" />
@@ -745,7 +746,7 @@ export function CampaignCard({
              * border, no warning colour, and a tooltip that says so.
              */
             <span
-              title="לא נמצא פוסט לקמפיין הזה — ייתכן שהוא הועבר לארכיון. המספרים לצד נכונים בכל מקרה."
+              title={t('לא נמצא פוסט לקמפיין הזה — ייתכן שהוא הועבר לארכיון. המספרים לצד נכונים בכל מקרה.')}
               className="grid h-full w-full place-items-center rounded-[20px] bg-ink-800 text-mist-500"
             >
               <ClipboardListIcon aria-hidden className="h-5 w-5" />
@@ -782,12 +783,12 @@ export function CampaignCard({
       {total > 0 ? (
         <>
           <div className="mt-2.5 grid grid-cols-3 gap-1.5 [&>*]:min-w-0">
-            <Stat tone="good" value={published} label="פורסמו" icon={<CheckCircleIcon aria-hidden className="h-4 w-4 shrink-0 text-success-400" />} />
+            <Stat tone="good" value={published} label={t('פורסמו')} icon={<CheckCircleIcon aria-hidden className="h-4 w-4 shrink-0 text-success-400" />} />
             {/* openRows(): scheduled + running + manual — everything that has
                 not ended yet. It is the number that answers "is this still
                 going to publish?", which is the question the card exists for. */}
-            <Stat tone="brand" value={view.open} label="ממתינים" icon={<ClockIcon aria-hidden className="h-4 w-4 shrink-0 text-brand-400" />} />
-            <Stat tone="bad" value={failed} label="נכשלו" icon={<AlertCircleIcon aria-hidden className="h-4 w-4 shrink-0 text-error-400" />} />
+            <Stat tone="brand" value={view.open} label={t('ממתינים')} icon={<ClockIcon aria-hidden className="h-4 w-4 shrink-0 text-brand-400" />} />
+            <Stat tone="bad" value={failed} label={t('נכשלו')} icon={<AlertCircleIcon aria-hidden className="h-4 w-4 shrink-0 text-error-400" />} />
           </div>
           {/* "פורסם ל-204 מתוך 252 קבוצות" — the denominator a customer
               actually reads the card for. Hidden when there is no group count

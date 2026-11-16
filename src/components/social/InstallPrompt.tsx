@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { t } from '@/lib/social/i18n';
 import { CloseIcon, ShareIcon } from '@/components/icons';
 import { Button } from './ui';
 
@@ -83,7 +84,7 @@ export function InstallPrompt() {
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src="/social/icon-192.png" alt="" className="h-11 w-11 shrink-0 rounded-xl" />
         <div className="min-w-0">
-          <p className="text-sm font-extrabold leading-snug text-mist-100">התקינו את האפליקציה על המסך</p>
+          <p className="text-sm font-extrabold leading-snug text-mist-100">{t('התקינו את האפליקציה על המסך')}</p>
           {mode === 'ios' ? (
             <>
               {/*
@@ -109,17 +110,17 @@ export function InstallPrompt() {
                 </li>
                 <li>
                   <span className="font-extrabold text-mist-100">3.</span> גללו למטה ברשימה ובחרו{' '}
-                  <strong className="font-extrabold text-mist-100">«הוסף למסך הבית»</strong>.
+                  <strong className="font-extrabold text-mist-100">{t('«הוסף למסך הבית»')}</strong>.
                 </li>
               </ol>
               <p className="mt-1.5 text-[13px] leading-relaxed text-mist-500">
-                אחר כך פתחו אותה מהמסך הראשי — בלי שורת הכתובת ובלי כפתורי הדפדפן, על כל המסך.
+                {t('אחר כך פתחו אותה מהמסך הראשי — בלי שורת הכתובת ובלי כפתורי הדפדפן, על כל המסך.')}
               </p>
             </>
           ) : (
             <>
               <p className="mt-1 text-[13px] leading-relaxed text-mist-300">
-                תיפתח על כל המסך, בלי שורת הכתובת ובלי כפתורי הדפדפן.
+                {t('תיפתח על כל המסך, בלי שורת הכתובת ובלי כפתורי הדפדפן.')}
               </p>
               <Button
                 size="sm"
@@ -130,7 +131,7 @@ export function InstallPrompt() {
                   close();
                 }}
               >
-                התקן עכשיו
+                {t('התקן עכשיו')}
               </Button>
             </>
           )}
@@ -138,7 +139,7 @@ export function InstallPrompt() {
       </div>
       <button
         type="button"
-        aria-label="סגור"
+        aria-label={t('סגור')}
         onClick={close}
         className="absolute end-1 top-1 grid h-11 w-11 place-items-center rounded-full text-mist-500 transition-colors hover:bg-ink-800 hover:text-mist-100"
       >

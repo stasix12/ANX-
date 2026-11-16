@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { t } from '@/lib/social/i18n';
 import Link from 'next/link';
 import { listRecentPosts } from '@/lib/social/client';
 import type { Post } from '@/lib/social/types';
@@ -54,11 +55,11 @@ export function StartFromLibrary({ onPick, hidden }: { onPick: (post: Post) => v
 
   return (
     <Card
-      title="התחילו מפוסט שכבר יש לכם"
-      subtitle="לחיצה ממלאת את הטופס — הטקסט, התמונות, הקישור והכפתור. הפוסט המקורי לא משתנה."
+      title={t('התחילו מפוסט שכבר יש לכם')}
+      subtitle={t('לחיצה ממלאת את הטופס — הטקסט, התמונות, הקישור והכפתור. הפוסט המקורי לא משתנה.')}
       action={
         <Link href="/social/library" className="inline-flex min-h-11 items-center px-2 text-sm font-bold text-brand-400">
-          כל הספרייה
+          {t('כל הספרייה')}
         </Link>
       }
     >

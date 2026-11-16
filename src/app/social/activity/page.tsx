@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { t } from '@/lib/social/i18n';
 import { InboxIcon } from '@/components/icons';
 import { ActivityDetailSheet } from '@/components/social/ActivityDetailSheet';
 import { ActivityFeed } from '@/components/social/ActivityFeed';
@@ -120,14 +121,14 @@ export default function ActivityPage() {
   const visible = filterActivity(all, filter);
 
   return (
-    <SocialShell title="מרכז פעילות" lede="כל מה שהמערכת עשתה, מהחדש לישן" onRefresh={load}>
+    <SocialShell title={t('מרכז פעילות')} lede="כל מה שהמערכת עשתה, מהחדש לישן" onRefresh={load}>
       <div className="space-y-4">
         {error && <ErrorState message={error} onRetry={load} />}
 
         <div className="space-y-2">
           <SegmentedControl
             variant="chips"
-            label="סוג פעילות"
+            label={t('סוג פעילות')}
             value={filter}
             onChange={setFilter}
             options={ACTIVITY_FILTERS.map((f) => ({
@@ -141,7 +142,7 @@ export default function ActivityPage() {
           />
           <SegmentedControl
             variant="chips"
-            label="טווח תאריכים"
+            label={t('טווח תאריכים')}
             value={range}
             onChange={setRange}
             options={RANGES.map((r) => ({ value: r.value, label: r.label }))}
@@ -149,7 +150,7 @@ export default function ActivityPage() {
         </div>
 
         <Card
-          title="פעילות"
+          title={t('פעילות')}
           /* A window, said as one. `rows` is what has been READ, never a total:
              the log has no cheap count and printing this array's length as one
              is the defect this module has a test for. */
@@ -159,7 +160,7 @@ export default function ActivityPage() {
           {rows && all.length === 0 && (
             <EmptyState
               icon={<InboxIcon className="h-5 w-5" />}
-              title="אין עדיין פעילות"
+              title={t('אין עדיין פעילות')}
               description="כשתתחילו לפרסם, כל הפעולות של המערכת יופיעו כאן."
             />
           )}
@@ -181,11 +182,11 @@ export default function ActivityPage() {
         {rows && !done && all.length > 0 && (
           <div className="flex justify-center">
             <Button variant="secondary" busy={more} onClick={loadMore}>
-              הצג עוד
+              {t('הצג עוד')}
             </Button>
           </div>
         )}
-        {rows && done && all.length > 0 && <p className="text-center text-[11px] text-mist-500">הגעתם לסוף היומן.</p>}
+        {rows && done && all.length > 0 && <p className="text-center text-[11px] text-mist-500">{t('הגעתם לסוף היומן.')}</p>}
       </div>
 
       <ActivityDetailSheet queueId={detail} onClose={() => setDetail(null)} onChanged={load} />

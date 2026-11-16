@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
+import { t } from '@/lib/social/i18n';
 import { TargetAvatar } from '@/components/social/TargetAvatar';
 import { Badge, Button, ButtonLink, CARD_ELEVATED, Card, inputClass } from '@/components/social/ui';
 import { MEMBERSHIP_SHORT, PRIVACY_LABEL, membersText, normalizeQuery, type Membership } from '@/lib/social/discovery';
@@ -235,7 +236,7 @@ export function GroupRow({
           {run ? (
             <div className="anxj">
               <p className="anxj-title">
-                <span>הצטרפות לקבוצה...</span>
+                <span>{t('הצטרפות לקבוצה...')}</span>
                 <UsersIcon aria-hidden className="h-3.5 w-3.5" />
               </p>
               <div className="anxj-bar">
@@ -279,10 +280,10 @@ export function GroupRow({
                 rather than guessed at from a chip. */}
             {exact && (
               <span
-                title="שם הקבוצה מכיל בדיוק את מה שחיפשתם"
+                title={t('שם הקבוצה מכיל בדיוק את מה שחיפשתם')}
                 className="inline-flex items-center rounded-full bg-brand-400/10 px-1.5 py-0.5 text-[11px] font-bold text-brand-300"
               >
-                מדויק
+                {t('מדויק')}
               </span>
             )}
             {already && (
@@ -325,7 +326,7 @@ export function GroupRow({
                 rel="noopener noreferrer"
                 className="inline-flex min-h-11 items-center whitespace-nowrap text-[11px] font-bold text-brand-400"
               >
-                פתח קבוצה
+                {t('פתח קבוצה')}
               </a>
             )}
           </div>
@@ -374,7 +375,7 @@ export function GroupRow({
           {canAdd ? (
             <>
               <Button size="sm" variant="primary" busy={busy} onClick={onAdopt} className="w-full whitespace-nowrap px-1 text-[11px]">
-                הוסף לרשימה
+                {t('הוסף לרשימה')}
               </Button>
             </>
           ) : (
@@ -406,7 +407,7 @@ export function GroupRow({
         <button
           type="button"
           aria-label={`הסתר את ${row.name}`}
-          title="לא רלוונטי"
+          title={t('לא רלוונטי')}
           onClick={onHide}
           disabled={busy}
           /*
@@ -457,7 +458,7 @@ export function WalkThrough({
 
   if (!row) return null;
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-ink-950/70 p-3 sm:items-center" role="dialog" aria-modal="true" aria-label="מעבר מהיר בין קבוצות">
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-ink-950/70 p-3 sm:items-center" role="dialog" aria-modal="true" aria-label={t('מעבר מהיר בין קבוצות')}>
       <div className={`${CARD_ELEVATED} w-full max-w-md px-4 py-4`}>
         <div className="flex items-start justify-between gap-2">
           <p className="text-xs font-bold text-mist-500">
@@ -466,7 +467,7 @@ export function WalkThrough({
           <button
             ref={closeRef}
             type="button"
-            aria-label="סגור"
+            aria-label={t('סגור')}
             onClick={onClose}
             className="grid h-11 w-11 shrink-0 place-items-center rounded-xl text-mist-500 hover:bg-ink-900"
           >
@@ -495,7 +496,7 @@ export function WalkThrough({
 
         <div className="mt-3 flex flex-col gap-2">
           <ButtonLink href={row.url} target="_blank" rel="noopener noreferrer" size="lg" className="w-full">
-            פתח להצטרפות
+            {t('פתח להצטרפות')}
           </ButtonLink>
           <Button variant="secondary" size="lg" className="w-full" onClick={onNext}>
             {at + 1 >= rows.length ? 'סיימתי' : 'הקבוצה הבאה →'}
@@ -503,7 +504,7 @@ export function WalkThrough({
         </div>
 
         <p className="mt-2 text-center text-[11px] leading-4 text-mist-500">
-          ההצטרפות נעשית בפייסבוק עצמו — המערכת לא שולחת בקשות הצטרפות בשמכם.
+          {t('ההצטרפות נעשית בפייסבוק עצמו — המערכת לא שולחת בקשות הצטרפות בשמכם.')}
         </p>
       </div>
     </div>
@@ -582,8 +583,8 @@ export function SearchCard({
               typed into a field forced to RTL has its punctuation thrown
               to the wrong end while he is typing it. */}
           <input
-            aria-label="חפש עיר, אזור או נושא"
-            placeholder="חפש עיר, אזור או נושא…"
+            aria-label={t('חפש עיר, אזור או נושא')}
+            placeholder={t('חפש עיר, אזור או נושא…')}
             dir="auto"
             inputMode="search"
             enterKeyHint="search"
@@ -599,7 +600,7 @@ export function SearchCard({
           {text && (
             <button
               type="button"
-              aria-label="נקה את תיבת החיפוש"
+              aria-label={t('נקה את תיבת החיפוש')}
               onClick={() => onText('')}
               className="absolute top-1/2 grid h-10 w-10 -translate-y-1/2 place-items-center rounded-xl text-mist-500 transition-colors hover:bg-ink-800 hover:text-mist-300 end-0.5"
             >
@@ -740,11 +741,11 @@ export function FilterRow<F extends string, S extends string>({
       */}
       <div className="flex justify-center">
         <label className="relative inline-flex items-center gap-1 rounded-full px-2 text-[11px] font-bold text-mist-500">
-          <span>מיון:</span>
+          <span>{t('מיון:')}</span>
           <span className="text-mist-300">{sortLabel[sort]}</span>
           <ChevronDownIcon aria-hidden className="pointer-events-none h-3 w-3" />
           <select
-            aria-label="סדר התוצאות"
+            aria-label={t('סדר התוצאות')}
             value={sort}
             onChange={(e) => onSort(e.target.value as S)}
             className="absolute inset-0 h-11 w-full cursor-pointer opacity-0"
@@ -834,9 +835,9 @@ export function ResultsCard({
           waiting, already joined. Same three values, same three tones,
           same labels — only the order they sit in. */}
       <div className="mt-2 grid grid-cols-3 gap-2 [&>*]:min-w-0">
-        <Figure tone="brand" value={totals.fresh} label="קבוצות חדשות" />
-        <Figure tone="warn" value={totals.requested} label="בקשות ממתינות" />
-        <Figure tone="good" value={totals.member} label="כבר הצטרפת" />
+        <Figure tone="brand" value={totals.fresh} label={t('קבוצות חדשות')} />
+        <Figure tone="warn" value={totals.requested} label={t('בקשות ממתינות')} />
+        <Figure tone="good" value={totals.member} label={t('כבר הצטרפת')} />
       </div>
       {/*
         ONE PRESS FOR THE ONES HE IS ALREADY IN.
@@ -924,7 +925,7 @@ export function MyGroupsCard({
             <TargetIcon className="h-4 w-4" />
           </span>
           <div className="min-w-0 flex-1">
-            <p className="text-[15px] font-extrabold text-mist-100">הקבוצות שלך בפייסבוק</p>
+            <p className="text-[15px] font-extrabold text-mist-100">{t('הקבוצות שלך בפייסבוק')}</p>
             <p className="mt-0.5 text-xs leading-relaxed text-mist-500">
               {joined === null
                 ? 'טוען…'

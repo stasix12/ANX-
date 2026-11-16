@@ -1,6 +1,7 @@
 'use client';
 
 import { PACE_PROFILES, paceGapWords, paceProfile, paceRatePerHour, type PaceProfile } from '@/lib/social/rules';
+import { t } from '@/lib/social/i18n';
 import type { PaceId } from '@/lib/social/types';
 import { BoltIcon, CheckIcon, GaugeIcon, LeafIcon, RocketIcon } from '@/components/icons';
 
@@ -125,7 +126,7 @@ export function SmartPaceCard({
   return (
     <section
       data-smart-pace
-      aria-label="מצב פרסום חכם"
+      aria-label={t('מצב פרסום חכם')}
       /*
        * THE SHELL: white, a thin blue hairline, generously rounded, one soft
        * shadow. "מעטפת לבנה עם מסגרת כחולה דקה… פינות מעוגלות והצללה עדינה."
@@ -149,7 +150,7 @@ export function SmartPaceCard({
           <span aria-hidden className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-brand-500 text-on-brand">
             <RocketIcon className="h-4 w-4" />
           </span>
-          <span dir="auto" className="min-w-0 truncate text-[15px] font-extrabold leading-5 text-mist-100">מצב פרסום חכם</span>
+          <span dir="auto" className="min-w-0 truncate text-[15px] font-extrabold leading-5 text-mist-100">{t('מצב פרסום חכם')}</span>
         </div>
       )}
 
@@ -160,7 +161,7 @@ export function SmartPaceCard({
         for every multi-column grid and is what lets the three narrow together
         on a 320px phone instead of overflowing the shell.
       */}
-      <div role="radiogroup" aria-label="קצב הפרסום" className={`grid grid-cols-3 gap-2 [&>*]:min-w-0 ${compact ? '' : 'mt-2'}`}>
+      <div role="radiogroup" aria-label={t('קצב הפרסום')} className={`grid grid-cols-3 gap-2 [&>*]:min-w-0 ${compact ? '' : 'mt-2'}`}>
         {PACE_PROFILES.map((p) => {
           const on = selected?.id === p.id;
           const Icon = PACE_ICON[p.id];

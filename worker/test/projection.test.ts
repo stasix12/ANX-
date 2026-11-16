@@ -676,8 +676,9 @@ const row = (id: string, scheduledAt: string, extra: Partial<ProjectableRow> = {
 
   /* AND A WAY THROUGH THAT IS NOT A GESTURE — "שקיימים חצים או מנגנון מעבר
      חלופי". */
-  is(/aria-label="הסבב הקודם"|label="הסבב הקודם"/.test(swiper), 'there is a previous arrow');
-  is(/label="הסבב הבא"/.test(swiper), 'and a next arrow');
+  /* Same as above: the arrows' names are translated at render time. */
+  is(/label=\{?t?\(?'?"?הסבב הקודם/.test(swiper), 'there is a previous arrow');
+  is(/label=\{?t?\(?'?"?הסבב הבא/.test(swiper), 'and a next arrow');
   is(/disabled=\{index === 0\}/.test(swiper) && /disabled=\{index === count - 1\}/.test(swiper), 'disabled at the ends rather than hidden, so the row beside them does not jump');
   is(!/focus-visible:outline-none/.test(swiper), 'and nothing cancels the focus ring — the dots were invisible to a keyboard');
 }

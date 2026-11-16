@@ -1,6 +1,7 @@
 'use client';
 
 import type { QueueRow } from '@/lib/social/client';
+import { t } from '@/lib/social/i18n';
 
 /**
  * Turns a raw failure into something a business owner can act on: what
@@ -234,7 +235,7 @@ export function ErrorDetail({ row, technical = false }: { row: QueueRow; technic
             * min-h-11 + the padding that fills it; the display stays list-item
             * so the native disclosure triangle survives.
             */}
-          <summary className="min-h-11 cursor-pointer py-3.5 text-mist-500">פרטים טכניים</summary>
+          <summary className="min-h-11 cursor-pointer py-3.5 text-mist-500">{t('פרטים טכניים')}</summary>
           <p className="mt-1 break-words text-mist-500">{row.error || row.skip_reason}</p>
         </details>
       )}

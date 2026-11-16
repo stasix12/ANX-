@@ -1,6 +1,7 @@
 'use client';
 
 import { CTA_OPTIONS, type CtaType, type MediaItem } from '@/lib/social/types';
+import { t } from '@/lib/social/i18n';
 
 /**
  * A faithful-enough rendition of how the post will look in the Facebook
@@ -34,7 +35,7 @@ export function PostPreview({
 
   return (
     <div className="rounded-card border border-ink-700 bg-ink-800 p-2.5 shadow-[0_4px_14px_rgba(40,20,80,0.06),0_18px_44px_-12px_rgba(46,16,101,0.18)]">
-      <p className="px-1 pb-2 text-[11px] font-bold text-mist-500">כך זה ייראה בפייסבוק</p>
+      <p className="px-1 pb-2 text-[11px] font-bold text-mist-500">{t('כך זה ייראה בפייסבוק')}</p>
       <div className="overflow-hidden rounded-xl border border-slate-200 bg-white text-slate-900" dir="auto">
       <div className="flex items-center gap-3 px-4 pt-4">
         <div className="grid h-10 w-10 place-items-center rounded-full bg-gradient-to-br from-blue-600 to-sky-400 text-sm font-extrabold text-white">
@@ -42,7 +43,7 @@ export function PostPreview({
         </div>
         <div>
           <p className="text-sm font-bold">{pageName || 'שם הדף'}</p>
-          <p className="text-xs text-slate-500">עכשיו · 🌐</p>
+          <p className="text-xs text-slate-500">{t('עכשיו · 🌐')}</p>
         </div>
       </div>
 
@@ -50,13 +51,13 @@ export function PostPreview({
         {text.trim() ? (
           text.length > 400 ? (
             <>
-              {text.slice(0, 400)}… <span className="font-semibold text-slate-500">עוד</span>
+              {text.slice(0, 400)}… <span className="font-semibold text-slate-500">{t('עוד')}</span>
             </>
           ) : (
             text
           )
         ) : (
-          <span className="text-slate-400">הטקסט של הפוסט יופיע כאן</span>
+          <span className="text-slate-400">{t('הטקסט של הפוסט יופיע כאן')}</span>
         )}
       </p>
 
@@ -96,9 +97,9 @@ export function PostPreview({
       )}
 
       <div className="flex justify-around border-t border-slate-200 px-4 py-2 text-sm font-semibold text-slate-500">
-        <span>👍 אהבתי</span>
-        <span>💬 תגובה</span>
-        <span>↗ שיתוף</span>
+        <span>{t('👍 אהבתי')}</span>
+        <span>{t('💬 תגובה')}</span>
+        <span>{t('↗ שיתוף')}</span>
       </div>
       </div>
     </div>

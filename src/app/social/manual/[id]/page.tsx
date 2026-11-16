@@ -1,6 +1,7 @@
 'use client';
 
 import { useParams, useRouter } from 'next/navigation';
+import { t } from '@/lib/social/i18n';
 import { useEffect, useState } from 'react';
 import { CheckCircleIcon, CheckIcon, CopyIcon, PlayIcon } from '@/components/icons';
 import { PostPreview } from '@/components/social/PostPreview';
@@ -94,7 +95,7 @@ export default function ManualKitPage() {
 
   return (
     <SocialShell
-      title="פרסום בעזרת המערכת"
+      title={t('פרסום בעזרת המערכת')}
       headerAction={
         queue.length > 1 ? (
           <span className="rounded-full bg-brand-300/14 px-3 py-1.5 text-xs font-bold text-brand-400">
@@ -111,7 +112,7 @@ export default function ManualKitPage() {
       {loaded && !item && !error && (
         <EmptyState
           icon={<CheckCircleIcon className="h-5 w-5" />}
-          title="הפריט הזה כבר לא ממתין"
+          title={t('הפריט הזה כבר לא ממתין')}
           description="הוא כנראה כבר פורסם, דולג או הוסר. אפשר להמשיך לפריט הבא בתור."
           action={
             <Button size="lg" onClick={goNext}>
@@ -134,12 +135,12 @@ export default function ManualKitPage() {
             <div className="min-w-0 space-y-4">
               <Card
                 title={item.target?.name ?? 'יעד'}
-                subtitle="שלושה שלבים: העתיקו · פתחו · פרסמו"
-                action={<Badge tone="brand">פרסום ידני</Badge>}
+                subtitle={t('שלושה שלבים: העתיקו · פתחו · פרסמו')}
+                action={<Badge tone="brand">{t('פרסום ידני')}</Badge>}
               >
                 {/* Step 1 */}
-                <Step n={1} title="העתיקו את הטקסט" done={copied}>
-                  <textarea readOnly dir="auto" aria-label="הטקסט לפרסום" className={`${inputClass} min-h-40`} value={item.rendered_text} onFocus={(e) => e.currentTarget.select()} />
+                <Step n={1} title={t('העתיקו את הטקסט')} done={copied}>
+                  <textarea readOnly dir="auto" aria-label={t('הטקסט לפרסום')} className={`${inputClass} min-h-40`} value={item.rendered_text} onFocus={(e) => e.currentTarget.select()} />
                   <Button size="lg" className="mt-2 w-full" variant={copied ? 'secondary' : 'primary'} onClick={copyText}>
                     {copied ? <CheckIcon className="h-4 w-4" /> : <CopyIcon className="h-4 w-4" />} {copied ? 'הועתק' : 'העתק טקסט'}
                   </Button>
@@ -147,7 +148,7 @@ export default function ManualKitPage() {
 
                 {/* Step 2 */}
                 {media.length > 0 && (
-                  <Step n={2} title="הורידו את המדיה">
+                  <Step n={2} title={t('הורידו את המדיה')}>
                     <ul className="grid grid-cols-3 gap-2 sm:grid-cols-4 [&>*]:min-w-0">
                       {media.map((m) => (
                         <li key={m.url}>
@@ -177,12 +178,12 @@ export default function ManualKitPage() {
                         </li>
                       ))}
                     </ul>
-                    <p className="mt-1.5 text-[11px] text-mist-500">באייפון: לחיצה ארוכה על התמונה ← "שמור תמונה".</p>
+                    <p className="mt-1.5 text-[11px] text-mist-500">{t('באייפון: לחיצה ארוכה על התמונה ← "שמור תמונה".')}</p>
                   </Step>
                 )}
 
                 {/* Step 3 */}
-                <Step n={media.length > 0 ? 3 : 2} title="פתחו את הקבוצה ופרסמו" done={opened}>
+                <Step n={media.length > 0 ? 3 : 2} title={t('פתחו את הקבוצה ופרסמו')} done={opened}>
                   {item.target?.url ? (
                     <a
                       href={item.target.url}
@@ -191,14 +192,14 @@ export default function ManualKitPage() {
                       onClick={() => setOpened(true)}
                       className="flex min-h-12 w-full items-center justify-center rounded-xl bg-brand-500 px-4 text-base font-bold text-on-brand"
                     >
-                      פתח את הקבוצה בפייסבוק ↗
+                      {t('פתח את הקבוצה בפייסבוק ↗')}
                     </a>
                   ) : (
-                    <p className="text-sm text-mist-500">אין קישור ליעד הזה.</p>
+                    <p className="text-sm text-mist-500">{t('אין קישור ליעד הזה.')}</p>
                   )}
                   {post?.link_url && (
                     <p className="mt-2 text-sm">
-                      <span className="text-mist-500">קישור לצירוף: </span>
+                      <span className="text-mist-500">{t('קישור לצירוף:')} </span>
                       <a href={post.link_url} dir="ltr" className="text-brand-400" target="_blank" rel="noreferrer">
                         {post.link_url}
                       </a>
@@ -208,8 +209,8 @@ export default function ManualKitPage() {
               </Card>
 
               {item.status === 'manual_pending' ? (
-                <Card title="סיימתם?">
-                  <Field label="קישור לפוסט שפורסם (רשות)" hint="נשמר בהיסטוריה כדי שתוכלו לחזור אליו">
+                <Card title={t('סיימתם?')}>
+                  <Field label={t('קישור לפוסט שפורסם (רשות)')} hint={t('נשמר בהיסטוריה כדי שתוכלו לחזור אליו')}>
                     <input className={inputClass} dir="ltr" inputMode="url" value={permalink} onChange={(e) => setPermalink(e.target.value)} placeholder="https://www.facebook.com/groups/…/posts/…" />
                   </Field>
                   <div className="mt-3 grid gap-2 sm:grid-cols-2 [&>*]:min-w-0">
@@ -217,25 +218,25 @@ export default function ManualKitPage() {
                       <CheckIcon className="h-4 w-4" /> פורסם{remaining.length > 0 ? ' — לבא' : ''}
                     </Button>
                     <Button size="lg" variant="secondary" busy={busy} onClick={() => finish('skip')}>
-                      דלג על הקבוצה
+                      {t('דלג על הקבוצה')}
                     </Button>
                   </div>
                   {remaining.length > 0 && (
                     <div className="mt-2.5 flex items-center justify-between gap-2 text-xs">
                       <span className="text-mist-500">הבאה בתור: {remaining[0].target?.name ?? '—'}</span>
                       <button type="button" onClick={goNext} className="min-h-11 px-1 font-bold text-brand-400">
-                        עבור לבא בלי לשנות →
+                        {t('עבור לבא בלי לשנות →')}
                       </button>
                     </div>
                   )}
                 </Card>
               ) : (
-                <Notice tone="success">הפריט כבר טופל. אפשר להמשיך לבא בתור.</Notice>
+                <Notice tone="success">{t('הפריט כבר טופל. אפשר להמשיך לבא בתור.')}</Notice>
               )}
             </div>
 
             <aside className="min-w-0 space-y-2">
-              <p className="text-xs font-extrabold uppercase tracking-wide text-mist-500">איך זה ייראה</p>
+              <p className="text-xs font-extrabold uppercase tracking-wide text-mist-500">{t('איך זה ייראה')}</p>
               <PostPreview pageName={item.target?.name ?? 'קבוצה'} text={item.rendered_text} media={media} link={post?.link_url ?? ''} cta="" />
             </aside>
           </div>
@@ -257,7 +258,7 @@ function Step({ n, title, done, children }: { n: number; title: string; done?: b
         {/* The tick used to be a literal "✓", which VoiceOver read as "check
             mark" in the middle of the heading. The icon is silent, so the
             state it carries says itself. */}
-        {done && <span className="sr-only">בוצע: </span>}
+        {done && <span className="sr-only">{t('בוצע:')} </span>}
         {title}
       </h3>
       {children}

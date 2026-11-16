@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { t } from '@/lib/social/i18n';
 
 /**
  * "A new version is live — tap to load it."
@@ -57,7 +58,7 @@ export function UpdateBanner() {
       onClick={() => window.location.reload()}
       className="flex min-h-11 w-full items-center justify-center gap-2 bg-brand-500 px-4 text-sm font-bold text-on-brand"
     >
-      <span>יש גרסה חדשה של המערכת — הקישו לטעינה</span>
+      <span>{t('יש גרסה חדשה של המערכת — הקישו לטעינה')}</span>
       <span dir="ltr" className="font-mono text-xs opacity-80">
         {live}
       </span>

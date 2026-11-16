@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { t } from '@/lib/social/i18n';
 import { useRouter } from 'next/navigation';
 import { BoxIcon, ChevronDownIcon, ClipboardListIcon, CopyIcon, EyeIcon, ImageIcon, PencilIcon, PlusIcon, SearchIcon, TagIcon, TextIcon, VideoIcon } from '@/components/icons';
 import { ContentCard } from '@/components/social/ContentCard';
@@ -302,7 +303,7 @@ export default function LibraryPage() {
     <SocialShell
       /* PULL DOWN TO RELOAD — the same loader this screen's own actions call. */
       onRefresh={load}
-      title="ספריית תוכן"
+      title={t('ספריית תוכן')}
       lede="בחר פוסט מוכן לפרסום"
       headerAction={
         /* The one filled control on the screen, and it is the one that makes
@@ -352,16 +353,16 @@ export default function LibraryPage() {
               <input
                 type="search"
                 className={`${inputClass} min-h-14 rounded-2xl ps-11 text-[15px]`}
-                placeholder="חיפוש פוסט, נושא או טקסט…"
+                placeholder={t('חיפוש פוסט, נושא או טקסט…')}
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                aria-label="חיפוש פוסט"
+                aria-label={t('חיפוש פוסט')}
               />
             </div>
 
             <SegmentedControl
               variant="chips"
-              label="סוג תוכן"
+              label={t('סוג תוכן')}
               value={mediaFilter}
               onChange={setMediaFilter}
               options={[
@@ -414,7 +415,7 @@ export default function LibraryPage() {
               </button>
               {selected.length > 0 && (
                 <button type="button" className="min-h-11 px-1 text-mist-500" onClick={() => setSelected([])}>
-                  נקה בחירה
+                  {t('נקה בחירה')}
                 </button>
               )}
               <button
@@ -435,7 +436,7 @@ export default function LibraryPage() {
                 {categories.length > 0 && (
                   <SegmentedControl
                     variant="chips"
-                    label="קטגוריית תוכן"
+                    label={t('קטגוריית תוכן')}
                     value={categoryFilter}
                     onChange={setCategoryFilter}
                     options={[
@@ -451,7 +452,7 @@ export default function LibraryPage() {
                 )}
                 <SegmentedControl
                   variant="chips"
-                  label="פרסום"
+                  label={t('פרסום')}
                   value={publishedFilter}
                   onChange={setPublishedFilter}
                   options={[
@@ -470,7 +471,7 @@ export default function LibraryPage() {
             leaves `items` null, and the grid used to shimmer under the error
             banner with no way out but a browser reload. */}
         {!items && !error && (
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 [&>*]:min-w-0" aria-busy="true" aria-label="טוען…">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 [&>*]:min-w-0" aria-busy="true" aria-label={t('טוען…')}>
             {Array.from({ length: 8 }).map((_, i) => (
               <Skeleton key={i} className="h-72 rounded-card" />
             ))}
@@ -480,11 +481,11 @@ export default function LibraryPage() {
         {items && all.length === 0 && !error && (
           <EmptyState
             icon={<ClipboardListIcon className="h-5 w-5" />}
-            title="הספרייה עדיין ריקה"
+            title={t('הספרייה עדיין ריקה')}
             description="פוסט הוא הטקסט, התמונות והסרטונים שיוצאים לקבוצות. ברגע שיהיה כאן פוסט אחד, אפשר יהיה לשלוח אותו לעשרות קבוצות בלי לפתוח אותו שוב."
             action={
               <ButtonLink href="/social/posts/new" size="lg">
-                צור פוסט ראשון
+                {t('צור פוסט ראשון')}
               </ButtonLink>
             }
           />
@@ -493,11 +494,11 @@ export default function LibraryPage() {
         {items && all.length > 0 && visible.length === 0 && (
           <EmptyState
             icon={<SearchIcon className="h-5 w-5" />}
-            title="אין פוסטים בסינון הזה"
+            title={t('אין פוסטים בסינון הזה')}
             description="נסו לנקות את החיפוש או לבחור 'הכל'."
             action={
               <Button variant="secondary" onClick={clearFilters}>
-                נקה סינון
+                {t('נקה סינון')}
               </Button>
             }
           />
@@ -544,7 +545,7 @@ export default function LibraryPage() {
           <div className={`mx-auto flex max-w-3xl flex-wrap items-center gap-2 p-2.5 ${CARD_ELEVATED}`}>
             <Badge tone="brand">נבחרו {selected.length}</Badge>
             <Button size="sm" variant="secondary" onClick={() => setAssignOpen(true)}>
-              קטגוריה
+              {t('קטגוריה')}
             </Button>
             <Button
               size="sm"
@@ -568,10 +569,10 @@ export default function LibraryPage() {
                   );
               }}
             >
-              ארכיון
+              {t('ארכיון')}
             </Button>
             <button type="button" className="ms-auto min-h-11 px-3 text-xs font-bold text-mist-500" onClick={() => setSelected([])}>
-              בטל
+              {t('בטל')}
             </button>
           </div>
         </div>
@@ -607,7 +608,7 @@ export default function LibraryPage() {
           </p>
         ) : categories.length === 0 ? (
           <div className="space-y-3">
-            <p className="text-sm text-mist-300">עדיין אין קטגוריות תוכן. צרו אחת כדי לסדר את הספרייה.</p>
+            <p className="text-sm text-mist-300">{t('עדיין אין קטגוריות תוכן. צרו אחת כדי לסדר את הספרייה.')}</p>
             <Button
               size="lg"
               className="w-full"
@@ -616,7 +617,7 @@ export default function LibraryPage() {
                 setManageOpen(true);
               }}
             >
-              נהל קטגוריות
+              {t('נהל קטגוריות')}
             </Button>
           </div>
         ) : (
@@ -643,16 +644,16 @@ export default function LibraryPage() {
               }}
               className="flex min-h-11 w-full items-center rounded-xl border border-ink-600 px-3 text-start text-sm font-bold text-mist-500"
             >
-              ללא קטגוריה
+              {t('ללא קטגוריה')}
             </button>
           </div>
         )}
       </Sheet>
 
       {/* Creating / renaming / deleting categories, without leaving the library. */}
-      <Sheet open={manageOpen} onClose={() => setManageOpen(false)} title="קטגוריות תוכן" size="lg">
+      <Sheet open={manageOpen} onClose={() => setManageOpen(false)} title={t('קטגוריות תוכן')} size="lg">
         <p className="text-sm text-mist-500">
-          הקטגוריות כאן הן של הפוסטים. הקטגוריה שבמסך הקבוצות היא דבר אחר — היא מתארת את הקבוצות עצמן.
+          {t('הקטגוריות כאן הן של הפוסטים. הקטגוריה שבמסך הקבוצות היא דבר אחר — היא מתארת את הקבוצות עצמן.')}
         </p>
 
         {categorySchemaMissing && (
@@ -674,16 +675,16 @@ export default function LibraryPage() {
           }}
         >
           <div className="min-w-0 grow">
-            <Field label="קטגוריה חדשה" hint="למשל: ספות, מזגנים, לפני ואחרי, המלצות.">
-              <input className={inputClass} value={newCategory} onChange={(e) => setNewCategory(e.target.value)} placeholder="שם הקטגוריה" />
+            <Field label={t('קטגוריה חדשה')} hint={t('למשל: ספות, מזגנים, לפני ואחרי, המלצות.')}>
+              <input className={inputClass} value={newCategory} onChange={(e) => setNewCategory(e.target.value)} placeholder={t('שם הקטגוריה')} />
             </Field>
           </div>
           <Button type="submit" busy={busy === 'cat-new'} disabled={!newCategory.trim() || categorySchemaMissing}>
-            הוסף
+            {t('הוסף')}
           </Button>
         </form>
 
-        {categories.length === 0 && <p className="mt-4 text-sm text-mist-500">עדיין אין קטגוריות.</p>}
+        {categories.length === 0 && <p className="mt-4 text-sm text-mist-500">{t('עדיין אין קטגוריות.')}</p>}
 
         <ul className="mt-4 space-y-2">
           {categories.map((c) => {
@@ -707,7 +708,7 @@ export default function LibraryPage() {
                   busy={busy === `cat-${c.id}`}
                   onClick={() => act(`cat-${c.id}`, () => saveCategory({ id: c.id, name: draft.trim() }), 'השם עודכן.')}
                 >
-                  שמור
+                  {t('שמור')}
                 </Button>
                 <Button
                   size="sm"
@@ -723,7 +724,7 @@ export default function LibraryPage() {
                     if (ok) await act(`catdel-${c.id}`, () => deleteCategory(c.id), 'הקטגוריה נמחקה. הפוסטים נשארו.');
                   }}
                 >
-                  מחק
+                  {t('מחק')}
                 </Button>
               </li>
             );
@@ -734,7 +735,7 @@ export default function LibraryPage() {
 
       {/* How the post will look in the feed — the editor's own preview component,
           so the two screens cannot show two different things. */}
-      <Sheet open={Boolean(previewItem)} onClose={() => setPreviewItem(null)} title="תצוגה מקדימה" size="lg">
+      <Sheet open={Boolean(previewItem)} onClose={() => setPreviewItem(null)} title={t('תצוגה מקדימה')} size="lg">
         {previewItem && (
           <div className="space-y-3">
             <PostPreview
@@ -745,7 +746,7 @@ export default function LibraryPage() {
               cta={previewItem.post.cta_type}
             />
             <p className="text-xs text-mist-500">
-              כך ייראה הפוסט בערך בפיד. אם יש לפוסט גרסאות מאושרות, כל קבוצה עשויה לקבל נוסח אחר — הנוסח הבסיסי הוא מה שמוצג כאן.
+              {t('כך ייראה הפוסט בערך בפיד. אם יש לפוסט גרסאות מאושרות, כל קבוצה עשויה לקבל נוסח אחר — הנוסח הבסיסי הוא מה שמוצג כאן.')}
             </p>
             <Button
               size="lg"
@@ -756,7 +757,7 @@ export default function LibraryPage() {
                 openPublish(it);
               }}
             >
-              פרסם את הפוסט הזה
+              {t('פרסם את הפוסט הזה')}
             </Button>
           </div>
         )}

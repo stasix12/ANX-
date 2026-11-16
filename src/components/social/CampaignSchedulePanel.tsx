@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { t } from '@/lib/social/i18n';
 
 import {
   DAY_LABELS,
@@ -429,7 +430,7 @@ export function CampaignSchedulePanel({
         */}
         {busy && (
           <div data-saving className="mb-1.5 flex justify-center">
-            <WorkingNote label="שומר את השינוי…" />
+            <WorkingNote label={t('שומר את השינוי…')} />
           </div>
         )}
         {/* ─── 1. the header: calendar, title, subtitle, switch ───────────── */}
@@ -440,14 +441,14 @@ export function CampaignSchedulePanel({
             <CalendarIcon className="h-3.5 w-3.5 text-brand-400" />
           </span>
           <span className="min-w-0 grow">
-            <span className="block text-[12.5px] font-extrabold leading-4 text-mist-100">תזמון פרסום</span>
+            <span className="block text-[12.5px] font-extrabold leading-4 text-mist-100">{t('תזמון פרסום')}</span>
             {/* WHAT THE CHIPS USED TO BE LABELLED. The reference replaces the
                 "ימי פרסום" line above the row with this sentence, which says
                 the same thing and also names the second control. The row
                 itself keeps "ימי פרסום" as its accessible name, so a screen
                 reader is not relying on a sentence two elements away. */}
             <span className="mt-px block text-[10px] font-bold leading-[13px] text-mist-300">
-              בחר את ימי הפרסום והגדר את שעת ההתחלה
+              {t('בחר את ימי הפרסום והגדר את שעת ההתחלה')}
             </span>
           </span>
         </div>
@@ -499,7 +500,7 @@ export function CampaignSchedulePanel({
              brief. */
           className={`block text-center text-[10px] font-bold leading-[13px] text-mist-300 ${compact ? 'hidden' : showHeader ? 'mt-1.5' : 'mt-0'}`}
         >
-          ימי פרסום
+          {t('ימי פרסום')}
         </span>
         <div
           role="group"
@@ -599,8 +600,8 @@ export function CampaignSchedulePanel({
             <ClockIcon className="h-3.5 w-3.5 text-brand-400" />
           </span>
           <span className="min-w-0 grow">
-            <span className="block text-[12.5px] font-extrabold leading-4 text-mist-100">שעת התחלה</span>
-            <span className="mt-px block text-[10px] font-bold leading-[13px] text-mist-300">הסבב פותח בשעה הזו בכל יום פרסום</span>
+            <span className="block text-[12.5px] font-extrabold leading-4 text-mist-100">{t('שעת התחלה')}</span>
+            <span className="mt-px block text-[10px] font-bold leading-[13px] text-mist-300">{t('הסבב פותח בשעה הזו בכל יום פרסום')}</span>
           </span>
           <span aria-hidden className="h-7 w-px shrink-0 bg-ink-700" />
           {/*
@@ -696,7 +697,7 @@ export function CampaignSchedulePanel({
               so one sentence covers both and the reader is never asked to
               know which.
             */
-            <span className="min-w-0">מפרסם בכל יום, בכל שעה</span>
+            <span className="min-w-0">{t('מפרסם בכל יום, בכל שעה')}</span>
           )}
         </div>
 
@@ -789,12 +790,12 @@ export function CampaignSchedulePanel({
               <RepeatIcon className="h-3.5 w-3.5 text-brand-400" />
             </span>
             <span className="min-w-0 grow">
-              <span className="block text-[12.5px] font-extrabold leading-4 text-mist-100">חזרה יומית</span>
+              <span className="block text-[12.5px] font-extrabold leading-4 text-mist-100">{t('חזרה יומית')}</span>
               {/* THE REFERENCE'S OWN SUBTITLE. "הפעל חזרה יומית של הקמפיין"
                   was an instruction to press the switch; the image writes
                   what the switch DOES, which is also the only one of the two
                   that is still true while it is off. */}
-              <span className="mt-px block text-[10px] font-bold leading-[13px] text-mist-300">הקמפיין יחזור אוטומטית בכל יום</span>
+              <span className="mt-px block text-[10px] font-bold leading-[13px] text-mist-300">{t('הקמפיין יחזור אוטומטית בכל יום')}</span>
             </span>
             {/* The reference draws a rule between the text and the controls
                 in this row, the same one the blue block and the strip carry. */}
@@ -812,15 +813,14 @@ export function CampaignSchedulePanel({
                 * on a dot that is ALWAYS present: nothing appears, nothing
                 * disappears, and the row cannot change height.
               */}
-              <InfoDot title="חזרה יומית">
+              <InfoDot title={t('חזרה יומית')}>
                 {neverLaunched ? (
                   <>
                     <p>
-                      הסבב הזה עוד לא יצא אף פעם, ולכן אין עדיין רשימת קבוצות לחזור אליה — החזרה היומית לא תיכנס לפעולה והתזמון לא יכניס
-                      פרסומים לתור.
+                      {t('הסבב הזה עוד לא יצא אף פעם, ולכן אין עדיין רשימת קבוצות לחזור אליה — החזרה היומית לא תיכנס לפעולה והתזמון לא יכניס פרסומים לתור.')}
                     </p>
                     <p className="text-warning-400">
-                      השיקו אותו פעם אחת — הוסיפו פוסט, בחרו קבוצות ושלחו — ומאותו רגע התזמון והחזרה יעבדו לבד.
+                      {t('השיקו אותו פעם אחת — הוסיפו פוסט, בחרו קבוצות ושלחו — ומאותו רגע התזמון והחזרה יעבדו לבד.')}
                     </p>
                   </>
                 ) : (
@@ -828,7 +828,7 @@ export function CampaignSchedulePanel({
                     {/* The consequence to HIS Facebook account leads, because
                         it is the one thing here he cannot undo. */}
                     <p className="text-warning-400">
-                      פרסום חוזר של אותה מודעה לאותן קבוצות עלול לגרום להסרה מהקבוצות או להגבלת החשבון שלכם בפייסבוק.
+                      {t('פרסום חוזר של אותה מודעה לאותן קבוצות עלול לגרום להסרה מהקבוצות או להגבלת החשבון שלכם בפייסבוק.')}
                     </p>
                     {/*
                       THE TENSE FOLLOWS THE SWITCH.
@@ -977,7 +977,7 @@ function TimePick({
      * squeezed back by a long campaign name.
      */
     <span className="relative block w-[128px] shrink-0">
-      <span className="sr-only">שעת התחלה</span>
+      <span className="sr-only">{t('שעת התחלה')}</span>
         <input
           type="time"
           step={60}

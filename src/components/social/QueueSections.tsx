@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo } from 'react';
+import { t } from '@/lib/social/i18n';
 import type { QueueRow } from '@/lib/social/client';
 import { PublicationItem, type PublicationActions } from './PublicationItem';
 import { EmptyState } from './ui';
@@ -75,15 +76,15 @@ export function QueueSections({
 
   return (
     <div className="space-y-4">
-      <Group title="דורשים אתכם" tone="text-warning-400" items={attention} actions={actions} busyRowId={busyRowId} projected={projected} />
-      <Group title="מפרסם עכשיו" tone="text-brand-400" items={now} actions={actions} busyRowId={busyRowId} projected={projected} pulse />
-      <Group title="הבאים בתור" tone="text-brand-400" items={next.slice(0, nextLimit)} actions={actions} busyRowId={busyRowId} projected={projected} showDate more={next.length - nextLimit} />
+      <Group title={t('דורשים אתכם')} tone="text-warning-400" items={attention} actions={actions} busyRowId={busyRowId} projected={projected} />
+      <Group title={t('מפרסם עכשיו')} tone="text-brand-400" items={now} actions={actions} busyRowId={busyRowId} projected={projected} pulse />
+      <Group title={t('הבאים בתור')} tone="text-brand-400" items={next.slice(0, nextLimit)} actions={actions} busyRowId={busyRowId} projected={projected} showDate more={next.length - nextLimit} />
       {/* "הסתיימו", not "הושלמו": this group is TERMINAL_STATUSES, so its rows
           and its count include the failed and the skipped. "הושלמו" is the word
           this module reserves for publications — it is what once let a run that
           published nothing read "84 מתוך 84 הושלמו" — and a heading with a
           number beside it is exactly where that word does the damage. */}
-      <Group title="הסתיימו" tone="text-success-400" items={done.slice(0, doneLimit)} actions={actions} busyRowId={busyRowId} projected={projected} more={done.length - doneLimit} />
+      <Group title={t('הסתיימו')} tone="text-success-400" items={done.slice(0, doneLimit)} actions={actions} busyRowId={busyRowId} projected={projected} more={done.length - doneLimit} />
     </div>
   );
 }

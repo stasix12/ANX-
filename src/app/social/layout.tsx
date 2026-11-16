@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from 'next';
 import { CrashLogger } from '@/components/social/CrashLogger';
+import { LangBoundary } from '@/components/social/LangBoundary';
 import { SocialGate } from '@/components/social/SocialGate';
 import { ToastProvider } from '@/components/social/ui';
 
@@ -105,7 +106,11 @@ export default function SocialLayout({ children }: { children: React.ReactNode }
           log. See CrashLogger. */}
       <CrashLogger />
       <ToastProvider>
-        <SocialGate>{children}</SocialGate>
+        {/* Re-keys the app when the language changes, which is what makes a
+            switch reach the screens that call the plain t(). */}
+        <LangBoundary>
+          <SocialGate>{children}</SocialGate>
+        </LangBoundary>
       </ToastProvider>
     </div>
   );

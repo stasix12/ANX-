@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { t } from '@/lib/social/i18n';
 import type { MediaItem } from '@/lib/social/types';
 import { MediaUploader } from './MediaUploader';
 import { Button, Field, Notice, SegmentedControl, Sheet, inputClass } from './ui';
@@ -58,42 +59,42 @@ export function CampaignCommentSheet({
   const howLong = totalMinutes < 1 ? 'פחות מדקה' : totalMinutes < 60 ? `בערך ${totalMinutes} דקות` : `בערך ${Math.round(totalMinutes / 6) / 10} שעות`;
 
   return (
-    <Sheet open={open} onClose={onClose} title="הוסף תגובה לכל הפרסומים בסבב">
+    <Sheet open={open} onClose={onClose} title={t('הוסף תגובה לכל הפרסומים בסבב')}>
       {publishedCount === 0 ? (
         /* Nothing has gone out yet, so there is nothing to comment on. Saying
            it here beats a button that looks live and does nothing. */
-        <Notice tone="warn">בסבב הזה עוד לא יצא אף פרסום, ולכן אין על מה להגיב. חזרו אחרי שהפרסומים יתחילו לצאת.</Notice>
+        <Notice tone="warn">{t('בסבב הזה עוד לא יצא אף פרסום, ולכן אין על מה להגיב. חזרו אחרי שהפרסומים יתחילו לצאת.')}</Notice>
       ) : (
         <>
-          <Field label="הטקסט של התגובה" hint="אפשר להשאיר ריק ולהעלות רק תמונה.">
+          <Field label={t('הטקסט של התגובה')} hint={t('אפשר להשאיר ריק ולהעלות רק תמונה.')}>
             <textarea
               className={inputClass}
               dir="auto"
               rows={4}
               value={text}
               onChange={(e) => setText(e.target.value)}
-              placeholder="מחירון מלא בתמונה 👇 לתיאום: 050-0000000"
+              placeholder={t('מחירון מלא בתמונה 👇 לתיאום: 050-0000000')}
             />
           </Field>
           <div className="mt-3">
             {/* One image, and the limit is Facebook's: a comment takes one
                 attachment. Accepting more and quietly sending one would be
                 worse than not accepting them. */}
-            <Field label="תמונה לתגובה (לא חובה)" hint="מחירון, לפני/אחרי — תמונה אחת, זה מה שפייסבוק מאפשרת בתגובה.">
+            <Field label={t('תמונה לתגובה (לא חובה)')} hint={t('מחירון, לפני/אחרי — תמונה אחת, זה מה שפייסבוק מאפשרת בתגובה.')}>
               {/* The uploader prints its own footer, and its default one says
                   "תמונות (כמה שתרצו) או סרטון אחד" — the opposite of the rule
                   above it, three centimetres away, inside the one sheet where
                   the limit is one. */}
               <MediaUploader
                 media={media}
-                hint="תמונה אחת. זה מה שפייסבוק מאפשרת בתגובה."
+                hint={t('תמונה אחת. זה מה שפייסבוק מאפשרת בתגובה.')}
                 onChange={(m) => setMedia(m.filter((x) => x.kind === 'image').slice(0, 1))}
               />
             </Field>
           </div>
 
           <div className="mt-3">
-            <Field label="מרווח בין תגובה לתגובה (שניות)" hint="כמה זמן להמתין בין פרסום לפרסום.">
+            <Field label={t('מרווח בין תגובה לתגובה (שניות)')} hint={t('כמה זמן להמתין בין פרסום לפרסום.')}>
               <input
                 className={inputClass}
                 dir="ltr"
@@ -113,7 +114,7 @@ export function CampaignCommentSheet({
             <div className="mt-2">
               <SegmentedControl
                 variant="chips"
-                label="מרווח מהיר"
+                label={t('מרווח מהיר')}
                 value={String(gapSeconds)}
                 onChange={setGap}
                 options={QUICK_GAPS.map((v) => ({ value: v, label: `${v} שנ׳` }))}
@@ -129,18 +130,18 @@ export function CampaignCommentSheet({
             and somebody watching for all of them at once would think it broke.
           */}
           <p className="mt-1.5 text-xs text-mist-500">
-            הן נוספות אחת-אחת ולא כולן יחד, והתוכנה במחשב צריכה לפעול לאורך כל הזמן הזה. אפשר לעקוב בכרטיס הסבב.
+            {t('הן נוספות אחת-אחת ולא כולן יחד, והתוכנה במחשב צריכה לפעול לאורך כל הזמן הזה. אפשר לעקוב בכרטיס הסבב.')}
           </p>
           {/* Said once, plainly, and only when it applies. It is his account
               and his call — but a choice this fast is worth knowing about
               before it is made, not after. */}
           {gapSeconds < 15 && publishedCount > 20 && (
             <p className="mt-1.5 text-xs text-warning-400">
-              מרווח קצר על הרבה פרסומים הוא הדפוס שפייסבוק מזהה הכי בקלות. 20 שניות ומעלה בטוח יותר לחשבון.
+              {t('מרווח קצר על הרבה פרסומים הוא הדפוס שפייסבוק מזהה הכי בקלות. 20 שניות ומעלה בטוח יותר לחשבון.')}
             </p>
           )}
           <p className="mt-1.5 text-xs text-mist-500">
-            תגובה נוספת רק לפרסום שהמערכת מזהה בוודאות שהוא שלה. פרסום שלא הצליחה להגיב עליו מסומן בנפרד ולא נספר כאילו הצליח.
+            {t('תגובה נוספת רק לפרסום שהמערכת מזהה בוודאות שהוא שלה. פרסום שלא הצליחה להגיב עליו מסומן בנפרד ולא נספר כאילו הצליח.')}
           </p>
 
           <div className="mt-4 flex flex-wrap gap-2">
@@ -148,7 +149,7 @@ export function CampaignCommentSheet({
               {`הוסף תגובה ל-${publishedCount} פרסומים`}
             </Button>
             <Button variant="secondary" onClick={onClose}>
-              ביטול
+              {t('ביטול')}
             </Button>
           </div>
         </>

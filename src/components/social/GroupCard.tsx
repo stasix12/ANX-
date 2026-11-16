@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { t } from '@/lib/social/i18n';
 import { formatDayMonthHe } from '@/lib/social/time';
 import { isPendingShare, type SocialTarget } from '@/lib/social/types';
 import { CheckIcon, StarIcon } from '@/components/icons';
@@ -116,7 +117,7 @@ export function GroupCard({
       */}
       {isPendingShare(group.external_id) ? (
         <p dir="auto" className="mt-0.5 w-full truncate text-[11px] font-bold leading-[14px] text-warning-400">
-          מזוהה…
+          {t('מזוהה…')}
         </p>
       ) : (
         cityLabel && (
@@ -211,7 +212,7 @@ export function GroupCard({
           {group.favorite && (
             <span
               aria-hidden
-              title="מועדפת"
+              title={t('מועדפת')}
               className="pointer-events-none absolute start-1 top-1 z-10 text-warning-400"
             >
               <StarIcon className="h-3.5 w-3.5" fill="currentColor" />

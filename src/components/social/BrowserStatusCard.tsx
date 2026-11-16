@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { t } from '@/lib/social/i18n';
 import { listRecentCommands, listWorkers, resumeNeedsAttention, sendWorkerCommand } from '@/lib/social/client';
 import { ChevronDownIcon } from '@/components/icons';
 import { Stamp } from './DateTime';
@@ -205,7 +206,7 @@ export function BrowserStatusCard({
       >
         <span aria-hidden className={`h-2.5 w-2.5 shrink-0 rounded-full ${TONE_FILL[light.tone]}`} />
         <span className="min-w-0 grow">
-          <span className="block truncate text-sm font-extrabold text-mist-100">התוכנה במחשב פועלת ומחוברת</span>
+          <span className="block truncate text-sm font-extrabold text-mist-100">{t('התוכנה במחשב פועלת ומחוברת')}</span>
           <span className="block truncate text-[11px] text-mist-500">
             נראה לאחרונה <Stamp iso={worker?.last_seen_at} />
             {worker?.debug_mode && ' · חלון גלוי'}
@@ -229,12 +230,12 @@ export function BrowserStatusCard({
           </button>
         ) : undefined
       }
-      title="פרסום בקבוצות — התוכנה שרצה במחשב"
+      title={t('פרסום בקבוצות — התוכנה שרצה במחשב')}
       /* "worker" is a developer's word and it was the title of this card, on a
          screen a cleaning-business owner reads on a phone. The thing it names
          is the one reason to own this product, so it is named in Hebrew and
          explained in a line. */
-      subtitle="קבוצות פייסבוק מתפרסמות רק דרך חלון Chrome אמיתי על המחשב שלכם. כאן רואים אם הוא פועל."
+      subtitle={t('קבוצות פייסבוק מתפרסמות רק דרך חלון Chrome אמיתי על המחשב שלכם. כאן רואים אם הוא פועל.')}
     >
       {error && <div className="mb-2"><Notice tone="error">{error}</Notice></div>}
       <p className={`flex items-center gap-2 text-lg font-extrabold ${TONE_TEXT[light.tone]}`}>
@@ -262,7 +263,7 @@ export function BrowserStatusCard({
       {stale && (
         <div className="mt-3">
           <Notice tone="warn">
-            <strong>התוכנה במחשב מריצה גרסה ישנה</strong> (<span dir="ltr">{worker?.version}</span> במקום <span dir="ltr">{WORKER_VERSION}</span>).
+            <strong>{t('התוכנה במחשב מריצה גרסה ישנה')}</strong> (<span dir="ltr">{worker?.version}</span> במקום <span dir="ltr">{WORKER_VERSION}</span>).
             {' '}היא מורידה את הגרסה החדשה בעצמה ומתקינה אותה ברגע שלא יוצא פרסום — אין צורך לגעת במחשב. זה לוקח עד שעה. אם המספר לא התחלף גם אחרי כמה שעות, כתבו
             לנו — יש משהו שחוסם את העדכון, וזה לא משהו שצריך לטפל בו מהמחשב.
           </Notice>
@@ -271,7 +272,7 @@ export function BrowserStatusCard({
       {needsHuman && (
         <div className="mt-3">
           <Notice tone="warn">
-            <strong>Facebook דורש פעולה ידנית.</strong> {worker?.attention_message || 'פתחו את חלון הדפדפן שנפתח במחשב (או לחצו "התחבר לפייסבוק"), טפלו באימות, ואז "בדוק שוב".'}
+            <strong>{t('Facebook דורש פעולה ידנית.')}</strong> {worker?.attention_message || 'פתחו את חלון הדפדפן שנפתח במחשב (או לחצו "התחבר לפייסבוק"), טפלו באימות, ואז "בדוק שוב".'}
           </Notice>
         </div>
       )}
@@ -296,20 +297,20 @@ export function BrowserStatusCard({
       {!needsHuman && worker?.online && worker.attention_message && (
         <div className="mt-3">
           <Notice tone="warn">
-            <strong>שימו לב.</strong> {worker.attention_message}
+            <strong>{t('שימו לב.')}</strong> {worker.attention_message}
           </Notice>
         </div>
       )}
       <div className="mt-3 flex flex-wrap gap-2">
         <Button busy={busy === 'login'} disabled={!worker?.online} onClick={() => send('login')}>
-          התחבר לפייסבוק
+          {t('התחבר לפייסבוק')}
         </Button>
         <Button variant="secondary" busy={busy === 'check'} disabled={!worker?.online} onClick={() => send('check')}>
           {needsHuman ? 'בדוק שוב' : 'בדוק חיבור'}
         </Button>
         {needsHuman && (
           <Button variant="secondary" busy={busy === 'resume'} onClick={() => send('resume')}>
-            המשך סבב
+            {t('המשך סבב')}
           </Button>
         )}
         <Button
@@ -326,7 +327,7 @@ export function BrowserStatusCard({
             if (ok) send('logout');
           }}
         >
-          נתק
+          {t('נתק')}
         </Button>
       </div>
       {lastCommand && (
@@ -337,7 +338,7 @@ export function BrowserStatusCard({
       )}
       {confirm.dialog}
       {!worker?.online && (
-        <p className="mt-2 text-xs text-mist-500">"התחבר לפייסבוק" פותח חלון Chrome אמיתי על המחשב שמריץ את התוכנה; אתם מתחברים בעצמכם, והמערכת לא רואה סיסמה.</p>
+        <p className="mt-2 text-xs text-mist-500">{t('"התחבר לפייסבוק" פותח חלון Chrome אמיתי על המחשב שמריץ את התוכנה; אתם מתחברים בעצמכם, והמערכת לא רואה סיסמה.')}</p>
       )}
     </Card>
   );

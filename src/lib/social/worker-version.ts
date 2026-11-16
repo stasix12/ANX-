@@ -1045,7 +1045,18 @@
  * the window are translated, and worker/test/desktop-window.test.ts fails if
  * a new Hebrew line is ever added without one.
  */
-export const WORKER_VERSION = '4.72.0';
+/*
+ * 4.72.0 → 4.73.0 — רוסית בכל מסכי האפליקציה.
+ *
+ * v4.72.0 published 16.11 at 04:34 (asked, not assumed), so 4.73.0 is free.
+ *
+ * WHAT MOVED THE FINGERPRINT: src/lib/social/i18n.ts gained the plain t(),
+ * the function the 44 translated screens call. The screens themselves are
+ * under src/app and src/components and ship with the website, not the
+ * installer — but the dictionary they call is bundled, so the installer's
+ * stamp moves with it.
+ */
+export const WORKER_VERSION = '4.73.0';
 
 /**
  * A FINGERPRINT OF EVERYTHING THE INSTALLER CARRIES.
@@ -1796,4 +1807,4 @@ export const WORKER_VERSION = '4.72.0';
  * worker/facebook/join.ts and written by worker/social-worker.ts, both of
  * which run only on his PC. Numbers under WORKER_VERSION above.
  */
-export const WORKER_FINGERPRINT = '4db006109ca1bfa5';
+export const WORKER_FINGERPRINT = '1d24f0550ed0f93d';

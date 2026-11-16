@@ -1,6 +1,7 @@
 'use client';
 
 import type { QueueRow } from '@/lib/social/client';
+import { t } from '@/lib/social/i18n';
 import { agree } from '@/lib/social/time';
 import { Stamp } from './DateTime';
 import { Card } from './ui';
@@ -99,7 +100,7 @@ export function CampaignReach({
   if (!readAt) return null;
 
   return (
-    <Card title="מה הפרסומים עשו" subtitle="נקרא מהפוסטים עצמם בפייסבוק, לא מחושב ולא משוער.">
+    <Card title={t('מה הפרסומים עשו')} subtitle={t('נקרא מהפוסטים עצמם בפייסבוק, לא מחושב ולא משוער.')}>
       {
         <>
           <dl className="grid grid-cols-2 gap-2 sm:grid-cols-4 [&>*]:min-w-0">
@@ -114,14 +115,14 @@ export function CampaignReach({
               answer.
             */}
             {views.posts > 0 && (
-              <Figure label="צפיות בסרטון" value={views.total} posts={views.posts} of={publishedOf} />
+              <Figure label={t('צפיות בסרטון')} value={views.total} posts={views.posts} of={publishedOf} />
             )}
             {(seen.posts > 0 || views.posts === 0) && (
-              <Figure label="נצפה על ידי" value={seen.posts ? seen.total : null} posts={seen.posts} of={publishedOf} />
+              <Figure label={t('נצפה על ידי')} value={seen.posts ? seen.total : null} posts={seen.posts} of={publishedOf} />
             )}
-            <Figure label="לייקים" value={reactions.posts ? reactions.total : null} posts={reactions.posts} of={publishedOf} />
-            <Figure label="תגובות" value={comments.posts ? comments.total : null} posts={comments.posts} of={publishedOf} />
-            <Figure label="שיתופים" value={shares.posts ? shares.total : null} posts={shares.posts} of={publishedOf} />
+            <Figure label={t('לייקים')} value={reactions.posts ? reactions.total : null} posts={reactions.posts} of={publishedOf} />
+            <Figure label={t('תגובות')} value={comments.posts ? comments.total : null} posts={comments.posts} of={publishedOf} />
+            <Figure label={t('שיתופים')} value={shares.posts ? shares.total : null} posts={shares.posts} of={publishedOf} />
           </dl>
           <p className="mt-3 text-xs text-mist-500">
             עודכן לאחרונה <Stamp iso={readAt} />
@@ -135,7 +136,7 @@ export function CampaignReach({
         more than a confident invented one.
       */}
       <p className="mt-2 text-xs text-mist-500">
-        פייסבוק לא מפרסמת מספר חשיפה לפוסט בקבוצה, ולכן אין כאן מספר כזה. "צפיות בסרטון" מופיע על פוסטי וידאו, ו"נצפה על ידי" רק בקבוצות שבהן פייסבוק עצמה מציגה אותו.
+        {t('פייסבוק לא מפרסמת מספר חשיפה לפוסט בקבוצה, ולכן אין כאן מספר כזה. "צפיות בסרטון" מופיע על פוסטי וידאו, ו"נצפה על ידי" רק בקבוצות שבהן פייסבוק עצמה מציגה אותו.')}
       </p>
     </Card>
   );

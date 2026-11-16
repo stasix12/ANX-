@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { t } from '@/lib/social/i18n';
 import { CheckIcon, ImageIcon, PlayIcon, SendIcon } from '@/components/icons';
 import type { LibraryPost } from '@/lib/social/library';
 import { agree, formatDayMonthHe } from '@/lib/social/time';
@@ -181,7 +182,7 @@ export function ContentCard({
         */}
         <div className="mt-1.5 flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1 px-0.5 text-[11px] leading-tight text-mist-500">
           <Badge tone="brand">{kind}</Badge>
-          {post.status === 'draft' && <Badge tone="neutral">טיוטה</Badge>}
+          {post.status === 'draft' && <Badge tone="neutral">{t('טיוטה')}</Badge>}
           {item.pendingCount > 0 && <Badge tone="brand">{item.pendingCount === 1 ? 'אחד בתור' : `${item.pendingCount} בתור`}</Badge>}
           {item.publishCount === 0 ? (
             <span className="truncate">{nothingYet}</span>
@@ -208,7 +209,7 @@ export function ContentCard({
 
         <div className="mt-auto flex items-center gap-1 pt-2">
           <Button size="sm" className="grow" onClick={() => onPublish(item)}>
-            פרסם
+            {t('פרסם')}
           </Button>
           {actions.length > 0 && <OverflowMenu label={title} actions={actions} />}
         </div>

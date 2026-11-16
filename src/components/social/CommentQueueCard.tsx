@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { t } from '@/lib/social/i18n';
 import { useState } from 'react';
 import type { CommentTotals, QueueRow } from '@/lib/social/client';
 import { retryComment, retryFailedComments } from '@/lib/social/client';
@@ -146,7 +147,7 @@ export function CommentQueueCard({
           תגובות לפרסומים
         </span>
       }
-      subtitle="מעקב אחר תגובות על הפוסטים שפורסמו בקבוצות"
+      subtitle={t('מעקב אחר תגובות על הפוסטים שפורסמו בקבוצות')}
     >
       {/* ── the numbers ──────────────────────────────────────────────── */}
       {/* A flex row, not a paragraph with an inline badge in it: `ms-2` on an
@@ -164,7 +165,7 @@ export function CommentQueueCard({
         ) : (
           /* Not "0 מתוך 0 · 0% הצלחה". Nothing has been tried today, and a zero
              percent success rate is a verdict on work that never happened. */
-          <p className="text-sm font-bold text-mist-300">עדיין לא הסתיימו תגובות היום</p>
+          <p className="text-sm font-bold text-mist-300">{t('עדיין לא הסתיימו תגובות היום')}</p>
         )}
         <span className="grow" />
         {needsHuman > 0 && <p className="text-sm font-extrabold text-warning-400">{needsHuman} לטיפול</p>}
@@ -268,7 +269,7 @@ export function CommentQueueCard({
       >
         <div className="overflow-hidden" inert={!openDone}>
           <div className="mt-3 border-t border-ink-700 pt-3">
-            <h3 className="text-[13px] font-extrabold text-mist-100">תגובות שהועלו</h3>
+            <h3 className="text-[13px] font-extrabold text-mist-100">{t('תגובות שהועלו')}</h3>
             {/*
               * THE TILE COUNTS TODAY AND THIS LIST DOES NOT, so it says so
               * rather than letting the reader discover it from a date. Hiding
@@ -364,7 +365,7 @@ export function CommentQueueCard({
           {stuck.length > 0 && (
             <div className="mt-3 border-t border-ink-700 pt-3">
               <div className="flex flex-wrap items-center gap-2">
-                <h3 className="text-[13px] font-extrabold text-mist-100">תגובות שנכשלו</h3>
+                <h3 className="text-[13px] font-extrabold text-mist-100">{t('תגובות שנכשלו')}</h3>
                 <span className="grow" />
                 {rounds.length > 0 && (
                   <button

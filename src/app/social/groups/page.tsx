@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { t } from '@/lib/social/i18n';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { GroupCard } from '@/components/social/GroupCard';
@@ -484,7 +485,7 @@ export default function GroupsPage() {
     <SocialShell
       /* PULL DOWN TO RELOAD — the same loader this screen's own actions call. */
       onRefresh={load}
-      title="קבוצות"
+      title={t('קבוצות')}
       lede="היעדים שאליהם המערכת מפרסמת"
       headerAction={
         <div className="flex items-center gap-1.5">
@@ -512,9 +513,9 @@ export default function GroupsPage() {
               act('recheck', () => requestGroupRefresh(), 'התוכנה במחשב תעבור על הקבוצות ותבדוק בכל אחת אם עדיין אפשר לפרסם. זה נעשה לאט, בין פרסומים.')
             }
           >
-            בדוק הכל
+            {t('בדוק הכל')}
           </Button>
-          <Button onClick={() => setAddOpen(true)}>+ הוסף</Button>
+          <Button onClick={() => setAddOpen(true)}>{t('+ הוסף')}</Button>
         </div>
       }
     >
@@ -554,8 +555,8 @@ export default function GroupsPage() {
             <SearchIcon aria-hidden className="h-5 w-5 text-brand-400" />
           </span>
           <span className="min-w-0 flex-1">
-            <span className="block text-sm font-extrabold text-mist-100">גילוי קבוצות</span>
-            <span className="block truncate text-xs text-mist-500">חפשו עיר או נושא וראו אילו קבוצות קיימות</span>
+            <span className="block text-sm font-extrabold text-mist-100">{t('גילוי קבוצות')}</span>
+            <span className="block truncate text-xs text-mist-500">{t('חפשו עיר או נושא וראו אילו קבוצות קיימות')}</span>
           </span>
           <ChevronIcon aria-hidden className="h-4 w-4 shrink-0 text-mist-500 rtl:rotate-180" />
         </Link>
@@ -637,7 +638,7 @@ export default function GroupsPage() {
                   אף פרסום לא עלה מהן מעום, והניסיון האחרון נכשל — בדרוך כלל קבוצות מכירת פריטים,
                   שבהן פייסבוק מחליפה את תיבת הכתיבה במסלול של העלאת פריט.{' '}
                   <button type="button" className="font-bold text-brand-400 underline" onClick={showBlocked}>
-                    הצג אותן
+                    {t('הצג אותן')}
                   </button>
                   {/* AND THIS SENTENCE USED TO SAY "ולא ייגעו", which stopped
                       being true the moment the switch started clearing the
@@ -711,16 +712,16 @@ export default function GroupsPage() {
         <Card padded={false} className="px-3 py-2.5">
           <input
             className={inputClass}
-            placeholder="חיפוש קבוצה…"
+            placeholder={t('חיפוש קבוצה…')}
             type="search"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            aria-label="חיפוש קבוצה"
+            aria-label={t('חיפוש קבוצה')}
           />
           <div className="mt-2 space-y-1.5">
             <SegmentedControl
               variant="chips"
-              label="סטטוס"
+              label={t('סטטוס')}
               value={status}
               onChange={setStatus}
               /* Counts omitted, not zeroed, until the list is known — these
@@ -762,7 +763,7 @@ export default function GroupsPage() {
             />
             <SegmentedControl
               variant="chips"
-              label="עיר"
+              label={t('עיר')}
               value={cityFilter}
               onChange={setCityFilter}
               options={[{ value: '', label: 'כל הערים' }, ...cities.map((c) => ({ value: c, label: c, count: cityCounts.get(c) ?? 0 }))]}
@@ -770,7 +771,7 @@ export default function GroupsPage() {
             {categories.length > 0 && (
               <SegmentedControl
                 variant="chips"
-                label="קטגוריה"
+                label={t('קטגוריה')}
                 value={categoryFilter}
                 onChange={setCategoryFilter}
                 options={[{ value: '', label: 'כל הקטגוריות' }, ...categories.map((c) => ({ value: c, label: c, count: categoryCounts.get(c) ?? 0 }))]}
@@ -795,7 +796,7 @@ export default function GroupsPage() {
             </button>
             <SegmentedControl
               variant="chips"
-              label="תצוגה"
+              label={t('תצוגה')}
               value={view}
               onChange={setView}
               options={[
@@ -815,16 +816,16 @@ export default function GroupsPage() {
         {groups && all.length === 0 && (
           <EmptyState
             icon={<UsersIcon className="h-5 w-5" />}
-            title="אין עדיין קבוצות"
+            title={t('אין עדיין קבוצות')}
             description="הדביקו קישור לקבוצת פייסבוק שאתם חברים בה ומותר לכם לפרסם בה. אפשר גם להדביק עשרות קישורים בבת אחת."
-            action={<Button onClick={() => setAddOpen(true)}>הוסף קבוצה ראשונה</Button>}
+            action={<Button onClick={() => setAddOpen(true)}>{t('הוסף קבוצה ראשונה')}</Button>}
           />
         )}
 
         {groups && all.length > 0 && visible.length === 0 && (
           <EmptyState
             icon={<SearchIcon className="h-5 w-5" />}
-            title="אין קבוצות שמתאימות לסינון"
+            title={t('אין קבוצות שמתאימות לסינון')}
             description="נסו לנקות את החיפוש או לבחור 'הכל'."
             action={
               <Button
@@ -836,7 +837,7 @@ export default function GroupsPage() {
                   setCategoryFilter('');
                 }}
               >
-                נקה סינון
+                {t('נקה סינון')}
               </Button>
             }
           />
@@ -929,7 +930,7 @@ export default function GroupsPage() {
                           again. */}
                       {g.last_status === 'left' && !g.enabled ? (
                         <p dir="auto" className="truncate text-[11px] font-bold text-warning-400">
-                          אי אפשר לפרסם בקבוצה הזו — כנראה יצאתם ממנה
+                          {t('אי אפשר לפרסם בקבוצה הזו — כנראה יצאתם ממנה')}
                         </p>
                       ) : (
                         <p dir="auto" className="truncate text-[11px] text-mist-500">
@@ -987,7 +988,7 @@ export default function GroupsPage() {
                   <button
                     type="button"
                     aria-label={`הסר את ${g.name}`}
-                    title="הסר מהרשימה"
+                    title={t('הסר מהרשימה')}
                     disabled={busy === `del-${g.id}`}
                     className="grid h-11 w-11 shrink-0 place-items-center rounded-xl text-mist-500 transition-colors hover:bg-bad-400/10 hover:text-bad-400 disabled:opacity-50"
                     onClick={async () => {
@@ -1043,10 +1044,10 @@ export default function GroupsPage() {
         <div data-overlay className="fixed inset-x-0 bottom-[calc(4.5rem+var(--safe-b))] z-40 px-3 md:bottom-4">
           <div className={`mx-auto flex max-w-3xl items-center gap-2 p-2.5 ${CARD_ELEVATED}`}>
             <Badge tone="brand">{selectionLabel}</Badge>
-            {selected.length > 0 && <ButtonLink href={`/social/posts/new?targets=${selected.join(',')}`}>צור פוסט</ButtonLink>}
-            <OverflowMenu label="פעולות על הבחירה" actions={bulkActions} />
+            {selected.length > 0 && <ButtonLink href={`/social/posts/new?targets=${selected.join(',')}`}>{t('צור פוסט')}</ButtonLink>}
+            <OverflowMenu label={t('פעולות על הבחירה')} actions={bulkActions} />
             <button type="button" className="ms-auto min-h-11 shrink-0 px-3 text-xs font-bold text-mist-500" onClick={exitPicking}>
-              בטל
+              {t('בטל')}
             </button>
           </div>
         </div>
@@ -1094,12 +1095,12 @@ export default function GroupsPage() {
         </div>
 
         <div className="mt-4 border-t border-ink-700 pt-4">
-          <Field label="עיר אחרת" hint="נשמרת ותופיע ברשימה למעלה בפעם הבאה.">
+          <Field label={t('עיר אחרת')} hint={t('נשמרת ותופיע ברשימה למעלה בפעם הבאה.')}>
             <input
               className={inputClass}
               value={cityDraft}
               onChange={(e) => setCityDraft(e.target.value)}
-              placeholder="שם העיר"
+              placeholder={t('שם העיר')}
             />
           </Field>
           <Button
@@ -1115,7 +1116,7 @@ export default function GroupsPage() {
               act('bulk-city', () => bulkUpdateTargets(ids, { city: c }), ids.length === 1 ? `שויכה ל${c}.` : `${ids.length} קבוצות שויכו ל${c}.`);
             }}
           >
-            שמור עיר
+            {t('שמור עיר')}
           </Button>
           {/* Clearing it is not the same as choosing "אחר": it hands the group
               back to the detector, which is the right answer when a city was
@@ -1129,7 +1130,7 @@ export default function GroupsPage() {
               act('bulk-city', () => bulkUpdateTargets(ids, { city: '' }), 'השיוך נוקה — העיר תיקבע לפי שם הקבוצה.');
             }}
           >
-            נקה שיוך וחזור לזיהוי לפי השם
+            {t('נקה שיוך וחזור לזיהוי לפי השם')}
           </button>
         </div>
       </Sheet>
@@ -1151,11 +1152,11 @@ export default function GroupsPage() {
               act('bulk-cat', () => bulkUpdateTargets(selected, { category: categoryDraft.trim() }), categoryDraft.trim() ? `סווגו כ-"${categoryDraft.trim()}".` : 'הקטגוריה נוקתה.');
             }}
           >
-            שמור
+            {t('שמור')}
           </Button>
         }
       >
-        <Field label="שם הקטגוריה" hint="למשל: לוחות מכירה, קהילתי, יד שנייה. השאירו ריק כדי לנקות.">
+        <Field label={t('שם הקטגוריה')} hint={t('למשל: לוחות מכירה, קהילתי, יד שנייה. השאירו ריק כדי לנקות.')}>
           <input className={inputClass} value={categoryDraft} onChange={(e) => setCategoryDraft(e.target.value)} list="group-categories" />
           <datalist id="group-categories">
             {categories.map((c) => (
@@ -1176,7 +1177,7 @@ export default function GroupsPage() {
 
       {/* Adding groups: one link, or a whole list pasted at once. */}
 
-      <Sheet open={addOpen} onClose={() => setAddOpen(false)} title="הוספת קבוצות" size="lg">
+      <Sheet open={addOpen} onClose={() => setAddOpen(false)} title={t('הוספת קבוצות')} size="lg">
         <form
           className="space-y-3"
           onSubmit={(e) => {
@@ -1189,7 +1190,7 @@ export default function GroupsPage() {
           }}
         >
           <Field
-            label="קישור לקבוצה"
+            label={t('קישור לקבוצה')}
             hint={
               parsed
                 ? `זוהה: ${parsed.externalId}`
@@ -1200,16 +1201,16 @@ export default function GroupsPage() {
           >
             <input className={inputClass} dir="ltr" inputMode="url" value={form.url} onChange={(e) => setForm({ ...form, url: e.target.value })} placeholder="https://www.facebook.com/groups/…" />
           </Field>
-          <Field label="שם (רשות)">
-            <input className={inputClass} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="באר שבע ביחד" />
+          <Field label={t('שם (רשות)')}>
+            <input className={inputClass} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder={t('באר שבע ביחד')} />
           </Field>
           <Button type="submit" size="lg" className="w-full" busy={busy === 'add'} disabled={!accepted}>
-            הוסף קבוצה
+            {t('הוסף קבוצה')}
           </Button>
         </form>
 
         <div className="mt-5 border-t border-ink-700 pt-4">
-          <p className="mb-2 text-sm font-extrabold text-mist-100">הוספה של הרבה קבוצות</p>
+          <p className="mb-2 text-sm font-extrabold text-mist-100">{t('הוספה של הרבה קבוצות')}</p>
           {/* No text-sm: it beats inputClass's text-base (Tailwind orders
               .text-sm after .text-base, so className order does not decide it)
               and lands the box at 14px, which is what makes iOS Safari zoom the
@@ -1245,10 +1246,10 @@ export default function GroupsPage() {
               })
             }
           >
-            הוסף את כולן
+            {t('הוסף את כולן')}
           </Button>
           <p className="mt-2 text-xs text-mist-500">
-            הוסיפו רק קבוצות שאתם חברים בהן ומותר לכם לפרסם בהן. הפרסום נעשה מהחשבון שלכם דרך הדפדפן שעל המחשב — לא דרך API רשמי של פייסבוק.
+            {t('הוסיפו רק קבוצות שאתם חברים בהן ומותר לכם לפרסם בהן. הפרסום נעשה מהחשבון שלכם דרך הדפדפן שעל המחשב — לא דרך API רשמי של פייסבוק.')}
           </p>
         </div>
       </Sheet>

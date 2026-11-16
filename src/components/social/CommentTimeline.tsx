@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { t } from '@/lib/social/i18n';
 import type { CommentTotals, QueueRow } from '@/lib/social/client';
 import type { Campaign } from '@/lib/social/types';
 import { COMMENT_TONE, commentLabel, commentNeedsHuman } from '@/lib/social/comments';
@@ -341,10 +342,10 @@ export function CommentTimeline({
 
   if (!items.length) {
     return (
-      <Card title="ציר הזמן של התגובות" subtitle="מה כבר נכתב, מה נכשל ומה עוד בתור">
+      <Card title={t('ציר הזמן של התגובות')} subtitle={t('מה כבר נכתב, מה נכשל ומה עוד בתור')}>
         <EmptyState
           icon={<MessageIcon className="h-5 w-5" />}
-          title="עוד לא ביקשתם תגובות"
+          title={t('עוד לא ביקשתם תגובות')}
           description="אחרי שתוסיפו תגובה לפרסום, כל תגובה תופיע כאן לפי הסדר — עם קישור לפוסט שהיא יושבת עליו."
         />
       </Card>
@@ -385,7 +386,7 @@ export function CommentTimeline({
     it.kind === 'past' ? it.row.comment_at ?? null : it.kind === 'ahead' ? it.row.scheduled_at : null;
 
   return (
-    <Card title="ציר הזמן של התגובות" subtitle="מה כבר נכתב, מה נכשל ומה עוד בתור">
+    <Card title={t('ציר הזמן של התגובות')} subtitle={t('מה כבר נכתב, מה נכשל ומה עוד בתור')}>
       {/* Three segments, in the tones the rest of the product already uses for
           these states: written, needs a person, still waiting. A comment being
           typed this second is inside `pending` — it is a second long, and a
@@ -468,7 +469,7 @@ export function CommentTimeline({
       */}
       {next && (
         <p className="mt-2 flex flex-wrap items-baseline gap-x-2 gap-y-0.5 rounded-xl bg-ink-800/50 px-2.5 py-2 text-[11.5px]">
-          <span className="font-extrabold text-brand-400">הבא בתור</span>
+          <span className="font-extrabold text-brand-400">{t('הבא בתור')}</span>
           <span dir="auto" className="min-w-0 flex-1 truncate font-bold text-mist-100">{next.target?.name ?? 'קבוצה'}</span>
           <span className="font-bold text-mist-300">
             {next.comment_status === 'commenting' ? 'כותב עכשיו' : inAbout(0)}
@@ -499,7 +500,7 @@ export function CommentTimeline({
       <div
         tabIndex={0}
         role="group"
-        aria-label="סדר התגובות — רשימה נגללת"
+        aria-label={t('סדר התגובות — רשימה נגללת')}
         className="mt-3 max-h-[21rem] overflow-y-auto rounded-xl focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-300"
       >
         <ol className="relative space-y-0.5">
@@ -655,7 +656,7 @@ export function CommentTimeline({
       </div>
 
       <p className="mt-2 text-[11px] leading-snug text-mist-500">
-        התגובות יוצאות אחת-אחת, במרווח שנבחר לכל סבב, ורק כשיש חלון פנוי בין שני פרסומים — ולכן אין להן שעה מראש. לפרסום שעוד לא יצא מוצגת השעה שבה הוא מתוזמן.
+        {t('התגובות יוצאות אחת-אחת, במרווח שנבחר לכל סבב, ורק כשיש חלון פנוי בין שני פרסומים — ולכן אין להן שעה מראש. לפרסום שעוד לא יצא מוצגת השעה שבה הוא מתוזמן.')}
       </p>
     </Card>
   );

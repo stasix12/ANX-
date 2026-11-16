@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { t } from '@/lib/social/i18n';
 import { screenshotUrl } from '@/lib/social/client';
 
 /**
@@ -29,10 +30,10 @@ export function CommentShot({ path }: { path: string }) {
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src={url}
-          alt="מה שהמחשב ראה כשהתגובה נכשלה"
+          alt={t('מה שהמחשב ראה כשהתגובה נכשלה')}
           className="max-h-64 w-full rounded-lg border border-ink-700 object-cover object-top"
         />
-        <span className="mt-1 block text-[11px] text-mist-500">לחצו לפתיחה בגודל מלא</span>
+        <span className="mt-1 block text-[11px] text-mist-500">{t('לחצו לפתיחה בגודל מלא')}</span>
       </a>
     );
   }

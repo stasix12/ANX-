@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { t } from '@/lib/social/i18n';
 import { useEffect, useState } from 'react';
 import { BellIcon } from '@/components/icons';
 import { listActivity, queueSummary } from '@/lib/social/client';
@@ -148,14 +149,14 @@ export function NotificationBell() {
 
       {open && (
         <>
-          <button type="button" aria-label="סגור" className="fixed inset-0 z-40 cursor-default" onClick={() => setOpen(false)} />
+          <button type="button" aria-label={t('סגור')} className="fixed inset-0 z-40 cursor-default" onClick={() => setOpen(false)} />
           <div className="absolute end-0 z-50 mt-2 w-80 max-w-[calc(100vw-2rem)] overflow-hidden rounded-card border border-ink-700 bg-ink-800 shadow-[0_4px_14px_rgba(40,20,80,0.06),0_18px_44px_-12px_rgba(46,16,101,0.18)]">
             <header className="flex items-center justify-between border-b border-ink-700 px-3.5 py-2.5">
-              <p className="text-sm font-extrabold text-mist-100">התראות</p>
+              <p className="text-sm font-extrabold text-mist-100">{t('התראות')}</p>
               {attention > 0 && <span className="rounded-full bg-warning-400/12 px-2 py-0.5 text-[11px] font-bold text-warning-400">{attention} דורשים טיפול</span>}
             </header>
             <ul className="max-h-80 divide-y divide-ink-700 overflow-y-auto">
-              {items.length === 0 && <li className="px-3.5 py-6 text-center text-sm text-mist-500">אין התראות חדשות.</li>}
+              {items.length === 0 && <li className="px-3.5 py-6 text-center text-sm text-mist-500">{t('אין התראות חדשות.')}</li>}
               {items.slice(0, 15).map((e) => (
                 <li key={e.id} className="px-3.5 py-2.5">
                   <p className={`text-sm leading-snug ${e.level === 'error' ? 'text-error-400' : e.level === 'warn' ? 'text-warning-400' : 'text-mist-100'}`}>{e.message}</p>
@@ -169,7 +170,7 @@ export function NotificationBell() {
                 different table, so a worker that stopped or a round that was
                 planned could not be found anywhere past this popover. */}
             <Link href="/social/activity" onClick={() => setOpen(false)} className="block border-t border-ink-700 px-3.5 py-2.5 text-center text-sm font-bold text-brand-400">
-              לכל הפעילות
+              {t('לכל הפעילות')}
             </Link>
           </div>
         </>

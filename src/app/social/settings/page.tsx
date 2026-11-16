@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { t } from '@/lib/social/i18n';
 import { Stamp } from '@/components/social/DateTime';
 import { ScreenProbe } from '@/components/social/ScreenProbe';
 import { SocialShell } from '@/components/social/SocialShell';
@@ -256,7 +257,7 @@ export default function SettingsPage() {
     // social_settings on a clock of its own — which is what let the header and
     // the switch a few hundred pixels below it show opposite states at once.
     <SocialShell
-      title="הגדרות"
+      title={t('הגדרות')}
       lede="קצב, מגבלות ופרטי העסק"
       paused={loaded ? control.paused : null}
       onControlChanged={refreshControl}
@@ -283,7 +284,7 @@ export default function SettingsPage() {
       headerAction={
         loaded ? (
           <Button busy={busy} onClick={save}>
-            שמור
+            {t('שמור')}
           </Button>
         ) : undefined
       }
@@ -320,7 +321,7 @@ export default function SettingsPage() {
           */}
           {isAdmin && (
             <SegmentedControl
-              label="חלקי ההגדרות"
+              label={t('חלקי ההגדרות')}
               value={tab}
               onChange={setTab}
               options={[
@@ -338,25 +339,24 @@ export default function SettingsPage() {
             whatever the customer can read. The sign-in screen carries the
             same control; this is the one for somebody already inside.
           */}
-          <Card title="שפה" subtitle="בוחרים פעם אחת, והבחירה נשמרת במכשיר הזה">
+          <Card title={t('שפה')} subtitle={t('בוחרים פעם אחת, והבחירה נשמרת במכשיר הזה')}>
             <LangSwitch />
           </Card>
 
           {tab === 'limits' && (
             <>
-              <Card title="היעד היומי שלכם" subtitle="מספרים שאתם קובעים — לא מכסות רשמיות של פייסבוק">
+              <Card title={t('היעד היומי שלכם')} subtitle={t('מספרים שאתם קובעים — לא מכסות רשמיות של פייסבוק')}>
                 <Notice tone="info">
-                  לפייסבוק אין מספר פרסומים רשמי ומפורסם לחשבון פרטי, ואף כלי לא יכול להבטיח שמספר מסוים לא יוביל להגבלה. המספרים כאן הם
-                  התקרה שאתם מגדירים למערכת, והיא תכבד אותה.
+                  {t('לפייסבוק אין מספר פרסומים רשמי ומפורסם לחשבון פרטי, ואף כלי לא יכול להבטיח שמספר מסוים לא יוביל להגבלה. המספרים כאן הם התקרה שאתם מגדירים למערכת, והיא תכבד אותה.')}
                 </Notice>
                 <div className="mt-3 grid gap-4 sm:grid-cols-2 [&>*]:min-w-0">
-                  <Field label="מקסימום פרסומים ביום (כל היעדים)" hint="פרסום מעבר לתקרה מדולג עם סיבה ברורה בהיסטוריה">
+                  <Field label={t('מקסימום פרסומים ביום (כל היעדים)')} hint={t('פרסום מעבר לתקרה מדולג עם סיבה ברורה בהיסטוריה')}>
                     <input type="number" min={0} inputMode="numeric" className={inputClass} value={limits.maxPerDay} onChange={num('maxPerDay')} />
                   </Field>
-                  <Field label="מקסימום ביום לכל יעד">
+                  <Field label={t('מקסימום ביום לכל יעד')}>
                     <input type="number" min={0} inputMode="numeric" className={inputClass} value={limits.maxPerTargetPerDay} onChange={num('maxPerTargetPerDay')} />
                   </Field>
-                  <Field label="מניעת כפילות (ימים)" hint="אותו טקסט ומדיה לאותו יעד לא יפורסמו שוב בטווח הזה">
+                  <Field label={t('מניעת כפילות (ימים)')} hint={t('אותו טקסט ומדיה לאותו יעד לא יפורסמו שוב בטווח הזה')}>
                     <input type="number" min={0} inputMode="numeric" className={inputClass} value={limits.dedupeDays} onChange={num('dedupeDays')} />
                   </Field>
                 </div>
@@ -520,7 +520,7 @@ export default function SettingsPage() {
                   <p className="mt-4 text-xs text-warning-400">
                     Meta ביקשה להאט — הפרסום מושהה עד <Stamp iso={control.rateLimitedUntil} />.{' '}
                     <button type="button" className="min-h-11 px-1 font-bold underline" onClick={clearRateLimit}>
-                      נקה
+                      {t('נקה')}
                     </button>
                   </p>
                 )}
@@ -532,11 +532,11 @@ export default function SettingsPage() {
           {tab === 'admin' && isAdmin && presence && (
             <>
               <Card
-                title="מי מחובר עכשיו"
+                title={t('מי מחובר עכשיו')}
                 subtitle={`${presence.workers.filter((w) => w.online).length} מחוברים מתוך ${presence.workers.length} מחשבים · מתרענן לבד כל 10 שניות`}
               >
                 {presence.workers.length === 0 ? (
-                  <Notice tone="info">אף מחשב לא נרשם עדיין. מחשב נכנס לרשימה הזו ברגע שהתוכנה עליו נפתחת פעם אחת.</Notice>
+                  <Notice tone="info">{t('אף מחשב לא נרשם עדיין. מחשב נכנס לרשימה הזו ברגע שהתוכנה עליו נפתחת פעם אחת.')}</Notice>
                 ) : (
                   <div className="mt-1 space-y-2">
                     {presence.workers.map((w) => (
@@ -555,17 +555,17 @@ export default function SettingsPage() {
                           </span>
                         </div>
                         <dl className="mt-1.5 grid grid-cols-[auto_1fr] [&>*]:min-w-0 gap-x-2 gap-y-0.5 text-[11px] leading-4">
-                          <dt className="text-mist-500">עסק</dt>
+                          <dt className="text-mist-500">{t('עסק')}</dt>
                           <dd dir="auto" className="min-w-0 truncate text-mist-300">{w.tenantName || '— לא משויך לעסק'}</dd>
-                          <dt className="text-mist-500">משתמש פייסבוק</dt>
+                          <dt className="text-mist-500">{t('משתמש פייסבוק')}</dt>
                           <dd className="min-w-0 truncate text-mist-300">
                             {w.fbUserName || (w.fbUserId ? <span dir="ltr">{w.fbUserId}</span> : '— לא ידוע')}
                           </dd>
-                          <dt className="text-mist-500">מחשב</dt>
+                          <dt className="text-mist-500">{t('מחשב')}</dt>
                           <dd className="min-w-0 truncate text-mist-300" dir="ltr">{w.host || '—'}</dd>
-                          <dt className="text-mist-500">גרסה</dt>
+                          <dt className="text-mist-500">{t('גרסה')}</dt>
                           <dd className="min-w-0 truncate text-mist-300" dir="ltr">{w.version || '—'}</dd>
-                          <dt className="text-mist-500">אות חיים אחרון</dt>
+                          <dt className="text-mist-500">{t('אות חיים אחרון')}</dt>
                           <dd className="min-w-0 text-mist-300">{w.last_seen_at ? <Stamp iso={w.last_seen_at} /> : '— מעולם'}</dd>
                         </dl>
                         {/* What the machine itself said is wrong, in its own
@@ -579,23 +579,23 @@ export default function SettingsPage() {
                 )}
                 {presence.truncated.workers && (
                   <div className="mt-2.5">
-                    <Notice tone="warn">הרשימה נקטעה — יש יותר מחשבים ממה שמוצג כאן.</Notice>
+                    <Notice tone="warn">{t('הרשימה נקטעה — יש יותר מחשבים ממה שמוצג כאן.')}</Notice>
                   </div>
                 )}
               </Card>
 
-              <Card title="משתמשים" subtitle="מי יכול להיכנס לדשבורד, ומתי נכנס לאחרונה">
+              <Card title={t('משתמשים')} subtitle={t('מי יכול להיכנס לדשבורד, ומתי נכנס לאחרונה')}>
                 {presence.users.length === 0 ? (
-                  <Notice tone="info">אין עדיין משתמשים רשומים.</Notice>
+                  <Notice tone="info">{t('אין עדיין משתמשים רשומים.')}</Notice>
                 ) : (
                   <div className="mt-1 space-y-2">
                     {presence.users.map((u) => (
                       <div key={u.id} className="rounded-xl border border-ink-700 px-3 py-2.5">
                         <p className="truncate font-bold text-mist-100" dir="ltr">{u.email || u.id}</p>
                         <dl className="mt-1 grid grid-cols-[auto_1fr] [&>*]:min-w-0 gap-x-2 gap-y-0.5 text-[11px] leading-4">
-                          <dt className="text-mist-500">עסקים</dt>
+                          <dt className="text-mist-500">{t('עסקים')}</dt>
                           <dd dir="auto" className="min-w-0 truncate text-mist-300">{u.tenants.length ? u.tenants.join(' · ') : '— לא משויך'}</dd>
-                          <dt className="text-mist-500">כניסה אחרונה</dt>
+                          <dt className="text-mist-500">{t('כניסה אחרונה')}</dt>
                           <dd className="min-w-0 text-mist-300">{u.lastSignInAt ? <Stamp iso={u.lastSignInAt} /> : '— מעולם לא נכנס'}</dd>
                         </dl>
                       </div>
@@ -604,7 +604,7 @@ export default function SettingsPage() {
                 )}
                 {presence.truncated.users && (
                   <div className="mt-2.5">
-                    <Notice tone="warn">הרשימה נקטעה — יש יותר משתמשים ממה שמוצג כאן.</Notice>
+                    <Notice tone="warn">{t('הרשימה נקטעה — יש יותר משתמשים ממה שמוצג כאן.')}</Notice>
                   </div>
                 )}
                 {/*
@@ -612,8 +612,7 @@ export default function SettingsPage() {
                   questions and the difference matters when something is wrong.
                 */}
                 <p className="mt-2.5 text-[11px] leading-4 text-mist-500">
-                  ״כניסה אחרונה״ היא כניסה לדשבורד באתר — לא הפעלה של התוכנה במחשב. מחשב יכול לפרסם שבועות בלי שאף אחד ייכנס לדשבורד,
-                  ולהפך.
+                  {t('״כניסה אחרונה״ היא כניסה לדשבורד באתר — לא הפעלה של התוכנה במחשב. מחשב יכול לפרסם שבועות בלי שאף אחד ייכנס לדשבורד, ולהפך.')}
                 </p>
               </Card>
 
@@ -629,7 +628,7 @@ export default function SettingsPage() {
           )}
 
           <Button size="lg" className="w-full" busy={busy} onClick={save}>
-            שמור הגדרות
+            {t('שמור הגדרות')}
           </Button>
 
           {/* Which build the phone is actually running. If this does not change

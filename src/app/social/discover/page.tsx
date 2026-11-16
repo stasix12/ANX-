@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { t } from '@/lib/social/i18n';
 import { SocialShell } from '@/components/social/SocialShell';
 import { FilterRow, GroupRow, MyGroupsCard, ResultsCard, SearchCard, WalkThrough } from '@/components/social/Discovery';
 import {
@@ -820,7 +821,7 @@ export default function DiscoverPage() {
 
   return (
     <SocialShell
-      title="גילוי קבוצות"
+      title={t('גילוי קבוצות')}
       lede="מצא קבוצות חדשות שמתאימות לעסק שלך"
       /* The reference puts an illustration beside the page title. `headerAction`
          is the shell's own slot for what sits there, so the shared page header
@@ -849,7 +850,7 @@ export default function DiscoverPage() {
 
         {workerOnline === false && (
           <Notice tone="warn">
-            החיפוש נעשה מהדפדפן שעל המחשב שלכם, והתוכנה שם לא פועלת כרגע. פתחו אותה והשאירו אותה פתוחה — ואז אפשר לחפש.
+            {t('החיפוש נעשה מהדפדפן שעל המחשב שלכם, והתוכנה שם לא פועלת כרגע. פתחו אותה והשאירו אותה פתוחה — ואז אפשר לחפש.')}
           </Notice>
         )}
 
@@ -870,7 +871,7 @@ export default function DiscoverPage() {
                 </p>
               </div>
               <Button size="sm" variant="secondary" onClick={() => run(stale[0].query)}>
-                בדוק מה חדש
+                {t('בדוק מה חדש')}
               </Button>
             </div>
           </Card>
@@ -913,9 +914,9 @@ export default function DiscoverPage() {
                 <SearchIcon aria-hidden className="h-5 w-5 text-brand-400 motion-safe:animate-pulse" />
               </span>
               <div className="min-w-0">
-                <p className="text-sm font-extrabold text-mist-100">מחפש קבוצות מתאימות…</p>
+                <p className="text-sm font-extrabold text-mist-100">{t('מחפש קבוצות מתאימות…')}</p>
                 <p className="mt-0.5 text-xs leading-4 text-mist-500">
-                  הדפדפן שבמחשב פותח את החיפוש של פייסבוק וגולל בתוצאות. זה לוקח כדקה, ואפשר להמשיך לעבוד כאן בינתיים.
+                  {t('הדפדפן שבמחשב פותח את החיפוש של פייסבוק וגולל בתוצאות. זה לוקח כדקה, ואפשר להמשיך לעבוד כאן בינתיים.')}
                 </p>
               </div>
             </div>
@@ -986,7 +987,7 @@ export default function DiscoverPage() {
         {rows !== null && !active && (
           <EmptyState
             icon={<SearchIcon aria-hidden className="h-6 w-6" />}
-            title="הקלידו עיר, אזור או נושא"
+            title={t('הקלידו עיר, אזור או נושא')}
             description="למשל “באר שבע”. המערכת תפתח את החיפוש של פייסבוק במחשב שלכם ותראה לכם אילו קבוצות קיימות, באילו אתם כבר חברים ולאילו כדאי להצטרף."
           />
         )}
@@ -994,7 +995,7 @@ export default function DiscoverPage() {
         {rows !== null && active && totals.total === 0 && !searching && (
           <EmptyState
             icon={<SearchIcon aria-hidden className="h-6 w-6" />}
-            title="לא נמצאו קבוצות"
+            title={t('לא נמצאו קבוצות')}
             description="נסו מילה אחרת — שם העיר לבדו לרוב מוצא הכי הרבה, ואפשר גם לנסות שם של שכונה או של אזור."
           />
         )}
@@ -1002,7 +1003,7 @@ export default function DiscoverPage() {
         {rows !== null && totals.total > 0 && shown.length === 0 && (
           <EmptyState
             icon={<UsersIcon aria-hidden className="h-6 w-6" />}
-            title="אין קבוצות בסינון הזה"
+            title={t('אין קבוצות בסינון הזה')}
             description={`נמצאו ${totals.total} קבוצות, אבל ${FILTER_EMPTY[filter]}. בחרו "הכל" כדי לראות את כולן.`}
           />
         )}
@@ -1059,7 +1060,7 @@ export default function DiscoverPage() {
                      a stage and is never drawn as one: the answer already
                      arrived, and this minute or two is the pacing that keeps
                      Facebook from blocking the account. */
-                  <span className="shrink-0 text-[11px] text-mist-500">הפסקה לפני הקבוצה הבאה</span>
+                  <span className="shrink-0 text-[11px] text-mist-500">{t('הפסקה לפני הקבוצה הבאה')}</span>
                 )}
               </div>
               {joinRunPercent(Object.keys(joinRun.byUrl).length, joinRun.total) !== null && (
@@ -1085,7 +1086,7 @@ export default function DiscoverPage() {
             <div className="flex min-w-0 items-center gap-1.5">
               <button
                 type="button"
-                aria-label="בטל את הבחירה"
+                aria-label={t('בטל את הבחירה')}
                 onClick={() => setPicked(new Set())}
                 className="grid h-11 w-11 shrink-0 place-items-center rounded-xl text-on-brand/80 transition-colors hover:bg-white/15 hover:text-on-brand"
               >
@@ -1124,7 +1125,7 @@ export default function DiscoverPage() {
                   setWalkAt(0);
                 }}
               >
-                עבור על הקבוצות
+                {t('עבור על הקבוצות')}
               </Button>
             </div>
           </div>

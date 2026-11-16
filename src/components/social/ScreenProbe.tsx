@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { t } from '@/lib/social/i18n';
 import { Card } from '@/components/social/ui';
 
 /**
@@ -127,7 +128,7 @@ export function ScreenProbe() {
   ];
 
   return (
-    <Card title="מה המסך הזה נותן לאפליקציה" subtitle="מתעדכן לבד כשמסובבים, מקפלים או פותחים מקלדת · צלמו ושלחו">
+    <Card title={t('מה המסך הזה נותן לאפליקציה')} subtitle={t('מתעדכן לבד כשמסובבים, מקפלים או פותחים מקלדת · צלמו ושלחו')}>
       {/*
         The probe itself. It has to be a laid-out element for the padding to
         resolve, so it is 1px and invisible rather than display:none.
@@ -156,8 +157,7 @@ export function ScreenProbe() {
         ))}
       </dl>
       <p className="mt-2.5 text-[11px] leading-4 text-mist-500">
-        אם ״חלון התצוגה״ כפול ״צפיפות פיקסלים״ קטן מ״המסך כולו״, הדפדפן לא נותן לאפליקציה את כל המסך — ואז אי אפשר לנצל את הפס הריק
-        דרך העיצוב. אם הם שווים ו״שוליים בטוחים״ מראה מספר גדול מאפס, הפס הוא שלנו והעיצוב יכול לקחת אותו.
+        {t('אם ״חלון התצוגה״ כפול ״צפיפות פיקסלים״ קטן מ״המסך כולו״, הדפדפן לא נותן לאפליקציה את כל המסך — ואז אי אפשר לנצל את הפס הריק דרך העיצוב. אם הם שווים ו״שוליים בטוחים״ מראה מספר גדול מאפס, הפס הוא שלנו והעיצוב יכול לקחת אותו.')}
       </p>
     </Card>
   );

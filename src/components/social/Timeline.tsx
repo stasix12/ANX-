@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { t } from '@/lib/social/i18n';
 import type { TimelineRow } from '@/lib/social/client';
 import { countdownTo } from '@/lib/social/countdown';
 import { isInFlight, needsHuman } from '@/lib/social/status';
@@ -144,7 +145,7 @@ function Countdown({ at, now }: { at: string | null; now: number }) {
    * is worth naming the setting rather than printing a time.
    */
   if (at === null) {
-    return <p className="text-[11px] font-bold leading-[14px] text-warning-400">מוחזק — לא נבחר יום פרסום בתזמון</p>;
+    return <p className="text-[11px] font-bold leading-[14px] text-warning-400">{t('מוחזק — לא נבחר יום פרסום בתזמון')}</p>;
   }
   const left = countdownTo(at, now);
   if (!left) return null;
@@ -155,7 +156,7 @@ function Countdown({ at, now }: { at: string | null; now: number }) {
       </p>
     );
   }
-  if (left.due) return <p className="text-[11px] font-bold leading-[14px] text-mist-300">אמור לצאת עכשיו</p>;
+  if (left.due) return <p className="text-[11px] font-bold leading-[14px] text-mist-300">{t('אמור לצאת עכשיו')}</p>;
   return (
     <p className="text-[11px] leading-[14px] text-mist-500">
       {/* mm:ss around a neutral colon reorders inside an RTL line. */}
@@ -289,7 +290,7 @@ const doneAt = (row: { published_at?: string | null; updated_at?: string | null;
      only while something is actually waiting keeps an idle screen idle. */
   const now = useTick(items.some((r) => r.status === 'scheduled'));
   if (!items.length) {
-    return <EmptyState icon={<CalendarIcon className="h-5 w-5" />} title="אין פרסום מתוכנן" description="כשתתזמנו סבב, סדר הפרסומים יופיע כאן לפי שעות." />;
+    return <EmptyState icon={<CalendarIcon className="h-5 w-5" />} title={t('אין פרסום מתוכנן')} description="כשתתזמנו סבב, סדר הפרסומים יופיע כאן לפי שעות." />;
   }
 
   const today = zonedDateISO(new Date());
@@ -431,7 +432,7 @@ const doneAt = (row: { published_at?: string | null; updated_at?: string | null;
            when the queue is empty they are ALL it carries. A label that
            promises what is next, over a list of what is over, is the same lie
            the card's title was telling. */
-        aria-label="סדר הפרסומים — רשימה נגללת"
+        aria-label={t('סדר הפרסומים — רשימה נגללת')}
         className="max-h-[21rem] overflow-y-auto rounded-xl focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-300"
       >
         {list}

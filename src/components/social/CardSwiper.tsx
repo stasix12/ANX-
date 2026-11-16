@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { t } from '@/lib/social/i18n';
 import { ChevronIcon } from '@/components/icons';
 
 /**
@@ -248,7 +249,7 @@ export function CardSwiper({
       {count > 1 && (
         <div className="mt-2 flex items-center justify-center gap-0.5">
           <ArrowButton
-            label="הסבב הקודם"
+            label={t('הסבב הקודם')}
             onClick={() => step(-1)}
             disabled={index === 0}
             /* Points at the START of the line, which on an RTL page is the
@@ -314,7 +315,7 @@ export function CardSwiper({
           >
             {index + 1} / {count}
           </p>
-          <ArrowButton label="הסבב הבא" onClick={() => step(1)} disabled={index === count - 1} />
+          <ArrowButton label={t('הסבב הבא')} onClick={() => step(1)} disabled={index === count - 1} />
         </div>
       )}
     </div>

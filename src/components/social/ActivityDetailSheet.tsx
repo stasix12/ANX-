@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { t } from '@/lib/social/i18n';
 import Link from 'next/link';
 import {
   cancelQueueItem,
@@ -223,7 +224,7 @@ export function ActivityDetailSheet({
       open={Boolean(queueId)}
       onClose={onClose}
       placement="center"
-      title="פרטי הפרסום"
+      title={t('פרטי הפרסום')}
       icon={<LayersIcon aria-hidden className="h-5 w-5 shrink-0 text-brand-500" />}
     >
       <div className="pb-1">
@@ -337,15 +338,15 @@ export function ActivityDetailSheet({
 
               {/* ─── the three columns ──────────────────────────────────── */}
               <div className="mt-3 grid grid-cols-3 divide-x divide-x-reverse divide-ink-700 border-t border-ink-700 pt-3 [&>*]:min-w-0">
-                <Fact icon={<FacebookMark className="h-[18px] w-[18px]" />} label="פלטפורמה">
+                <Fact icon={<FacebookMark className="h-[18px] w-[18px]" />} label={t('פלטפורמה')}>
                   Facebook
                 </Fact>
                 {kind && (
-                  <Fact icon={<kind.Icon aria-hidden className="h-[18px] w-[18px]" />} label="סוג תוכן">
+                  <Fact icon={<kind.Icon aria-hidden className="h-[18px] w-[18px]" />} label={t('סוג תוכן')}>
                     {kind.label}
                   </Fact>
                 )}
-                <Fact icon={<UsersIcon aria-hidden className="h-[18px] w-[18px]" />} label="קבוצה">
+                <Fact icon={<UsersIcon aria-hidden className="h-[18px] w-[18px]" />} label={t('קבוצה')}>
                   {/*
                     THE GROUP'S OWN PAGE, kept as a function and not as a third
                     button: the window had a "לקבוצה" link before this redesign
@@ -393,7 +394,7 @@ export function ActivityDetailSheet({
                     className="inline-flex min-h-11 min-w-0 items-center justify-center gap-1 rounded-full bg-brand-500 px-2 text-[12px] font-extrabold text-on-brand"
                   >
                     <FacebookMark className="h-4 w-4 shrink-0" />
-                    <span className="truncate">פתח את הפוסט</span>
+                    <span className="truncate">{t('פתח את הפוסט')}</span>
                     <ExternalLinkIcon aria-hidden className="h-3.5 w-3.5 shrink-0 opacity-80" />
                   </a>
                 )}
@@ -407,7 +408,7 @@ export function ActivityDetailSheet({
                     }`}
                   >
                     <UsersIcon aria-hidden className="h-4 w-4 shrink-0" />
-                    <span className="truncate">פתח את הקבוצה</span>
+                    <span className="truncate">{t('פתח את הקבוצה')}</span>
                     <ExternalLinkIcon aria-hidden className="h-3.5 w-3.5 shrink-0 opacity-80" />
                   </a>
                 )}
@@ -419,12 +420,12 @@ export function ActivityDetailSheet({
               <div className="mt-2.5 flex flex-wrap items-center gap-2">
                 {failure?.canRetry && (
                   <Button size="sm" busy={busy === 'retry'} onClick={() => act('retry')}>
-                    נסה שוב
+                    {t('נסה שוב')}
                   </Button>
                 )}
                 {row.status !== 'published' && (
                   <Button size="sm" variant="secondary" busy={busy === 'cancel'} onClick={() => act('cancel')}>
-                    בטל פרסום
+                    {t('בטל פרסום')}
                   </Button>
                 )}
               </div>

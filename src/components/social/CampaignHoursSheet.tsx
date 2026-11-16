@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { t } from '@/lib/social/i18n';
 import { Button, Sheet } from '@/components/social/ui';
 import { DAY_LABELS, DAY_NAMES, type CampaignSchedule } from '@/lib/social/campaign-schedule';
 import { friendlyMessage } from '@/lib/social/errors';
@@ -100,7 +101,7 @@ export function CampaignHoursSheet({
     <Sheet
       open={open}
       onClose={saving ? () => undefined : onClose}
-      title="ימי פעילות והפעלה"
+      title={t('ימי פעילות והפעלה')}
       footer={
         <Button onClick={() => void save()} disabled={saving} className="w-full">
           {saving ? 'שומר…' : 'שמור שינויים'}
@@ -122,7 +123,7 @@ export function CampaignHoursSheet({
 
         {/* ── ימי פעילות ── */}
         <div>
-          <p className="text-[13px] font-extrabold text-mist-100">ימי פעילות</p>
+          <p className="text-[13px] font-extrabold text-mist-100">{t('ימי פעילות')}</p>
           <div role="group" aria-label={`ימי פרסום ל${campaignName}`} className="mt-2 grid grid-cols-7 gap-1 [&>*]:min-w-0">
             {DAY_LABELS.map((label, day) => {
               const on = days.includes(day);
@@ -152,13 +153,13 @@ export function CampaignHoursSheet({
 
         {/* ── שעת הפעלה, אחת ── */}
         <div>
-          <p className="text-[13px] font-extrabold text-mist-100">שעת הפעלה</p>
+          <p className="text-[13px] font-extrabold text-mist-100">{t('שעת הפעלה')}</p>
           <p className="mt-0.5 text-[11.5px] font-semibold text-mist-500">
-            הפרסום מתחיל בשעה הזאת, בימים שבחרתם. אין שעת סיום — היום פתוח עד חצות.
+            {t('הפרסום מתחיל בשעה הזאת, בימים שבחרתם. אין שעת סיום — היום פתוח עד חצות.')}
           </p>
           <input
             type="time"
-            aria-label="שעת הפעלה"
+            aria-label={t('שעת הפעלה')}
             value={start}
             disabled={saving}
             onChange={(e) => setStart(e.target.value || '08:00')}

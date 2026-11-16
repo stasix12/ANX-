@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { t } from '@/lib/social/i18n';
 import { useCallback, useEffect, useState } from 'react';
 import { cancelQueueItem, confirmQueueItem, listLiveQueue, queueGates, retryQueueItem, screenshotUrl, type QueueRow } from '@/lib/social/client';
 import { projectQueue } from '@/lib/social/projection';
@@ -186,7 +187,7 @@ export function LiveBoard({ postId, compact = false }: { postId?: string; compac
           busyRowId={rowBusy}
           projected={projected}
           emptyAction={
-            <ButtonLink href="/social/posts/new">צרו פוסט ראשון</ButtonLink>
+            <ButtonLink href="/social/posts/new">{t('צרו פוסט ראשון')}</ButtonLink>
           }
         />
       )}
@@ -198,11 +199,11 @@ export function LiveBoard({ postId, compact = false }: { postId?: string; compac
   if (compact) return content;
   return (
     <Card
-      title="פרסום בזמן אמת"
-      subtitle="מתעדכן לבד כל 4 שניות"
+      title={t('פרסום בזמן אמת')}
+      subtitle={t('מתעדכן לבד כל 4 שניות')}
       action={
         <Link href="/social/history" className="inline-flex min-h-11 items-center text-sm font-bold text-brand-400">
-          היסטוריה
+          {t('היסטוריה')}
         </Link>
       }
     >

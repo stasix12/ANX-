@@ -198,6 +198,23 @@ export function useLang(): Lang {
   );
 }
 
+/*
+ * THE PLAIN FUNCTION, for the 61 screens that simply print sentences.
+ *
+ * A hook in every one of them would mean inserting a line into 61 component
+ * bodies by regex — and a component body is exactly the thing a regex gets
+ * wrong. So screens call this, and <LangBoundary> re-keys the app when the
+ * language changes, which re-renders them all. The price is that a switch
+ * remounts the tree; it is a deliberate, rare action, and the alternative was
+ * rewriting 61 files blind.
+ *
+ * Reactive callers (the sign-in screen) keep useT() and do not need the
+ * remount at all.
+ */
+export function t(hebrew: string): string {
+  return translate(current, hebrew);
+}
+
 /** `const t = useT()` — then `t('ברוכים הבאים')`. */
 export function useT(): (hebrew: string) => string {
   const lang = useLang();

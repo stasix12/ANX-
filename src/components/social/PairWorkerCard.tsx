@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { t } from '@/lib/social/i18n';
 import { callSocialApi } from '@/lib/social/client';
 import { friendlyMessage } from '@/lib/social/errors';
 import { Button, Card } from '@/components/social/ui';
@@ -54,12 +55,11 @@ export function PairWorkerCard() {
 
   return (
     <Card
-      title="חיבור worker בענן"
-      subtitle="קוד חד-פעמי שמחבר את מנוע הפרסום לחשבון הזה — בלי למסור סיסמה לאף אחד."
+      title={t('חיבור worker בענן')}
+      subtitle={t('קוד חד-פעמי שמחבר את מנוע הפרסום לחשבון הזה — בלי למסור סיסמה לאף אחד.')}
     >
       <p className="text-sm text-mist-300">
-        לוחצים, מעתיקים את הקוד ושולחים למי שמקים לכם את השרת. הקוד תקף לשעה, עובד פעם אחת בלבד, ואחרי
-        החיבור הראשון המכונה זוכרת את החשבון בעצמה.
+        {t('לוחצים, מעתיקים את הקוד ושולחים למי שמקים לכם את השרת. הקוד תקף לשעה, עובד פעם אחת בלבד, ואחרי החיבור הראשון המכונה זוכרת את החשבון בעצמה.')}
       </p>
       <div className="mt-3 flex flex-wrap items-center gap-2">
         <Button variant="secondary" busy={busy} onClick={generate}>

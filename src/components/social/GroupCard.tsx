@@ -70,7 +70,24 @@ export function GroupCard({
    * it was propped up by the dark puck that has just been removed. 12% is
    * TONE_TINT.brand, not a new opacity; the ring is what actually reads.
    */
-  const skin = `surface flex h-full flex-col items-center rounded-tile border p-2 pt-1 text-center transition-[border-color,transform] active:scale-[0.98] ${
+  /*
+ * ─── THE CAPTIONS WRAP IN RUSSIAN, AND THE TILE GETS TALLER ───────────────
+ *
+ * This card's own note above explains that the meta lines were merged into
+ * one paragraph to keep it short. In Russian that is not affordable, and the
+ * numbers say so: inside 48-66px, "Беэр-Шева" needs 62px, "Кирьят-Гат" 63,
+ * "Мицпе-Рамон" 79, "Получаем данные…" 108, and "· Следующий 17.11" did not
+ * merely get cut off — it escaped the 320px viewport. Seven boxes at six
+ * widths, none of them fixable by wording: a city is a proper noun.
+ *
+ * So the captions carry anx-ru-wrap (src/app/globals.css), which costs real
+ * height — measured at 320px, a tile goes from 140px to 196px, about a third
+ * fewer cards on a phone screen — IN RUSSIAN ONLY. The Hebrew card is
+ * 140px before and after, at every width, because the rule is scoped to
+ * html[dir='ltr'] and nothing else about this file changed. The group's NAME
+ * is not in that set: a name is the customer's and is meant to truncate.
+ */
+const skin = `surface flex h-full flex-col items-center rounded-tile border p-2 pt-1 text-center transition-[border-color,transform] active:scale-[0.98] ${
     selected ? 'border-brand-300 bg-brand-300/12 ring-2 ring-brand-300' : 'border-ink-700'
   } ${group.enabled ? '' : 'opacity-55'}`;
 
@@ -116,18 +133,18 @@ export function GroupCard({
         a name and look like a bug.
       */}
       {isPendingShare(group.external_id) ? (
-        <p dir="auto" className="mt-0.5 w-full truncate text-[11px] font-bold leading-[14px] text-warning-400">
+        <p dir="auto" className="anx-ru-wrap mt-0.5 w-full truncate text-[11px] font-bold leading-[14px] text-warning-400">
           {t('מזוהה…')}
         </p>
       ) : (
         cityLabel && (
-          <p dir="auto" className={`mt-0.5 w-full truncate text-[11px] font-bold leading-[14px] ${group.city ? 'text-brand-400' : 'text-mist-500'}`}>
+          <p dir="auto" className={`anx-ru-wrap mt-0.5 w-full truncate text-[11px] font-bold leading-[14px] ${group.city ? 'text-brand-400' : 'text-mist-500'}`}>
             {group.city ? cityLabel : `${cityLabel}?`}
           </p>
         )
       )}
       {group.category && (
-        <p dir="auto" className="w-full truncate text-[11px] leading-[14px] text-mist-500">
+        <p dir="auto" className="anx-ru-wrap w-full truncate text-[11px] leading-[14px] text-mist-500">
           {group.category}
         </p>
       )}
@@ -136,7 +153,7 @@ export function GroupCard({
           without and the grid rows stopped agreeing. No dir="ltr" island is
           needed here: "18.09" is a single number run under UAX#9 W4, and the
           two dates never touch — the word "הבא" sits between them. */}
-      <p className="mt-0.5 w-full truncate text-[11px] leading-[14px] text-mist-500">
+      <p className="anx-ru-wrap mt-0.5 w-full truncate text-[11px] leading-[14px] text-mist-500">
         {!group.last_synced_at
           ? 'מושך פרטים…'
           : group.last_published_at

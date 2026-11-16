@@ -143,13 +143,17 @@ async function main(): Promise<void> {
       'Группа "ניקוי ספות באר שבע" убрана из очереди',
       'a sentence built around a value is translated, and the group\'s own name is left alone',
     );
-    eq(pat.live, '7 минут назад', 'and one built around a number');
+    /* "мин", not "минут назад": the age forms are abbreviated now, measured
+       against the 62px activity pill — worker/test/russian-clock carries the
+       measurement and the reasoning. What this line proves is unchanged, that
+       a pattern with a number in it is answered at all. */
+    eq(pat.live, '7 мин', 'and one built around a number');
     eq(pat.gap, '5 Группы', 'the space before a word survives translation — without it the two would run together');
 
     await page.evaluate(() => (window as unknown as { bump: () => void }).bump());
     await page.waitForTimeout(120);
     const bumped = await page.evaluate(() => document.querySelector('#live')?.textContent);
-    eq(bumped, '6 минут назад', 'and when React writes a new number, the screen shows the NEW one — not a cached translation of the old');
+    eq(bumped, '6 мин', 'and when React writes a new number, the screen shows the NEW one — not a cached translation of the old');
 
     /* And back. */
     await page.click('.anxl-btn[lang="he"]');

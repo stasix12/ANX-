@@ -362,7 +362,9 @@ export function PublicationItem({
       <TargetAvatar name={row.target?.name ?? '?'} imageUrl={row.target?.image_url} channel={row.target?.channel} size={38} />
       <button type="button" onClick={() => setOpen(true)} className="min-h-11 min-w-0 grow text-start">
         <p dir="auto" className="truncate text-sm font-bold text-mist-100">{row.target?.name ?? 'יעד'}</p>
-        <p dir="auto" className={`truncate text-xs font-semibold ${line.cls}`}>{when}</p>
+        {/* anx-ru-wrap on the STATUS line only: the name above it is the
+            customer's and stays on one line whatever language is on. */}
+        <p dir="auto" className={`anx-ru-wrap truncate text-xs font-semibold ${line.cls}`}>{when}</p>
       </button>
 
       {row.status === 'awaiting_confirmation' && actions.onConfirm ? (

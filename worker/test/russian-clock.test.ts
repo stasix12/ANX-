@@ -143,16 +143,42 @@ eq(otherLeft, [], 'and every label they print is answered in Russian with no Heb
  * через takes the accusative, and the three-form plural has to settle on the
  * right one for 1, 2–4, 5+ and the 11–14 exception.
  */
+/*
+ * ─── THE PAST, ABBREVIATED, BECAUSE THE PILL IS 62 PIXELS WIDE ────────────
+ *
+ * The minute and hour ages below USED to read "минуту назад", "5 часов
+ * назад" — correct Russian, and too wide to exist. The activity row at 320px
+ * is 228px: 40 for the mark, 16 for the gaps, 110 for the sentence, which
+ * leaves the age pill 62px. Measured in the browser: "минуту назад" is
+ * 85.6px and clipped on four rows, "1 мин назад" is 74.3px and still
+ * clipped, and no form carrying "назад" fits. The same pill also clipped the
+ * customer's own group name at 390px.
+ *
+ * So minutes and hours are the digit-and-unit form a Russian feed uses
+ * anyway — "1 мин", "47 мин", "1 ч", "23 ч" — and the exact stamp is on the
+ * pill's title attribute, so nothing is lost. "1 м" was measured too and
+ * rejected: it reads as metres.
+ *
+ * DAYS KEEP "назад", and that is deliberate rather than an oversight. The
+ * Hebrew changes register at the same place — ActivityFeed's agePill hands
+ * back to relativeHe past 48 hours — and "3 дн" reads worse than "3 дня
+ * назад" in the eight other components that print the day form.
+ *
+ * WHAT IS STILL ASSERTED HERE is the thing "no Hebrew left" cannot see: that
+ * 'через' takes the accusative, that 'назад' takes the nominative where it
+ * is still used, and that the three-form plural settles on the right form
+ * for 1, 2–4, 5+ and the 11–14 exception.
+ */
 const GRAMMAR: [string, string][] = [
-  ['לפני דקה', 'минуту назад'],
-  ['לפני שתי דקות', 'две минуты назад'],
-  ['לפני 3 דקות', '3 минуты назад'],
-  ['לפני 5 דקות', '5 минут назад'],
-  ['לפני 11 דקות', '11 минут назад'],
-  ['לפני 21 דקות', '21 минута назад'],
-  ['לפני שעה', 'час назад'],
-  ['לפני שעתיים', 'два часа назад'],
-  ['לפני 5 שעות', '5 часов назад'],
+  ['לפני דקה', '1 мин'],
+  ['לפני שתי דקות', '2 мин'],
+  ['לפני 3 דקות', '3 мин'],
+  ['לפני 5 דקות', '5 мин'],
+  ['לפני 11 דקות', '11 мин'],
+  ['לפני 21 דקות', '21 мин'],
+  ['לפני שעה', '1 ч'],
+  ['לפני שעתיים', '2 ч'],
+  ['לפני 5 שעות', '5 ч'],
   ['לפני יום', 'день назад'],
   ['לפני יומיים', 'два дня назад'],
   ['לפני 7 ימים', '7 дней назад'],

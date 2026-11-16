@@ -195,7 +195,7 @@ export function ContentCard({
           {post.status === 'draft' && <Badge tone="neutral">{t('טיוטה')}</Badge>}
           {item.pendingCount > 0 && <Badge tone="brand">{item.pendingCount === 1 ? 'אחד בתור' : `${item.pendingCount} בתור`}</Badge>}
           {item.publishCount === 0 ? (
-            <span className="truncate">{nothingYet}</span>
+            <span className="anx-ru-wrap truncate">{nothingYet}</span>
           ) : (
             <span className="inline-flex items-center gap-1">
               <SendIcon aria-hidden className="h-3.5 w-3.5 shrink-0" />

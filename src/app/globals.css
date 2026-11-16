@@ -3862,3 +3862,40 @@ body:has(.social-theme) .site-backdrop {
   text-align: center;
   color: var(--color-mist-300);
 }
+
+/*
+ * ─── מה שנשבר ברוסית בלבד ────────────────────────────────────────────────
+ *
+ * "תבדוק גם שהטקסט נכנס גם בכל המשבצות ומתאים לעיצוב"
+ *
+ * Russian runs about 46% longer than Hebrew on a short caption, and four
+ * boxes in this product are narrow enough that no honest wording fits. Each
+ * of the four was measured in a browser at 320/360/390/430/768/1280 in both
+ * languages before and after the rule, and each rule was measured against
+ * the Hebrew page as well: identical, every width.
+ *
+ * THE SCOPE IS html[dir='ltr'], not [dir='ltr']. Only i18n.ts's setLang()
+ * writes dir on the document element (i18n.ts applyToDocument), so this
+ * prefix can match nothing while the app is in Hebrew — while the shorter
+ * [dir='ltr'] could: src/ carries about 120 islands that set dir="ltr" by
+ * hand inside the RTL app, for timestamps and numbers, and a rule aimed at a
+ * Tailwind class could land inside one of them in either language.
+ *
+ * AND THE TARGETS ARE NAMED CLASSES rather than Tailwind combinations, for
+ * the same reason .anxf-row is: a selector like `li > button.grow > p + p`
+ * reaches exactly the rows it was measured on today and whatever matches it
+ * tomorrow.
+ */
+
+/* `truncate` cuts a caption off; in Russian it cuts off meaning — a city
+   name, a status line, a date. On these four it wraps instead. */
+html[dir='ltr'] .anx-ru-wrap {
+  white-space: normal;
+}
+
+/* The composer's preview header: "Предварительный просмотр" plus the variant
+   select do not fit one 380px line, and the select was pushed out of the
+   card. They take two rows in Russian. */
+html[dir='ltr'] .anx-ru-rows {
+  flex-wrap: wrap;
+}

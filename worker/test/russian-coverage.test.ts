@@ -364,6 +364,10 @@ eq(wrongForm, [], "a count and its noun agree, by Russian's own rule and not by 
    not produce a brace or an empty gap on the screen. */
 const notACount = translate('ru', 'לפני 08:30 דקות');
 eq(notACount.includes('{'), false, 'a value that is not a count never leaves a brace on the screen');
-eq(notACount, '08:30 минут назад', 'and falls back to the form Russian uses when the count is unknown');
+/* "мин" and not "минут назад": the minute and hour ages are the abbreviated
+   form now, measured against the 62px age pill — worker/test/russian-clock
+   carries the measurement. What this line guards is unchanged: a value that
+   is not a whole number still comes out as a plain string. */
+eq(notACount, '08:30 мин', 'and falls back to the form Russian uses when the count is unknown');
 
 console.log(`${NAME} OK — ${checks} assertions over ${plain.length} sentences and ${patterns.length} value shapes`);

@@ -930,7 +930,9 @@ export function PostEditor({ postId }: { postId?: string }) {
         </div>
 
         <aside className="min-w-0 space-y-3 lg:sticky lg:top-28 lg:self-start">
-          <div className="flex items-center justify-between">
+          {/* anx-ru-rows: in Russian the heading and the variant select do not
+              fit on one 380px line — see src/app/globals.css. */}
+          <div className="anx-ru-rows flex items-center justify-between">
             <h2 className="text-base font-extrabold text-mist-100">תצוגה מקדימה</h2>
             <select aria-label="גרסה לתצוגה מקדימה" className="min-h-11 rounded-xl border border-ink-600 bg-ink-900 px-2.5 py-1 text-base text-mist-100" value={previewKey} onChange={(e) => setPreviewKey(e.target.value)}>
               <option value="base">טקסט בסיסי</option>

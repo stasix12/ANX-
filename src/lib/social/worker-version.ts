@@ -1896,4 +1896,30 @@ export const WORKER_VERSION = '4.78.0';
  * every installed copy it was out of date and asked for a re-install that
  * changes not one byte on the machine.
  */
-export const WORKER_FINGERPRINT = '449eed2293b68d8a';
+/*
+ * ─── 16.11.2026 — still 4.78.0, and the reason is measured again ──────────
+ *
+ * Two more changes under src/lib/social since the stamp above: the clock
+ * entries in i18n.ts, and one line in dom-translate.ts that makes
+ * data-no-translate cover a protected element's attributes as well as its
+ * text. Both are the website's. Measured against a bundle built from this
+ * exact tree (node scripts/build-app.mjs):
+ *
+ *   dist/app/worker.cjs    __anxHe 0   data-no-translate 0   Группы 0
+ *                          'минуту назад' 0
+ *   (the controls)         planQueue 4   readMyGroups 4
+ *
+ * Nothing under worker/ or desktop/ imports either file, so esbuild drops
+ * both. The one Cyrillic file in the payload is dist/app/renderer/i18n.js,
+ * the window's own translator, unchanged since 597c4bb and published inside
+ * v4.78.0.
+ *
+ * ONE THING IS OWED TO THE PC AND IS NOT IN THIS STAMP. That window's own
+ * dictionary answers 'לפני § ימים' with '§ дней назад' and has no three-form
+ * plural, so "3 дней назад" instead of "3 дня назад" — and desktop/renderer/
+ * app.js:52 prints 'לפני 1 ימים' for anything between 24 and 36 hours, which
+ * is wrong in Hebrew too. Fixing the Russian means changing code that runs on
+ * his machine, so it waits for the version bump at the end of this work
+ * rather than costing him a second re-install now.
+ */
+export const WORKER_FINGERPRINT = '0b0e268bfaa4e7f3';

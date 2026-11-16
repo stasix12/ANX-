@@ -1239,6 +1239,13 @@ const RU: Record<string, string> = {
   'בטל תזמון': 'Отменить расписание',
   'בסך הכול.': 'всего.',
   'בעוד כדקה': 'примерно через минуту',
+  'בעוד פחות מדקה': 'менее чем через минуту',
+  'בעוד שנייה': 'через секунду',
+  'בעוד שתי שניות': 'через две секунды',
+  'בעוד דקה': 'через минуту',
+  'בעוד שתי דקות': 'через две минуты',
+  'בעוד שבוע': 'через неделю',
+  'לפני פחות מדקה': 'меньше минуты назад',
   'הוסף פוסט': 'Добавить пост',
   'הכל חוץ מ': 'Всё, кроме',
   'המסך כולו': 'Весь экран',
@@ -2162,7 +2169,29 @@ const RU_PAT: Record<string, string> = {
   '§ ימים ושעתיים': '§ дн 2 ч',
   '§ ימים ו-§ שעות': '§ дн § ч',
   'בעוד שעה ו-§ דקות': 'через час § мин',
-  'בעוד § דקות': 'через § мин',
+  /*
+   * ─── בעוד: ACCUSATIVE, NOT NOMINATIVE ──────────────────────────────────
+   *
+   * "назад" takes the nominative, "через" takes the accusative, and the two
+   * halves of the same clock were being translated as if they were the same
+   * shape. Measured on the real engine before this block existed:
+   *
+   *   'בעוד דקה'        -> 'через минута'      (wants минуту)
+   *   'בעוד שנייה'      -> 'через секунда'     (wants секунду)
+   *   'בעוד שתי דקות'   -> 'через שתי мин'     (Hebrew left on screen)
+   *   'בעוד 5 שע׳'      -> 'через 5 שע׳'       (Hebrew left on screen)
+   *   'בעוד שבוע'       -> 'через שבוע'        (Hebrew left on screen)
+   *   'בעוד פחות מדקה'  -> 'через меньше минуты'
+   *
+   * This is the dashboard's "next publication" line — the most-read sentence
+   * on the screen — so three of those were visible every time he opened it
+   * in Russian.
+   */
+  'בעוד § דקות': 'через § {минуту|минуты|минут}',
+  'בעוד § דק׳': 'через § мин',
+  'בעוד § שע׳': 'через § ч',
+  'בעוד § שניות': 'через § {секунду|секунды|секунд}',
+  'בעוד § שנ׳': 'через § с',
   '§% — § מתוך § טופלו היום': '§% — § из § обработано сегодня',
   '§% — פורסם ל-§ מתוך § קבוצות היום': '§% — опубликовано в § из § групп сегодня',
   '§% — פורסם לפחות ל-§ מתוך § קבוצות היום': '§% — опубликовано минимум в § из § групп сегодня',
@@ -2204,7 +2233,31 @@ const RU_PAT: Record<string, string> = {
   'לעבור לפרופיל "§"?': 'Перейти на профиль "§"?',
   'לפי המכסה היומית שהגדרתם (§ ליום), וכולל מה שכבר יצא היום ומה שכבר ממתין בתור לאותם ימים, §. פרסום שנדחה אינו אובד — הוא ממתין ליום הראשון שיש בו מקום. כדי שזה יצא מוקדם יותר: העלו את המכסה בהגדרות, פרסו את הפרסום על פני יותר ימים, או בחרו פחות יעדים.': 'По дневной квоте, которую вы задали (§ в день), и с учётом того, что уже вышло сегодня и что уже ждёт в очереди на те же дни, §. Отложенная публикация не теряется — она ждёт первого дня, где есть место. Чтобы это вышло раньше: поднимите квоту в настройках, растяните публикацию на больше дней или выберите меньше целей.',
   'לפי הקצב היום — בערך § לכל תגובה': 'По сегодняшнему темпу — примерно § на каждый комментарий',
-  'לפני §': '§ назад',
+  /*
+   * 'לפני §' USED TO BE HERE, AND IT REWROTE THE CUSTOMER'S OWN WORDS.
+   *
+   * It was a catch-all: any text node beginning with "לפני " had the rest of
+   * it moved and " назад" stapled on. "לפני" is a preposition, not a label,
+   * so the pattern reached far past the clock it was written for:
+   *
+   *   'לפני ואחרי'              -> 'ואחרי назад'        ("and after ago")
+   *   'לפני ואחרי — ספה פינתית' -> 'ואחרי — ספה פינתית назад'
+   *   'לפני ההפעלה'             -> 'ההפעלה назад'
+   *   'לפני כל פרסום'           -> 'Каждые публикация назад'
+   *
+   * "לפני ואחרי" — before and after — is the single commonest phrase in a
+   * cleaning business's own posts and variant labels. His text, on his
+   * screen, turned into Russian-Hebrew nonsense he cannot read.
+   *
+   * relativeHe() (src/lib/social/time.ts:292) is the only thing that builds
+   * 'לפני <label>', and its label set is finite and closed:
+   *   פחות מדקה · דקה · שתי דקות · N דק׳ · שעה · שעתיים · N שעות ·
+   *   יום · יומיים · N ימים
+   * plus the seconds and שע׳ forms from ui.tsx and ActivityFeed.tsx. Every
+   * one of them now has its own entry, so nothing is lost by naming them
+   * instead of guessing.
+   */
+  'לפני § ימים': '§ {день|дня|дней} назад',
   'לפני § דקות': '§ {минута|минуты|минут} назад',
   'לפני § דק׳': '§ мин назад',
   'לפני § שניות': '§ {секунда|секунды|секунд} назад',
@@ -2559,6 +2612,14 @@ const RU_PAT: Record<string, string> = {
   '§ שניות': '§ {секунда|секунды|секунд}',
   '§ שנ׳': '§ с',
   '§ שעות': '§ {час|часа|часов}',
+  /*
+   * '§ ימים' was missing while '7 ימים' and '30 ימים' sat in the plain
+   * dictionary as fixed menu options — so the two counts a dropdown offers
+   * were Russian and every count the clock computes stayed Hebrew:
+   * 'בעוד 3 ימים' -> 'через 3 ימים'. worker/test/russian-clock.test.ts drives
+   * relativeHe() over nineteen offsets in both directions and found it.
+   */
+  '§ ימים': '§ {день|дня|дней}',
   '§ שעות שהיו תפוסות בגלל פרסומים שבוטלו שוחררו וחזרו לתור': '§ {час|часа|часов}, которые были заняты из-за отменённых публикаций, освобождены и вернулись в очередь',
   '§ — הפרסום מושהה ויתחדש ב-§.': '§ — публикация приостановлена и возобновится в §.',
   '§ — הראשון ב-§, אחר כך אחד כל §': '§ — первая в §, затем по одной каждые §',

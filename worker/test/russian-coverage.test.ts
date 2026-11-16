@@ -114,6 +114,32 @@ const HANDLED_MORE_SPECIFICALLY = new Set([
   `${PH} ${PH} תגובה`,
   `${PH} ${PH} לתגובה`,
   `${PH} ${PH} לכם`,
+  /*
+   * ─── 'לפני §' IS NOT A PATTERN ANY MORE, AND MUST NOT BECOME ONE ───────
+   *
+   * relativeHe() (src/lib/social/time.ts:292) builds `לפני ${label}`, so the
+   * parser sees this shape. It was a pattern once, and as a pattern it
+   * rewrote the customer's own words: "לפני" is a preposition, so any text
+   * node starting with it was swallowed —
+   *
+   *   'לפני ואחרי'   ->  'ואחרי назад'      ("and after ago")
+   *   'לפני ההפעלה'  ->  'ההפעלה назад'
+   *
+   * and "לפני ואחרי" is the commonest phrase in a cleaning business's own
+   * posts and variant labels. The label set relativeHe can produce is finite
+   * and closed, and every member of it is in the dictionary in full — along
+   * with the seconds and שע׳ forms the other two clocks produce:
+   *
+   *   לפני פחות מדקה · לפני שנייה · לפני שתי שניות · לפני § שניות ·
+   *   לפני § שנ׳ · לפני דקה · לפני שתי דקות · לפני § דקות · לפני § דק׳ ·
+   *   לפני שעה · לפני שעתיים · לפני § שעות · לפני § שע׳ ·
+   *   לפני יום · לפני יומיים · לפני § ימים · לפני שבוע
+   *
+   * Thirty-four labels across both directions of the clock are measured in
+   * worker/test/russian-clock.test.ts, which also holds the customer's own
+   * phrases and requires them to come back untouched.
+   */
+  `לפני ${PH}`,
 ]);
 
 /* A connector or a single letter is not a sentence, and as a dictionary key

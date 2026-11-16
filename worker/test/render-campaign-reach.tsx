@@ -57,7 +57,7 @@
  * run.
  */
 import { createElement } from 'react';
-import { renderToStaticMarkup } from 'react-dom/server';
+import { renderSnapshot } from './render-html';
 import { CampaignReach } from '@/components/social/CampaignReach';
 import type { QueueRow } from '@/lib/social/client';
 
@@ -174,7 +174,7 @@ const CASES: { id: string; what: string; node: React.ReactNode }[] = [
 const body = CASES.map(
   (c) => `
   <p data-no-translate style="color:#9aa;font:12px sans-serif;margin:18px 0 6px" data-case="${c.id}">${c.what}</p>
-  ${renderToStaticMarkup(c.node)}`,
+  ${renderSnapshot(c.node)}`,
 ).join('');
 
 /* The container the campaign screen really draws this card in —

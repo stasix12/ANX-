@@ -1,7 +1,7 @@
 /*
  * PUBLISH-NOW, AS A MEASURABLE PAGE — src/components/social/QuickPublishSheet.tsx.
  *
- * ─── WHY THIS IS NOT ONE `renderToStaticMarkup(<QuickPublishSheet/>)` ──────
+ * ─── WHY THIS IS NOT ONE `renderSnapshot(<QuickPublishSheet/>)` ──────
  *
  * It was tried first and it draws NOTHING at all. Two gates, both of them a
  * client effect:
@@ -70,7 +70,7 @@
  * NOTHING HERE touches the network, publishes, or reads a clock: NOW is
  * pinned, so every instant is identical on every run.
  */
-import { renderToStaticMarkup } from 'react-dom/server';
+import { renderSnapshot } from './render-html';
 import { CloseIcon } from '@/components/icons';
 import { Stamp } from '@/components/social/DateTime';
 import { SchedulePlanPreview, type SchedulePlan } from '@/components/social/SchedulePicker';
@@ -547,7 +547,7 @@ const CASES: { id: string; what: string; body: React.ReactNode }[] = [
 const body = CASES.map(
   (c) => `
   <p style="color:#9aa;font:12px sans-serif;margin:18px 0 6px" data-case="${c.id}">${c.what}</p>
-  ${renderToStaticMarkup(c.body)}`,
+  ${renderSnapshot(c.body)}`,
 ).join('');
 
 process.stdout.write(

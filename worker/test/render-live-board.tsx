@@ -81,7 +81,7 @@
  * effect runs, and `supabase` is null without the public env vars anyway.
  */
 import Link from 'next/link';
-import { renderToStaticMarkup } from 'react-dom/server';
+import { renderSnapshot } from './render-html';
 import { LiveBoard } from '@/components/social/LiveBoard';
 import { QueueSections } from '@/components/social/QueueSections';
 import { ButtonLink, Card, ErrorState, Freshness } from '@/components/social/ui';
@@ -123,7 +123,7 @@ const HistoryLink = (
 
 const block = (label: string, node: React.ReactNode) => `
   <p style="color:#9aa;font:12px sans-serif;margin:14px 0 4px">${label}</p>
-  <div class="board-probe">${renderToStaticMarkup(node)}</div>`;
+  <div class="board-probe">${renderSnapshot(node)}</div>`;
 
 const body = [
   /*

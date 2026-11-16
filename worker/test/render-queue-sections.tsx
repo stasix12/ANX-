@@ -78,7 +78,7 @@
  *     paragraph it draws.
  */
 import { createElement } from 'react';
-import { renderToStaticMarkup } from 'react-dom/server';
+import { renderSnapshot } from './render-html';
 import { QueueSections } from '@/components/social/QueueSections';
 import { ButtonLink } from '@/components/social/ui';
 import type { QueueRow } from '@/lib/social/client';
@@ -271,7 +271,7 @@ const CASES: { id: string; what: string; node: React.ReactNode }[] = [
 const body = CASES.map(
   (c) => `
   <p data-no-translate style="color:#9aa;font:12px sans-serif;margin:18px 0 6px" data-case="${c.id}">${c.what}</p>
-  <section class="surface rounded-card border border-ink-700 p-4">${renderToStaticMarkup(c.node)}</section>`,
+  <section class="surface rounded-card border border-ink-700 p-4">${renderSnapshot(c.node)}</section>`,
 ).join('');
 
 /* SocialShell.tsx:1280 verbatim — the box the queue card really sits in. */

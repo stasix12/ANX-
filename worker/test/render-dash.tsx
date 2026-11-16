@@ -21,7 +21,7 @@
  * what the compaction brief is about.
  */
 import { createElement } from 'react';
-import { renderToStaticMarkup } from 'react-dom/server';
+import { renderSnapshot } from './render-html';
 import { AlertTriangleIcon, MessageIcon, PauseIcon, PlusIcon, SendIcon, UsersIcon } from '@/components/icons';
 import { IdentityBar } from '@/components/social/SocialShell';
 import { LiveQueueHero } from '@/components/social/LiveCampaignHero';
@@ -192,6 +192,6 @@ process.stdout.write(
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <link rel="stylesheet" href="app.css">
 <body class="bg-ink-950">
-<div class="social-theme">${renderToStaticMarkup(page)}</div>
+<div class="social-theme">${renderSnapshot(page)}</div>
 </body></html>`,
 );

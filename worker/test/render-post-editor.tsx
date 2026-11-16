@@ -5,7 +5,7 @@
  * screen the owner writes every post on — and nothing in this repo has ever
  * measured it in Russian.
  *
- * ─── WHY THIS IS NOT `renderToStaticMarkup(<PostEditor/>)` ───────────────
+ * ─── WHY THIS IS NOT `renderSnapshot(<PostEditor/>)` ───────────────
  *
  * Two separate reasons, both verified rather than assumed:
  *
@@ -66,7 +66,7 @@
  *     this screen sets: 292 waiting publications rewritten plus the
  *     truncation tail.
  */
-import { renderToStaticMarkup } from 'react-dom/server';
+import { renderSnapshot } from './render-html';
 import Link from 'next/link';
 import { SparklesIcon } from '@/components/icons';
 import { MediaUploader } from '@/components/social/MediaUploader';
@@ -289,6 +289,6 @@ process.stdout.write(
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <link rel="stylesheet" href="app.css">
 <body class="bg-ink-950">
-<div class="social-theme">${renderToStaticMarkup(page)}</div>
+<div class="social-theme">${renderSnapshot(page)}</div>
 </body></html>`,
 );

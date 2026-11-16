@@ -43,7 +43,7 @@
  *   · AN EMPTY pageName in case 4, which is the 'שם הדף' fallback — chrome,
  *     and so the one name on the card that IS translated.
  */
-import { renderToStaticMarkup } from 'react-dom/server';
+import { renderSnapshot } from './render-html';
 import { PostPreview } from '@/components/social/PostPreview';
 import type { CtaType, MediaItem } from '@/lib/social/types';
 
@@ -152,6 +152,6 @@ process.stdout.write(
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <link rel="stylesheet" href="app.css">
 <body class="bg-ink-950">
-<div class="social-theme">${renderToStaticMarkup(page)}</div>
+<div class="social-theme">${renderSnapshot(page)}</div>
 </body></html>`,
 );

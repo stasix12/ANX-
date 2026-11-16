@@ -89,7 +89,7 @@
  * a control.
  */
 import { createElement } from 'react';
-import { renderToStaticMarkup } from 'react-dom/server';
+import { renderSnapshot } from './render-html';
 import { ActivityFeed } from '@/components/social/ActivityFeed';
 import { Card } from '@/components/social/ui';
 import type { ActivityEntry } from '@/lib/social/types';
@@ -200,13 +200,27 @@ const ROWS: ActivityEntry[] = [
     message: `פורסם ל-"${HE_GROUP}" (גרסה ב׳)`,
     meta: { queueId: 'q-9', target: HE_GROUP, permalink: 'https://www.facebook.com/groups/1234567890/posts/999' },
   },
-  /* 10 — a publication handed back to a person (worker.ts:453). */
+  /*
+   * 10 — a publication handed back to a person.
+   *
+   * THE MESSAGE THIS ROW USED TO CARRY WAS WRITTEN HERE AND NOWHERE ELSE:
+   * "פתחו את הקבוצה, הדביקו את הטקסט מהפוסט ולחצו פרסום — ואז סמנו כאן
+   * שפורסם." appears in no file of this product — `grep -rn` over src,
+   * worker, desktop and the renderer finds only this line. A fixture that
+   * invents a sentence measures a screen the app never shows: the Russian
+   * suites then report an untranslated line that cannot be fixed, because
+   * there is nothing to add an entry for. So the message is the app's own
+   * words for this state — src/components/social/Timeline.tsx:109 and
+   * PublicationItem.tsx:170 both print exactly this — and the group it
+   * belongs to arrives through meta.target, which is where this row's group
+   * really comes from.
+   */
   {
     id: 10,
     at: ago(30 * HOUR),
     level: 'warn',
     event: 'manual_pending',
-    message: `"${RU_GROUP}": פתחו את הקבוצה, הדביקו את הטקסט מהפוסט ולחצו פרסום — ואז סמנו כאן שפורסם.`,
+    message: 'ממתין לפרסום ידני',
     meta: { queueId: 'q-10', target: RU_GROUP },
   },
   /* 11 — no TITLE entry and no Hebrew in the message: BY_LEVEL plus the
@@ -263,7 +277,7 @@ const screen = createElement(Card, { title: 'פעילות',
 /* The empty branch, which is its own sentence and its own box. */
 const empty = createElement(Card, { title: 'פעילות', children: createElement(ActivityFeed, { entries: [], emptyText: 'אין פעילות בסינון הזה.' }) });
 
-const body = renderToStaticMarkup(
+const body = renderSnapshot(
   createElement(
     'div',
     { className: 'space-y-4' },

@@ -68,7 +68,7 @@
  * Nothing here touches the network, Facebook, Supabase or a database: no
  * handler runs, and `supabase` is null without the public env vars anyway.
  */
-import { renderToStaticMarkup } from 'react-dom/server';
+import { renderSnapshot } from './render-html';
 import { PairWorkerCard } from '@/components/social/PairWorkerCard';
 import { Button, Card } from '@/components/social/ui';
 import { friendlyMessage } from '@/lib/social/errors';
@@ -109,7 +109,7 @@ const CodeBlock = (
 
 const block = (label: string, node: React.ReactNode) => `
   <p style="color:#9aa;font:12px sans-serif;margin:14px 0 4px">${label}</p>
-  <div class="pair-probe mt-3">${renderToStaticMarkup(node)}</div>`;
+  <div class="pair-probe mt-3">${renderSnapshot(node)}</div>`;
 
 const body = [
   /* 1 — THE CALL SITE, prop for prop. No code, no error, not busy: the card

@@ -878,7 +878,17 @@ export function ResultsCard({
       )}
       {totals.unknown > 0 && (
         <p className="mt-1.5 text-[11px] leading-4 text-mist-500">
-          ב-{totals.unknown} קבוצות תוצאות החיפוש לא אמרו אם אתם חברים. פתחו אותן כדי לראות.
+          {/*
+            ONE STRING, NOT THREE TEXT NODES. Written as JSX text around an
+            expression, React puts "ב-", the number and the rest of the
+            sentence in three separate text nodes, and the DOM translator
+            looks up each node on its own: "ב-" is a preposition no
+            dictionary can answer, and the tail was answered as if the
+            sentence began there, so the Russian read "в 15 Группы в
+            результатах поиска…". As one string it is one lookup, and the
+            count sits in the pattern where Russian needs it.
+          */}
+          {`ב-${totals.unknown} קבוצות תוצאות החיפוש לא אמרו אם אתם חברים. פתחו אותן כדי לראות.`}
         </p>
       )}
     </Card>

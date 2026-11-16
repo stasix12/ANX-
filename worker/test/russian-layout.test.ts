@@ -78,6 +78,38 @@ const SNAPSHOTS = [
   { r: 'render-comment-timeline', what: 'the comment timeline' },
   { r: 'render-quick-comments', what: 'the quick-comment sheet' },
   { r: 'render-rounds', what: 'the publishing rounds' },
+  /*
+   * ─── AND THE TWENTY-ONE SCREENS NOTHING MEASURED UNTIL NOW ──────────────
+   *
+   * The nine above are the screens the dashboard is built from. They left
+   * most of the product unmeasured: the composer, the sheets that publish,
+   * the queue itself, the activity feed, the first-run cards, and the two
+   * narrowest boxes in the app — the content card and the group tile. Each
+   * of these fixtures prints its real component with its real classes, at
+   * the data shape that makes its tightest box tightest, and its own header
+   * records which props could not be reached on a server pass and why.
+   */
+  { r: 'render-post-editor', what: 'the post composer' },
+  { r: 'render-media-uploader', what: 'the media uploader' },
+  { r: 'render-post-preview', what: 'the Facebook preview' },
+  { r: 'render-quick-publish-sheet', what: 'the publish-now sheet' },
+  { r: 'render-queue-tuner-sheet', what: 'the queue tuner' },
+  { r: 'render-schedule-picker', what: 'the schedule picker' },
+  { r: 'render-pre-launch-review', what: 'the pre-launch review' },
+  { r: 'render-start-from-library', what: 'starting from the library' },
+  { r: 'render-activity-feed', what: 'the activity feed' },
+  { r: 'render-activity-detail-sheet', what: 'one activity line, opened' },
+  { r: 'render-timeline', what: 'the publishing order' },
+  { r: 'render-campaign-comment-sheet', what: 'the cycle comment sheet' },
+  { r: 'render-campaign-progress-bar', what: 'the campaign progress bar' },
+  { r: 'render-campaign-reach', what: 'the reach card' },
+  { r: 'render-queue-sections', what: 'the queue, section by section' },
+  { r: 'render-live-board', what: 'the live board' },
+  { r: 'render-pair-worker-card', what: 'pairing the PC' },
+  { r: 'render-profile-upload-card', what: 'handing the profile to the cloud worker' },
+  { r: 'render-setup-checklist', what: 'the first-run checklist' },
+  { r: 'render-content-card', what: 'the content card' },
+  { r: 'render-group-card', what: 'the group tile' },
 ] as const;
 
 /* The widths the rest of this repo measures at — a small phone through a desk. */
@@ -196,9 +228,14 @@ async function main(): Promise<void> {
   const { execFileSync } = await import('node:child_process');
   const snapshotFiles: { r: string; what: string; file: string }[] = [];
   for (const snap of SNAPSHOTS.filter((x) => wanted(x.r))) {
+    /* ANX_SPLIT_TEXT: the text-node boundaries a client render produces, so
+       the translator answers here what it answers in the app and the box is
+       measured around the string the customer would actually see. See
+       worker/test/render-html.ts. */
     const html = execFileSync('npx', ['tsx', `worker/test/${snap.r}.tsx`], {
       encoding: 'utf8',
       maxBuffer: 32 << 20,
+      env: { ...process.env, ANX_SPLIT_TEXT: '1' },
     });
     const withLang = html.includes('</body>')
       ? html.replace('</body>', '<script src="lang.js"></script></body>')

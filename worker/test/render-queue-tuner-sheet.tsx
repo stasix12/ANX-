@@ -1,7 +1,7 @@
 /*
  * THE QUEUE TUNER, AS A MEASURABLE PAGE — src/components/social/QueueTunerSheet.tsx.
  *
- * ─── WHY THIS FIXTURE IS NOT ONE `renderToStaticMarkup(<QueueTunerSheet/>)` ──
+ * ─── WHY THIS FIXTURE IS NOT ONE `renderSnapshot(<QueueTunerSheet/>)` ──
  *
  * It was tried first, and it draws NOTHING. Two gates, both of them a client
  * effect:
@@ -72,7 +72,7 @@
  * NOTHING HERE TOUCHES THE NETWORK, writes anything, or reads a clock: NOW is
  * pinned, so the instants are the same on every run.
  */
-import { renderToStaticMarkup } from 'react-dom/server';
+import { renderSnapshot } from './render-html';
 import { ClockIcon, CloseIcon, SearchIcon, SpinnerIcon, TrashIcon } from '@/components/icons';
 import { TargetAvatar } from '@/components/social/TargetAvatar';
 import { Button, EmptyState, Field, IconButton, Loading, Notice, inputClass } from '@/components/social/ui';
@@ -574,7 +574,7 @@ const CASES: { id: string; what: string; body: React.ReactNode }[] = [
 const body = CASES.map(
   (c) => `
   <p style="color:#9aa;font:12px sans-serif;margin:18px 0 6px" data-case="${c.id}">${c.what}</p>
-  ${renderToStaticMarkup(c.body)}`,
+  ${renderSnapshot(c.body)}`,
 ).join('');
 
 process.stdout.write(

@@ -11,7 +11,7 @@
  * So this renders the panel on its own, in the four shapes that matter.
  */
 import { createElement } from 'react';
-import { renderToStaticMarkup } from 'react-dom/server';
+import { renderSnapshot } from './render-html';
 import { CampaignSchedulePanel } from '@/components/social/CampaignSchedulePanel';
 import { DEFAULT_CAMPAIGN_SCHEDULE, type CampaignRound } from '@/lib/social/campaign-schedule';
 
@@ -105,7 +105,7 @@ const body = cases
   .map(
     ([label, rounds, repeat, figures, shape]) => `
   <p style="color:#9aa;font:12px sans-serif;margin:14px 0 4px">${label}</p>
-  <div class="panel-probe">${renderToStaticMarkup(
+  <div class="panel-probe">${renderSnapshot(
     createElement(CampaignSchedulePanel, {
       schedule: shape?.start ? { ...base, start: shape.start } : base,
       onChange: () => {},
@@ -146,7 +146,7 @@ const narrow = [298, 260]
   .map(
     (w) => `
   <p style="color:#9aa;font:12px sans-serif;margin:14px 0 4px">three rounds at ${w}px — the width the run card gives this panel</p>
-  <div class="narrow-probe" style="width:${w}px">${renderToStaticMarkup(
+  <div class="narrow-probe" style="width:${w}px">${renderSnapshot(
     createElement(CampaignSchedulePanel, {
       schedule: base,
       onChange: () => {},
@@ -183,7 +183,7 @@ const fitNarrow = [298, 260]
   .map(
     (w) => `
   <p style="color:#9aa;font:12px sans-serif;margin:14px 0 4px">his own layout at ${w}px — the width the run card gives this panel</p>
-  <div class="fit-probe" style="width:${w}px">${renderToStaticMarkup(
+  <div class="fit-probe" style="width:${w}px">${renderSnapshot(
     createElement(CampaignSchedulePanel, {
       schedule: { ...base, start: '01:30' },
       onChange: () => {},

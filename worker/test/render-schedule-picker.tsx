@@ -76,7 +76,7 @@
  * publishes, or writes anything.
  */
 import { createElement } from 'react';
-import { renderToStaticMarkup } from 'react-dom/server';
+import { renderSnapshot } from './render-html';
 import { SchedulePicker, type ScheduleDraft } from '@/components/social/SchedulePicker';
 import { Card } from '@/components/social/ui';
 import { readSchedule } from '@/lib/social/campaign-schedule';
@@ -236,7 +236,7 @@ process.stdout.write(
 <div class="social-theme">
   <main class="mx-auto min-w-0 max-w-6xl overflow-x-clip px-4 py-5">
     <div class="grid gap-5 lg:grid-cols-[1fr_380px] [&>*]:min-w-0">
-      <div class="min-w-0 space-y-5">${renderToStaticMarkup(createElement('div', null, body))}</div>
+      <div class="min-w-0 space-y-5">${renderSnapshot(createElement('div', null, body))}</div>
     </div>
   </main>
 </div>

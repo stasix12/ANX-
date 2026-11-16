@@ -25,7 +25,7 @@
  *   • A group already in the publishing list, which carries one badge more
  *     than any other row.
  */
-import { renderToStaticMarkup } from 'react-dom/server';
+import { renderSnapshot } from './render-html';
 import { GroupRow, MyGroupsCard } from '@/components/social/Discovery';
 import { joinCardView } from '@/lib/social/join-run';
 import type { DiscoveredGroupRow } from '@/lib/social/types';
@@ -124,11 +124,11 @@ const endedView = joinCardView({
 
 const runs = `
   <p style="color:#9aa;font:12px sans-serif;margin:14px 0 4px">join log — live, waiting for the answer</p>
-  <div class="row-probe">${renderToStaticMarkup(
+  <div class="row-probe">${renderSnapshot(
     GroupRow({ row: liveRow, picked: true, already: false, busy: false, exact: false, run: liveView, fallbackImage: null, onToggle: () => {}, onAdopt: () => {}, onHide: () => {} }) as never,
   )}</div>
   <p style="color:#9aa;font:12px sans-serif;margin:14px 0 4px">join log — ended with no join button, middle steps never taken</p>
-  <div class="row-probe">${renderToStaticMarkup(
+  <div class="row-probe">${renderSnapshot(
     GroupRow({ row: endedRow, picked: true, already: false, busy: false, exact: false, run: endedView, fallbackImage: null, onToggle: () => {}, onAdopt: () => {}, onHide: () => {} }) as never,
   )}</div>`;
 
@@ -136,7 +136,7 @@ const body = cases
   .map(
     ([label, r, already, picked, exact]) => `
   <p style="color:#9aa;font:12px sans-serif;margin:14px 0 4px">${label}</p>
-  <div class="row-probe">${renderToStaticMarkup(
+  <div class="row-probe">${renderSnapshot(
     GroupRow({
       row: r,
       picked,
@@ -197,7 +197,7 @@ const cardRows = [
 
 const card = `
   <p style="color:#9aa;font:12px sans-serif;margin:22px 0 4px">the "my groups" card</p>
-  <div class="card-probe">${renderToStaticMarkup(
+  <div class="card-probe">${renderSnapshot(
     MyGroupsCard({
       /*
        * TWO DIFFERENT SETS, because the difference between them IS the card.

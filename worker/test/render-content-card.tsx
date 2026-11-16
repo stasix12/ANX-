@@ -52,7 +52,7 @@
  * reaches the network.
  */
 import { createElement } from 'react';
-import { renderToStaticMarkup } from 'react-dom/server';
+import { renderSnapshot } from './render-html';
 import { BoxIcon, CopyIcon, EyeIcon, PencilIcon, TagIcon } from '@/components/icons';
 import { ContentCard } from '@/components/social/ContentCard';
 import type { MenuAction } from '@/components/social/ui';
@@ -194,7 +194,7 @@ process.stdout.write(
 <link rel="stylesheet" href="app.css">
 <body class="bg-ink-950">
 <div class="social-theme">
-  <main class="crm-page mx-auto min-w-0 max-w-6xl overflow-x-clip px-4 py-5">${renderToStaticMarkup(grid)}</main>
+  <main class="crm-page mx-auto min-w-0 max-w-6xl overflow-x-clip px-4 py-5">${renderSnapshot(grid)}</main>
 </div>
 </body></html>`,
 );

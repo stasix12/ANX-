@@ -6,7 +6,7 @@
  * app renders, this one was reachable from no fixture, so the screen the owner
  * confirms a hundred-group launch on had never been measured in Russian.
  *
- * ─── WHY THIS IS NOT ONE `renderToStaticMarkup(<PreLaunchReview/>)` ────────
+ * ─── WHY THIS IS NOT ONE `renderSnapshot(<PreLaunchReview/>)` ────────
  *
  * It was tried first and it draws NOTHING — a single `<span hidden
  * aria-hidden></span>`. PreLaunchReview's whole body is the children of
@@ -96,7 +96,7 @@
  * URIs, as render-card.tsx does it, and `plan` is computed by the real planner.
  */
 import { createElement } from 'react';
-import { renderToStaticMarkup } from 'react-dom/server';
+import { renderSnapshot } from './render-html';
 import { CloseIcon } from '@/components/icons';
 import { Stamp } from '@/components/social/DateTime';
 import { SchedulePlanPreview, planFor, type ScheduleDraft } from '@/components/social/SchedulePicker';
@@ -402,6 +402,6 @@ process.stdout.write(
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <link rel="stylesheet" href="app.css">
 <body class="bg-ink-950">
-<div class="social-theme">${renderToStaticMarkup(createElement('div', null, body))}</div>
+<div class="social-theme">${renderSnapshot(createElement('div', null, body))}</div>
 </body></html>`,
 );

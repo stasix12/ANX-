@@ -44,6 +44,8 @@ export function dirOf(lang: Lang): 'rtl' | 'ltr' {
  */
 const RU: Record<string, string> = {
   /* ── the sign-in screen ── */
+  'כל היעדים': 'Все цели',
+  'פייסבוק ביקשה להאט את קצב הפרסום': 'Facebook попросил замедлить публикацию',
   'פרסום לקבוצות פייסבוק': 'Публикация в группы Facebook',
   'פרסום אוטומטי': 'Автопубликация',
   'ריבוי חשבונות': 'Несколько аккаунтов',
@@ -2119,17 +2121,43 @@ const RU_PAT: Record<string, string> = {
    * numeral governs the noun, and the Russian reads as Russian. The singular
    * forms need no braces: the Hebrew helper only reaches them when n is 1.
    */
+  '§ דפים': '§ {страница|страницы|страниц}',
+  '§ יעדים נבחרו': 'Выбрано § {цель|цели|целей}',
+  '§ יעדים נבחרים לא מוצגים': 'Не показано § {выбранная цель|выбранные цели|выбранных целей}',
+  '§ לתור עבור § יעדים.': '§ в очередь для § целей.',
+  '§ לתור עבור יעד אחד.': '§ в очередь для одной цели.',
+  '§ לתור עבור שני יעדים.': '§ в очередь для двух целей.',
+  '§ מועדים בשבועיים הקרובים': '§ {срок|срока|сроков} в ближайшие две недели',
+  '§ נבחרו': 'Выбрано §',
+  '§ סבבים': '§ {цикл|цикла|циклов}',
+  '§ פרסומים': '§ {публикация|публикации|публикаций}',
+  '§ פרסומים בוטלו.': 'Отменено § {публикация|публикации|публикаций}.',
+  '§ פרסומים בתור יגיעו': '§ {публикация из очереди придёт|публикации из очереди придут|публикаций из очереди придут}',
+  '§ פרסומים הוזזו': 'Перенесено § {публикация|публикации|публикаций}',
+  '§ פרסומים ממתינים בתור להיום': '§ {публикация ждёт|публикации ждут|публикаций ждут} в очереди на сегодня',
+  '§ פרסומים נכנסו': 'Добавлено § {публикация|публикации|публикаций}',
+  '§ פרסומים שהמתינו בוטלו': 'Отменено § {ожидавшая публикация|ожидавшие публикации|ожидавших публикаций}',
+  '§ פרסומים שממתינים בתור עודכנו': '§ {публикация в очереди обновлена|публикации в очереди обновлены|публикаций в очереди обновлено}',
+  '§ פרסומים תוזמנו': '§ {публикация запланирована|публикации запланированы|публикаций запланировано}',
+  '§ פרסומים תוזמנו מחדש, מרווח של § ביניהם.': '§ {публикация запланирована|публикации запланированы|публикаций запланировано} заново, с интервалом § между ними.',
+  '§ פרסומים תקועים': '§ {публикация застряла|публикации застряли|публикаций застряли}',
+  '§ פרסומים, אחד כל §, על פני § ימים': '§ {публикация|публикации|публикаций}, по одной каждые §, в течение § {дня|дней|дней}',
+  '§ קבוצות': '§ {группа|группы|групп}',
+  '§ רשומות': '§ {запись|записи|записей}',
   '§ תגובה הועלתה היום': '§ комментарий добавлен сегодня',
   '§ תגובות הועלו היום': '§ {комментарий добавлен|комментария добавлено|комментариев добавлено} сегодня',
   '§ תגובה דורשת טיפול': '§ комментарий требует обработки',
   '§ תגובות דורשות טיפול': '§ {комментарий требует|комментария требуют|комментариев требуют} обработки',
   '§ קבוצה ממתינה לתגובה': '§ группа ждёт комментария',
   '§ קבוצות ממתינות לתגובה': '§ {группа ждёт|группы ждут|групп ждут} комментария',
+  'כל § היעדים': 'Все § {цель|цели|целей}',
   'לפרסום האחרון: §': 'К последней публикации: §',
   'הוסף את § הקבוצות לרשימת הפרסום': 'Добавить § групп в список публикации',
   'הוסף לרשימה את § הקבוצות שאתה כבר חבר בהן': 'Добавить в список § групп, в которых вы уже состоите',
+  'ניסיון § לפרסום נכשל.': 'Попытка § публикации не удалась.',
   'עבור החיפוש “§”': 'Для поиска «§»',
-  'ב-§ קבוצות תוצאות החיפוש לא אמרו אם אתם חברים. פתחו אותן כדי לראות.': 'В § группах результаты поиска не сообщили, состоите ли вы в них. Откройте их, чтобы увидеть.',
+  /* The three forms were missing, so one unknown group read "В 1 группах". */
+  'ב-§ קבוצות תוצאות החיפוש לא אמרו אם אתם חברים. פתחו אותן כדי לראות.': 'В § {группе|группах|группах} результаты поиска не сообщили, состоите ли вы в них. Откройте их, чтобы увидеть.',
   '§ תגובות קודמות לא מוצגות כאן': '§ предыдущих комментариев здесь не показаны',
   'פורסם ל-§ מתוך § קבוצות': 'Опубликовано в § из § групп',
   'פורסם ל-§ מתוך § קבוצות היום': 'Опубликовано в § из § групп сегодня',
@@ -2158,6 +2186,11 @@ const RU_PAT: Record<string, string> = {
    * is both correct and shorter than the Hebrew it replaces.
    */
   'בעוד § שעות ו-§ דקות': 'через § ч § мин',
+  'פרסום אחד נכנס לתור עבור § יעדים.': 'Одна публикация добавлена в очередь для § целей.',
+  'פרסום אחד נכנס לתור עבור יעד אחד.': 'Одна публикация добавлена в очередь для одной цели.',
+  'פרסום אחד נכנס לתור עבור שני יעדים.': 'Одна публикация добавлена в очередь для двух целей.',
+  'פרסום אחד תוזמן מחדש, מרווח של § ביניהם.': 'Одна публикация запланирована заново, с интервалом § между ними.',
+  'שני פרסומים תוזמנו מחדש, מרווח של § ביניהם.': 'Две публикации запланированы заново, с интервалом § между ними.',
   'שעה ו-§ דקות': '1 ч § мин',
   'שעתיים ו-§ דקות': '2 ч § мин',
   '§ שעות ודקה': '§ ч 1 мин',
@@ -2551,7 +2584,14 @@ const RU_PAT: Record<string, string> = {
   '§ דורשות טיפול היום': '§ требуют обработки сегодня',
   '§ דורשים אתכם': '§ ждут вас',
   '§ דקות': '§ {минута|минуты|минут}',
-  '§ דק׳': '§ мин',
+  /*
+   * THREE IDENTICAL FORMS ARE NOT A MISTAKE. "мин" does not decline, but the
+   * braces are also what tells this file that the slot holds a NUMBER (see
+   * countSlots above), and without them '§ דק׳' was a wildcard: it matched
+   * "292 יעדים בכל מועד, אחד כל 65 דק׳" whole and printed the Hebrew back
+   * with only the last two letters in Russian.
+   */
+  '§ דק׳': '§ {мин|мин|мин}',
   '§ הגיבו היום': '§ прокомментировали сегодня',
   '§ הוסרה מהתור — § פרסומים בוטלו§': '§ убрана из очереди — § {публикация|публикации|публикаций} отменено§',
   '§ התראות חדשות': '§ новых оповещений',
@@ -2610,7 +2650,7 @@ const RU_PAT: Record<string, string> = {
   '§ קבוצות ששמן כתוב ברוסית': '§ {группа|группы|групп}, название которых написано по-русски',
   '§ של הקבוצה הזו יימחקו יחד איתה — כולל § שכבר פורסמו — והמספרים בלוח הבקרה ובהיסטוריה ירדו בהתאם. אי אפשר לבטל. אם רק לא רוצים לפרסם אליה יותר, עדיף להשהות את הקבוצה.': '§ этой группы будут удалены вместе с ней — включая § уже опубликованных — и числа в панели управления и в истории уменьшатся соответственно. Отменить нельзя. Если вы просто не хотите больше в неё публиковать, лучше приостановить группу.',
   '§ שניות': '§ {секунда|секунды|секунд}',
-  '§ שנ׳': '§ с',
+  '§ שנ׳': '§ {с|с|с}',
   '§ שעות': '§ {час|часа|часов}',
   /*
    * '§ ימים' was missing while '7 ימים' and '30 ימים' sat in the plain
@@ -2641,7 +2681,7 @@ const RU_PAT: Record<string, string> = {
   'הקבוצה "§" הוסרה מהתור': 'Группа "§" убрана из очереди',
 };
 
-type Compiled = { re: RegExp; out: string; countOnly: boolean };
+type Compiled = { re: RegExp; out: string; countSlots: number[] };
 
 let compiled: Compiled[] | null = null;
 let anchorRe: RegExp | null = null;
@@ -2706,7 +2746,26 @@ function compile(): Compiled[] {
      * the customer's words: a group name in one, the name of a day in
      * another.
      */
-    countOnly: HAS_PLURAL.test(ru),
+    /*
+     * WHICH slots those are is read off the Russian, not guessed. `fill()`
+     * settles a braced noun against the value immediately before it, so a
+     * brace in part i is governed by value i-1 and only THAT value has to be
+     * a number. The old rule asked about the first value whatever the braces
+     * governed, and it was wrong in both directions:
+     *
+     *   '§ בכל מועד, אחד כל § · § מועדים בשבועיים הקרובים'
+     *
+     * puts a count in the THIRD slot and a counted phrase ("292 יעדים") in
+     * the first, so the whole line was skipped and the screen kept the
+     * Hebrew half of a sentence whose Russian was sitting right here.
+     *
+     * A brace in part 0 has nothing before it; fill() gives it the third
+     * form and there is no value to check.
+     */
+    countSlots: ru
+      .split(PH)
+      .map((part, i) => (i > 0 && HAS_PLURAL.test(part) ? i - 1 : -1))
+      .filter((i) => i >= 0),
   }));
   const anchors = [...new Set(rows.map(([he]) => longestLiteral(he)).filter((a) => a.trim().length >= 1))];
   anchorRe = anchors.length ? new RegExp(anchors.map(esc).join('|')) : null;
@@ -2827,10 +2886,10 @@ function matchPattern(hebrew: string, deep: boolean, depth = 1): string | null {
   /* One regex decides whether any pattern is even worth trying. Without this
      a DOM walk would run 400 regexes over every text node on the page. */
   if (!anchorRe || !anchorRe.test(hebrew)) return null;
-  for (const { re, out, countOnly } of rows) {
+  for (const { re, out, countSlots } of rows) {
     const m = re.exec(hebrew);
     if (!m) continue;
-    if (countOnly && /[\u0590-\u05FF]/.test(m[1] ?? '')) continue;
+    if (countSlots.some((i) => /[\u0590-\u05FF]/.test(m[i + 1] ?? ''))) continue;
     /* Where each value lands in the Russian decides whether it keeps its
        capital: at the very start of the line, or after a full stop, it does. */
     const parts = out.split(PH);
@@ -2859,7 +2918,13 @@ function matchPattern(hebrew: string, deep: boolean, depth = 1): string | null {
  * translated, and the decoration is put back exactly as it was. The inside
  * still has to be a sentence the dictionary knows, so nothing is guessed.
  */
-const DECORATED = /^([·•*\-\s]*)([\s\S]*?)([,.:;\s]*)$/;
+/*
+ * The dash list holds the ASCII hyphen AND the two the screens really use:
+ * "— הפרסום מושהה." came out in Hebrew on a Russian screen while
+ * "הפרסום מושהה." sat in the dictionary, because an em dash was not
+ * decoration as far as this regex was concerned.
+ */
+const DECORATED = /^([·•*\-–—\s]*)([\s\S]*?)([,.:;\s]*)$/;
 
 function withoutDecoration(hebrew: string): string | null {
   const m = DECORATED.exec(hebrew);

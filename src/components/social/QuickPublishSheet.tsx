@@ -239,6 +239,24 @@ export function QuickPublishSheet({
   const media = post.media as MediaItem[];
   const cover = media.find((m) => m.kind === 'image') ?? media[0] ?? null;
   const postTitle = post.title || post.base_text.slice(0, 60) || 'ללא כותרת';
+  /*
+   * ─── THE POST ITSELF IS NOT OURS TO REWRITE ─────────────────────────────
+   *
+   * This header is the last place the owner sees the post before it goes out,
+   * and the DOM translator looks up every text node against the dictionary.
+   * src/lib/social/compose.ts builds its suggested text from a TEMPLATE that
+   * is itself a dictionary pattern (i18n.ts), so a post written with that
+   * help came back part Russian on this screen — "✨ ניקוי ספות с выездом на
+   * дом — באר שבע והסביבה!" — while Facebook would receive the Hebrew. A
+   * preview that does not match what is about to be published is worse than
+   * no preview.
+   *
+   * So the owner's own words carry data-no-translate, and only the FALLBACKS
+   * stay translatable: "ללא כותרת" and "בלי טקסט — מדיה בלבד" are this app
+   * speaking, not the customer, and a Russian speaker must be able to read
+   * them.
+   */
+  const titleIsOwn = Boolean(post.title || post.base_text);
 
   /*
    * A first pass in the sheet so the obvious refusals are shown beside the
@@ -355,8 +373,12 @@ export function QuickPublishSheet({
           )}
         </div>
         <div className="min-w-0 grow">
-          <p dir="auto" className="truncate text-sm font-bold text-mist-100">{postTitle}</p>
-          <p dir="auto" className="truncate text-[11px] text-mist-500">{post.base_text || 'בלי טקסט — מדיה בלבד'}</p>
+          <p dir="auto" className="truncate text-sm font-bold text-mist-100">
+            {titleIsOwn ? <span data-no-translate>{postTitle}</span> : postTitle}
+          </p>
+          <p dir="auto" className="truncate text-[11px] text-mist-500">
+            {post.base_text ? <span data-no-translate>{post.base_text}</span> : 'בלי טקסט — מדיה בלבד'}
+          </p>
         </div>
         {item.pendingCount > 0 && (
           <Badge tone="info">{item.pendingCount === 1 ? 'אחד בתור' : `${item.pendingCount} בתור`}</Badge>

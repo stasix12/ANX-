@@ -21,7 +21,7 @@
  *      320px phone.
  */
 import { createElement } from 'react';
-import { renderToStaticMarkup } from 'react-dom/server';
+import { renderSnapshot } from './render-html';
 import { AlertTriangleIcon, MessageIcon, SendIcon, UsersIcon } from '@/components/icons';
 import { StatStrip, type StatStripItem } from '@/components/social/ui';
 
@@ -97,7 +97,7 @@ process.stdout.write(
 <link rel="stylesheet" href="app.css">
 <body class="bg-ink-950">
 <div class="social-theme">
-  <main class="mx-auto min-w-0 max-w-6xl overflow-x-clip px-4 py-5">${renderToStaticMarkup(createElement('div', null, body))}</main>
+  <main class="mx-auto min-w-0 max-w-6xl overflow-x-clip px-4 py-5">${renderSnapshot(createElement('div', null, body))}</main>
 </div>
 </body></html>`,
 );

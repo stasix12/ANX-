@@ -1,7 +1,7 @@
 /*
  * THE FIXTURE src/components/social/CampaignCommentSheet.tsx GETS MEASURED IN.
  *
- * ─── WHY THIS IS NOT ONE renderToStaticMarkup(<CampaignCommentSheet/>) ────
+ * ─── WHY THIS IS NOT ONE renderSnapshot(<CampaignCommentSheet/>) ────
  *
  * It was tried first, and it draws NOTHING — one `<span hidden aria-hidden>`.
  * The sheet's whole body is inside <Sheet> (src/components/social/ui.tsx:1208),
@@ -66,7 +66,7 @@
  * Nothing here touches the network, uploads anything or reads a clock.
  */
 import { createElement } from 'react';
-import { renderToStaticMarkup } from 'react-dom/server';
+import { renderSnapshot } from './render-html';
 import { CloseIcon } from '@/components/icons';
 import { MediaUploader } from '@/components/social/MediaUploader';
 import { Button, Field, IconButton, Notice, SegmentedControl, inputClass } from '@/components/social/ui';
@@ -234,7 +234,7 @@ const CASES: { id: string; what: string; props: Parameters<typeof CommentBody>[0
 const body = CASES.map(
   (c) => `
   <p data-no-translate style="color:#9aa;font:12px sans-serif;margin:18px 0 6px" data-case="${c.id}">${c.what}</p>
-  ${renderToStaticMarkup(
+  ${renderSnapshot(
     createElement(SheetShell, { title: 'הוסף תגובה לכל הפרסומים בסבב', children: createElement(CommentBody, c.props) }),
   )}`,
 ).join('');

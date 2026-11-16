@@ -19,7 +19,7 @@
  * strip's whole geometry is that line's.
  */
 import { createElement } from 'react';
-import { renderToStaticMarkup } from 'react-dom/server';
+import { renderSnapshot } from './render-html';
 import { LiveCampaignHero } from '@/components/social/LiveCampaignHero';
 import type { CampaignState } from '@/lib/social/campaign';
 import { DEFAULT_CAMPAIGN_SCHEDULE, type CampaignSchedule } from '@/lib/social/campaign-schedule';
@@ -440,7 +440,7 @@ const body = cases
   .map(
     ([label, c, s, targets, schedule, clock]) => `
   <p style="color:#9aa;font:12px sans-serif;margin:14px 0 4px">${label}</p>
-  <div class="hero-probe">${atClock((clock as string | null) ?? null, () => renderToStaticMarkup(
+  <div class="hero-probe">${atClock((clock as string | null) ?? null, () => renderSnapshot(
     /* createElement, NOT a direct call. The card holds `editingSchedule` in a
        useState now, and a component invoked as a plain function has no hook
        dispatcher — React throws before it renders a pixel. */

@@ -71,7 +71,7 @@
  * NOTHING HERE TOUCHES THE NETWORK and nothing is published.
  */
 import { createElement as h } from 'react';
-import { renderToStaticMarkup } from 'react-dom/server';
+import { renderSnapshot } from './render-html';
 import { Timeline } from '@/components/social/Timeline';
 import { Card, SegmentedControl } from '@/components/social/ui';
 import type { TimelineRow } from '@/lib/social/client';
@@ -170,7 +170,7 @@ const tabs = h(SegmentedControl, {
 
 const label = (text: string) => h('p', { className: 'mb-1 mt-5 text-[11px] text-mist-500' }, text);
 
-const body = renderToStaticMarkup(
+const body = renderSnapshot(
   h(
     'div',
     { className: 'space-y-4' },

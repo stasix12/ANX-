@@ -8,7 +8,7 @@
  *
  * ─── THE REAL COMPONENT, AND THE ONE BRANCH IT CANNOT REACH ───────────────
  *
- * Case 1 is `renderToStaticMarkup(<StartFromLibrary hidden={false} …/>)` — the
+ * Case 1 is `renderSnapshot(<StartFromLibrary hidden={false} …/>)` — the
  * shipped component, with its real Card, its real `t()` calls and its real
  * Skeleton strip. That is the state the server reaches on its own and it is
  * the state the owner sees first: `posts` is `useState<Post[] | null>(null)`
@@ -69,7 +69,7 @@
  * and the covers are inline SVG data URIs, as render-card.tsx does it.
  */
 import { createElement } from 'react';
-import { renderToStaticMarkup } from 'react-dom/server';
+import { renderSnapshot } from './render-html';
 import { ClipboardListIcon } from '@/components/icons';
 import { PostCover } from '@/components/social/PostCover';
 import { StartFromLibrary } from '@/components/social/StartFromLibrary';
@@ -191,7 +191,7 @@ process.stdout.write(
 <div class="social-theme">
   <main class="mx-auto min-w-0 max-w-6xl overflow-x-clip px-4 py-5">
     <div class="grid gap-5 lg:grid-cols-[1fr_380px] [&>*]:min-w-0">
-      <div class="min-w-0 space-y-5">${renderToStaticMarkup(createElement('div', null, body))}</div>
+      <div class="min-w-0 space-y-5">${renderSnapshot(createElement('div', null, body))}</div>
     </div>
   </main>
 </div>

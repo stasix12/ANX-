@@ -29,7 +29,7 @@
  * all.
  */
 import { createElement } from 'react';
-import { renderToStaticMarkup } from 'react-dom/server';
+import { renderSnapshot } from './render-html';
 import { CampaignCard } from '@/components/social/CampaignCard';
 import type { CampaignState } from '@/lib/social/campaign';
 import { DEFAULT_CAMPAIGN_REPEAT, DEFAULT_CAMPAIGN_SCHEDULE, type CampaignRepeat, type CampaignSchedule } from '@/lib/social/campaign-schedule';
@@ -185,7 +185,7 @@ const repeats: Record<string, CampaignRepeat> = {
 
 const body = cases.map(([label, c, s, posts, media, paused]) => `
   <p style="color:#9aa;font:12px sans-serif;margin:14px 0 4px">${label}</p>
-  <div class="card-probe">${renderToStaticMarkup(
+  <div class="card-probe">${renderSnapshot(
     /*
      * createElement, NOT a direct call — the same correction render-hero.tsx
      * made for the same reason. The card draws <NextPublication>, which holds

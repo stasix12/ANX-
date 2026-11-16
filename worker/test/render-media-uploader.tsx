@@ -41,7 +41,7 @@
  * of the three with a box to break is the add button's aria-label, which is
  * an attribute and has no width.
  */
-import { renderToStaticMarkup } from 'react-dom/server';
+import { renderSnapshot } from './render-html';
 import { MediaUploader } from '@/components/social/MediaUploader';
 import { Card, Field } from '@/components/social/ui';
 import type { MediaItem } from '@/lib/social/types';
@@ -113,6 +113,6 @@ process.stdout.write(
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <link rel="stylesheet" href="app.css">
 <body class="bg-ink-950">
-<div class="social-theme">${renderToStaticMarkup(page)}</div>
+<div class="social-theme">${renderSnapshot(page)}</div>
 </body></html>`,
 );

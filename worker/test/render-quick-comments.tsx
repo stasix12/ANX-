@@ -22,7 +22,7 @@
  * was blue when /social's brand-* is in fact purple.)
  */
 import { createElement } from 'react';
-import { renderToStaticMarkup } from 'react-dom/server';
+import { renderSnapshot } from './render-html';
 import { QuickCommentsCard } from '@/components/social/QuickCommentsCard';
 import type { Campaign } from '@/lib/social/types';
 import type { CampaignState } from '@/lib/social/campaign';
@@ -125,7 +125,7 @@ const states: Record<string, CampaignState> = {
   '8': st(60, '2026-09-24T12:00:00Z'),
 };
 
-const body = renderToStaticMarkup(
+const body = renderSnapshot(
   createElement('div', { className: 'probe' }, createElement(QuickCommentsCard, { campaigns, states, now: NOW, onComment: () => {} })),
 );
 

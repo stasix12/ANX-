@@ -22,7 +22,7 @@
  *     next comment out rather than continuing the finished ones' count.
  */
 import { createElement } from 'react';
-import { renderToStaticMarkup } from 'react-dom/server';
+import { renderSnapshot } from './render-html';
 import { CommentTimeline } from '@/components/social/CommentTimeline';
 import type { QueueRow } from '@/lib/social/client';
 
@@ -290,7 +290,7 @@ const stalledUpcoming: QueueRow[] = [
 const stalledToday = { done: 0, failed: 11, unverified: 1 };
 const stalledTotals = { pending: 879, done: 0, failed: 11, unverified: 1 };
 
-const body = renderToStaticMarkup(
+const body = renderSnapshot(
   createElement(
     'div',
     null,

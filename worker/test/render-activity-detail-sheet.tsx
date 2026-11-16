@@ -1,7 +1,7 @@
 /*
  * "פרטי הפרסום", AS A MEASURABLE PAGE — src/components/social/ActivityDetailSheet.tsx.
  *
- * ─── WHY THIS IS NOT ONE renderToStaticMarkup(<ActivityDetailSheet/>) ──────
+ * ─── WHY THIS IS NOT ONE renderSnapshot(<ActivityDetailSheet/>) ──────
  *
  * It was tried first, and it draws `<span hidden aria-hidden></span>` and
  * nothing else. Two gates, both of them a client effect:
@@ -83,7 +83,7 @@
  * instants are literals, so the window is the same on every run.
  */
 import { createElement as h } from 'react';
-import { renderToStaticMarkup } from 'react-dom/server';
+import { renderSnapshot } from './render-html';
 import { ActivityDetailSheet } from '@/components/social/ActivityDetailSheet';
 import { explainFailure, TONE_CLASS } from '@/components/social/ErrorDetail';
 import { TargetAvatar } from '@/components/social/TargetAvatar';
@@ -474,7 +474,7 @@ const CASES: { id: string; what: string; row: Row; log: typeof LOG }[] = [
 
 const label = (text: string) => h('p', { className: 'mx-auto mb-1 mt-5 max-w-[480px] px-2 text-[11px] text-mist-500' }, text);
 
-const body = renderToStaticMarkup(
+const body = renderSnapshot(
   h(
     'div',
     null,

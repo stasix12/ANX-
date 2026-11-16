@@ -10,7 +10,7 @@
  * saved searches, 146 results for "באר שבע" with 80 new, 46 already joined and
  * 20 whose membership the cards did not state.
  */
-import { renderToStaticMarkup } from 'react-dom/server';
+import { renderSnapshot } from './render-html';
 import { FilterRow, MyGroupsCard, ResultsCard, SearchCard } from '@/components/social/Discovery';
 import { FILTER_LABEL, SORT_LABEL, type DiscoveryFilter, type DiscoverySort } from '@/lib/social/discovery';
 
@@ -98,5 +98,5 @@ console.log(`<!doctype html><html lang="he" dir="rtl"><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <link rel="stylesheet" href="app.css">
 <body class="bg-ink-950"><div class="social-theme" style="padding:16px">
-<div class="top-after">${renderToStaticMarkup(after)}</div>
+<div class="top-after">${renderSnapshot(after)}</div>
 </div></body></html>`);

@@ -19,7 +19,7 @@
  * this was invisible.
  */
 import { createElement } from 'react';
-import { renderToStaticMarkup } from 'react-dom/server';
+import { renderSnapshot } from './render-html';
 /*
  * CrmShell calls usePathname() to decide which tab is lit. Outside the app
  * router that throws "invariant expected app router to be mounted", and the
@@ -44,7 +44,7 @@ import { LeadForm } from '../../src/components/crm/LeadForm';
  * elements with the session and the router taken out, which is what makes
  * the measurement possible at all.
  */
-const body = renderToStaticMarkup(
+const body = renderSnapshot(
   createElement(
     CrmChrome,
     { title: 'ליד חדש', pathname: '/crm/leads/new' } as never,

@@ -72,6 +72,16 @@ export function ContentCard({
   const kind = !cover ? 'טקסט' : cover.kind === 'video' ? 'וידאו' : 'תמונה';
   const title = post.title || post.base_text.slice(0, 60) || 'ללא כותרת';
   /*
+   * The owner's own words, which the DOM translator must not touch — the same
+   * rule PostPreview and PreLaunchReview already follow, and for the same
+   * reason: a post written with compose.ts's help matches a dictionary
+   * pattern, so this tile showed half of the customer's post in Russian while
+   * Facebook would get the Hebrew. "ללא כותרת" is OUR word for a post with no
+   * title, so it stays translatable.
+   */
+  const titleIsOwn = Boolean(post.title || post.base_text);
+  const own = (text: string) => <span data-no-translate>{text}</span>;
+  /*
    * One number, not two.
    *
    * publishCount counts PUBLICATIONS and publishedTargetIds counts distinct
@@ -137,7 +147,7 @@ export function ContentCard({
                 dir="auto"
                 className="line-clamp-5 h-full px-3 py-3 text-start text-[13px] font-extrabold leading-snug text-mist-300"
               >
-                {post.base_text || title}
+                {post.base_text ? own(post.base_text) : titleIsOwn ? own(title) : title}
               </span>
             )}
 
@@ -165,7 +175,7 @@ export function ContentCard({
               never took and a long title ran to three lines and pushed the two
               cards in its row apart. */}
           <span dir="auto" className="mt-2 line-clamp-2 px-0.5 text-sm font-bold leading-snug text-mist-100">
-            {title}
+            {titleIsOwn ? own(title) : title}
           </span>
         </button>
 

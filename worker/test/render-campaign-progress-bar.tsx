@@ -56,7 +56,7 @@
  *      a single sentence and no bar at all.
  */
 import { createElement } from 'react';
-import { renderToStaticMarkup } from 'react-dom/server';
+import { renderSnapshot } from './render-html';
 import { CampaignProgressBar } from '@/components/social/CampaignProgressBar';
 import { EMPTY_PROGRESS, type CampaignProgress } from '@/lib/social/types';
 
@@ -107,7 +107,7 @@ const CASES: { id: string; what: string; progress: CampaignProgress }[] = [
 const body = CASES.map(
   (c) => `
   <p data-no-translate style="color:#9aa;font:12px sans-serif;margin:18px 0 6px" data-case="${c.id}">${c.what}</p>
-  <section class="surface rounded-card border border-ink-700 p-4">${renderToStaticMarkup(
+  <section class="surface rounded-card border border-ink-700 p-4">${renderSnapshot(
     createElement('div', { className: 'mt-4' }, createElement(CampaignProgressBar, { progress: c.progress })),
   )}</section>`,
 ).join('');

@@ -60,7 +60,7 @@
  * Facebook or a database.
  */
 import { createElement } from 'react';
-import { renderToStaticMarkup } from 'react-dom/server';
+import { renderSnapshot } from './render-html';
 import { SetupChecklist } from '@/components/social/SetupChecklist';
 
 const CASES: [string, { hasTargets: boolean; workerOnline: boolean; hasPublications: boolean }][] = [
@@ -74,7 +74,7 @@ const CASES: [string, { hasTargets: boolean; workerOnline: boolean; hasPublicati
 const body = CASES.map(
   ([label, props]) => `
   <p style="color:#9aa;font:12px sans-serif;margin:14px 0 4px">${label}</p>
-  <div class="checklist-probe mb-4">${renderToStaticMarkup(createElement(SetupChecklist, props))}</div>`,
+  <div class="checklist-probe mb-4">${renderSnapshot(createElement(SetupChecklist, props))}</div>`,
 ).join('');
 
 process.stdout.write(

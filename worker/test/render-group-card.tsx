@@ -62,7 +62,7 @@
  * is all `object-fit: cover` needs. The fixture never reaches the network.
  */
 import { createElement } from 'react';
-import { renderToStaticMarkup } from 'react-dom/server';
+import { renderSnapshot } from './render-html';
 import { ChartIcon, MapPinIcon, PauseIcon, PencilIcon, PlayIcon, RepeatIcon, StarIcon, TrashIcon, UsersIcon } from '@/components/icons';
 import { GroupCard } from '@/components/social/GroupCard';
 import type { MenuAction } from '@/components/social/ui';
@@ -217,9 +217,9 @@ process.stdout.write(
 <div class="social-theme">
   <main class="crm-page mx-auto min-w-0 max-w-6xl overflow-x-clip px-4 py-5">
     ${label('browsing — the tile is a link, with the star, the dot and the "⋯" in its corners')}
-    ${renderToStaticMarkup(grid(false, []))}
+    ${renderSnapshot(grid(false, []))}
     ${label('picking — the tile is one big toggle, with the 28px mark; two of these are selected')}
-    ${renderToStaticMarkup(grid(true, ['g1', 'g5']))}
+    ${renderSnapshot(grid(true, ['g1', 'g5']))}
   </main>
 </div>
 </body></html>`,

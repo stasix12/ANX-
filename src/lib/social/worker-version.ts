@@ -1084,7 +1084,25 @@
  * because src/lib/social ships whole with the installer. The PC is not
  * behind in any way that affects publishing while it sits on an older one.
  */
-export const WORKER_VERSION = '4.76.0';
+/*
+ * 4.76.0 → 4.77.0 — רוסית מלאה: 405 משפטים עם ערך באמצע, ו-80 משפטים בחלון
+ * התוכנה שעל המחשב שנשארו בעברית.
+ *
+ * v4.76.0 published 16.11 at 05:43 (asked, not assumed), so 4.77.0 is free.
+ *
+ * THIS ONE DOES CHANGE THE PROGRAM ON THE PC, and that is the difference
+ * from the three before it. desktop/renderer/i18n.js is the window's own
+ * translator and it was answering fixed sentences only; every status, empty
+ * state, greeting and log line that app.js writes while the program runs was
+ * still Hebrew. It now holds those, and matches lines built around a value.
+ *
+ * Two bugs went with it, both in logic rather than in the dictionary: a node
+ * the program rewrote kept the first translation (a minute counter froze),
+ * and the space around a line was dropped (a word fused to its number).
+ *
+ * The engine that publishes is untouched. "מאד חשוב לא לגעת כלום חוץ מזה."
+ */
+export const WORKER_VERSION = '4.77.0';
 
 /**
  * A FINGERPRINT OF EVERYTHING THE INSTALLER CARRIES.
@@ -1835,4 +1853,4 @@ export const WORKER_VERSION = '4.76.0';
  * worker/facebook/join.ts and written by worker/social-worker.ts, both of
  * which run only on his PC. Numbers under WORKER_VERSION above.
  */
-export const WORKER_FINGERPRINT = 'c1868792cd77806c';
+export const WORKER_FINGERPRINT = '9ea200be0e84b9c2';

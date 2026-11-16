@@ -39,7 +39,13 @@ import { translate, type Lang } from './i18n';
 const ATTRS = ['placeholder', 'aria-label', 'title'] as const;
 const SKIP_TAGS = new Set(['SCRIPT', 'STYLE', 'TEXTAREA', 'CODE', 'PRE']);
 
-type Marked = Text & { __anxHe?: string | null; __anxOut?: string; __anxPre?: string; __anxPost?: string };
+type Marked = Text & {
+  __anxHe?: string | null;
+  __anxSrc?: string;
+  __anxOut?: string;
+  __anxPre?: string;
+  __anxPost?: string;
+};
 type MarkedEl = Element & { [k: string]: unknown };
 
 let lang: Lang = 'he';
@@ -66,9 +72,18 @@ function tidy(s: string): string {
  */
 function source(node: Marked): string | null {
   const cur = node.nodeValue ?? '';
-  if (node.__anxHe !== undefined && node.__anxOut !== undefined && cur === node.__anxOut) {
+  /*
+   * TWO STRINGS ARE REMEMBERED, and both are needed to skip work:
+   * __anxSrc is the value this node was last READ from, __anxOut the value
+   * last WRITTEN to it. A node holding a bare number or a group name has no
+   * translation, and without __anxSrc it would be looked up again on every
+   * render for the life of the page — a few microseconds each, times every
+   * node, times every render. With it, an unchanged node costs one compare.
+   */
+  if (node.__anxHe !== undefined && (cur === node.__anxSrc || cur === node.__anxOut)) {
     return node.__anxHe;
   }
+  node.__anxSrc = cur;
   const txt = tidy(cur);
   /*
    * ─── THE SPACE AROUND THE WORDS IS NOT DECORATION ─────────────────────

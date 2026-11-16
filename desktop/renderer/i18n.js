@@ -299,7 +299,12 @@
    */
   function paintNode(node) {
     var current = node.nodeValue === null ? '' : node.nodeValue;
-    if (node.__anxHe === undefined || node.__anxOut === undefined || current !== node.__anxOut) {
+    /* __anxSrc is what this node was last READ from and __anxOut what was
+       last WRITTEN to it. Without the first, a node holding a bare number
+       would be looked up again on every repaint for as long as the program
+       stayed open. With it, an unchanged node costs one compare. */
+    if (node.__anxHe === undefined || (current !== node.__anxSrc && current !== node.__anxOut)) {
+      node.__anxSrc = current;
       var original = tidy(current);
       if (!original) {
         node.__anxHe = null;

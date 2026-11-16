@@ -267,6 +267,36 @@ async function main(): Promise<void> {
     html.indexOf('<script src="i18n.js">') < html.indexOf('<script src="app.js">'),
     'and before app.js, so the window opens already in the chosen language',
   );
+  /*
+   * ─── ONE PRODUCT, ONE WORD FOR THE SAME THING ───────────────────────────
+   *
+   * Two dictionaries, written months apart: this window's and the website's.
+   * Thirty-five Hebrew sentences are in BOTH, and eight of them had drifted
+   * into two different Russian words for the same status —
+   *
+   *     נכשל   the window: "Не удалось"      the site: "Сбой"
+   *     נעצר   the window: "Остановлено"     the site: "Стоп"
+   *
+   * — which the customer reads as two programs. Nothing could have caught it:
+   * each dictionary is self-consistent and each suite only ever read one.
+   * They are aligned now, and this is what keeps them aligned: a shared
+   * sentence must have the same Russian on both sides, or say here why not.
+   */
+  const web = readFileSync(new URL('../../src/lib/social/i18n.ts', import.meta.url), 'utf8');
+  const pairs = (text: string) =>
+    new Map([...text.matchAll(/^\s+'((?:[^'\\]|\\.)*)': '((?:[^'\\]|\\.)*)',$/gm)].map((m) => [m[1], m[2]]));
+  const here = pairs(body);
+  const there = pairs(web);
+  const shared = [...here.keys()].filter((k) => there.has(k));
+  is(shared.length >= 30, `the two dictionaries share sentences — ${shared.length} of them`);
+  const drifted = shared
+    .filter((k) => here.get(k) !== there.get(k))
+    .map((k) => `${k}  window: ${here.get(k)}  site: ${there.get(k)}`);
+  is(
+    drifted.length === 0,
+    `and every shared sentence reads the same in both — the window and the site speak one language${drifted.length ? `\n      ${drifted.join('\n      ')}` : ''}`,
+  );
+
   /* It must ship. scripts/build-app.mjs copies the whole renderer folder, and
      this is the assertion that notices if that ever becomes a file list. */
   const build = read('scripts/build-app.mjs');

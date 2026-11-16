@@ -960,7 +960,7 @@ export function PostEditor({ postId }: { postId?: string }) {
         onClose={() => setReviewOpen(false)}
         onStart={onSchedule}
         busy={busy === 'schedule'}
-        campaignName={campaign?.name ?? ''}
+        campaignName={campaign?.name ? keep(campaign.name) : ''}
         // A post with no internal name still needs to be identifiable in the
         // review; its opening line is what the owner recognises.
         postTitle={post.title || post.base_text.split('\n')[0].slice(0, 60)}

@@ -1142,7 +1142,33 @@
  * HE MUST RE-INSTALL ONCE for this: the Hebrew day line and the Russian
  * plural both live in the window on his machine.
  */
-export const WORKER_VERSION = '4.79.0';
+/*
+ * 4.79.0 → 4.80.0 — "תראה אם אפשר להשתמש במילים נרדפות שזה ישמע יותר קצר".
+ *
+ * v4.79.0 published 16.11 at 13:48 (asked GitHub, not assumed), so 4.80.0 is
+ * free. THIS ONE HAS TO REACH THE PC, which is why the version moves rather
+ * than only the stamp: desktop/renderer/i18n.js is inside the installer, and
+ * fourteen of its lines changed.
+ *
+ * ONE PRODUCT, ONE WORD. Two dictionaries written months apart — the window's
+ * and the website's — share thirty-five Hebrew sentences, and eight of them
+ * had drifted into two different Russian words for the same status:
+ *
+ *     נכשל   the window: "Не удалось"      the site: "Сбой"
+ *     נעצר   the window: "Остановлено"     the site: "Стоп"
+ *
+ * Nothing could have caught that: each dictionary is self-consistent, and
+ * each suite only ever read one of them. They are aligned now, and
+ * desktop-window.test.ts compares them from here on. The machine on the desk
+ * is also called the same thing in both — "ПК" on 99 of the website's lines
+ * and, until now, "компьютер" on seven of the window's.
+ *
+ * The engine that publishes is untouched. "מאד חשוב לא לגעת כלום חוץ מזה."
+ *
+ * HE MUST RE-INSTALL ONCE for this. He has not installed 4.79.0 yet, so one
+ * install carries both.
+ */
+export const WORKER_VERSION = '4.80.0';
 
 /**
  * A FINGERPRINT OF EVERYTHING THE INSTALLER CARRIES.
@@ -1946,4 +1972,4 @@ export const WORKER_VERSION = '4.79.0';
  * his machine, so it waits for the version bump at the end of this work
  * rather than costing him a second re-install now.
  */
-export const WORKER_FINGERPRINT = 'b5d3a673a4b67e50';
+export const WORKER_FINGERPRINT = '71e78b4f6730ad76';

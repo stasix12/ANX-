@@ -942,7 +942,7 @@ export function CampaignCard({
             onChange={onScheduleChange}
             repeat={repeat}
             onRepeatChange={onRepeatChange}
-            campaignName={campaign.name}
+            campaignName={keep(campaign.name)}
             disabled={scheduleBusy}
             busy={scheduleBusy}
             accountFloorSeconds={spacing ? accountGapSeconds(spacing, spacing, true) : undefined}

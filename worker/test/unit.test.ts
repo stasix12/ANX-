@@ -1205,8 +1205,16 @@ console.log('unit tests OK');
     /\.\.\.\(onDelete \? \[\{ label: 'מחק קמפיין'[\s\S]{0,120}danger: true \}\] : \[\]\)/.test(cardCode),
     "the ⋯ sheet must keep its 'מחק קמפיין' entry — it is where the rest of this card's actions live",
   );
+  /*
+   * keep() AROUND IT IS NOT A LOOSENING, it is the rest of the same idea.
+   * The label is one string built from our words and the customer's, so the
+   * Russian dictionary answered the whole thing and a campaign he called
+   * "קיץ" was announced under a translated name. keep() marks his part as
+   * his; what this line still insists on is that the campaign's OWN name is
+   * what gets announced. See the note on keep() in src/lib/social/i18n.ts.
+   */
   assert.ok(
-    /aria-label=\{`מחק את הקמפיין "\$\{campaign\.name\}"`\}/.test(cardCode),
+    /aria-label=\{`מחק את הקמפיין "\$\{keep\(campaign\.name\)\}"`\}/.test(cardCode),
     'the campaign card must draw a VISIBLE delete control, named after the campaign it would delete — twenty-six buttons all called "מחק" tell a screen reader nothing about which one it is on',
   );
   /*

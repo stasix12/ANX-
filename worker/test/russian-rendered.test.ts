@@ -573,6 +573,24 @@ async function main(): Promise<void> {
   const crashed: string[] = [];
   let screens = 0;
   let nameKept: { hebrew: boolean; russian: boolean } = { hebrew: false, russian: true };
+  /*
+   * ─── AND THE NAME'S RUSSIAN MUST BE NOWHERE, ON ANY SCREEN ──────────────
+   *
+   * nameKept proves it for one screen, by looking at one element. This looks
+   * for the OPPOSITE on every screen, in the whole document — attributes
+   * included — because that is where the leak hid: the visible name was
+   * protected while `aria-label={`בחר את ${group.name}`}` still announced
+   * "Выбрать наш район", and nothing in this suite could see an attribute
+   * that reads as perfectly good Russian. "Наш район" is what the dictionary
+   * turns this fixture's group name into; finding it anywhere means some
+   * label was built from the customer's words without keep().
+   *
+   * CASE-INSENSITIVELY, which is not pedantry: inside a sentence the engine
+   * lowercases a value it translates, so the leak reads "Выбрать наш район"
+   * and a search for "Наш район" walks straight past it. The first version of
+   * this check did, and passed with the mark deliberately removed.
+   */
+  const nameLeaked: string[] = [];
 
   try {
     /* One tall window: this suite is about words, not boxes — russian-layout
@@ -603,6 +621,7 @@ async function main(): Promise<void> {
       await page.evaluate('document.fonts.ready');
       await page.waitForTimeout(250);
       examine((await page.evaluate(PROBE)) as string[], m);
+      if (await page.evaluate(`document.documentElement.outerHTML.toLowerCase().includes('наш район')`)) nameLeaked.push(m);
       screens += 1;
     }
     for (const r of SNAPSHOTS) {
@@ -611,6 +630,7 @@ async function main(): Promise<void> {
       await page.evaluate('document.fonts.ready');
       await page.waitForTimeout(150);
       examine((await page.evaluate(PROBE)) as string[], r);
+      if (await page.evaluate(`document.documentElement.outerHTML.toLowerCase().includes('наш район')`)) nameLeaked.push(r);
       screens += 1;
       if (r === 'render-group-card') {
         nameKept = (await page.evaluate(`(() => {
@@ -641,6 +661,7 @@ async function main(): Promise<void> {
    * it used to become is nowhere on the page.
    */
   eq(nameKept, { hebrew: true, russian: false }, 'a group whose name is also a dictionary sentence keeps its name');
+  eq(nameLeaked.sort(), [], 'and no screen turns that name into Russian anywhere in its document, attributes included');
 
   is(screens === FIXTURES.length + SNAPSHOTS.length, `every screen was read — ${screens}`);
   eq(crashed, [], 'no screen throws with the translator over it');

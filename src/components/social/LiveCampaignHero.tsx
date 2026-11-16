@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
 import { CalendarIcon, ChevronIcon, MegaphoneIcon, PauseIcon, RepeatIcon, SpinnerIcon } from '@/components/icons';
+import { keep } from '@/lib/social/i18n';
 import {
   canPauseRun,
   canResumeRun,
@@ -866,7 +867,7 @@ export function LiveCampaignHero({
           /* Same number the campaigns screen passes, from the same place: the
              round's own rows that wait on a person. */
           waiting={state.progress.manual}
-          campaignName={campaign.name}
+          campaignName={keep(campaign.name)}
           /* "ושיהיה גם טיימר במסך הראשי ליד כרטיסיית הקמפיין שזה סופר את
              ה-3 שעות בגלל המגבלה." It is drawn inside the block below, under
              the instant it contradicts — see NextPublication's own note. */
@@ -914,7 +915,7 @@ export function LiveCampaignHero({
                    which cannot be split by round — and absence is drawn as
                    absence rather than as nought. */
                 roundProgress={state.byRound}
-                campaignName={campaign.name}
+                campaignName={keep(campaign.name)}
                 disabled={scheduleBusy}
                 /* …and WHY it is disabled: the blue circle, where he is
                    looking when he changes the hour. */

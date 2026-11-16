@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { t } from '@/lib/social/i18n';
+import { keep, t } from '@/lib/social/i18n';
 import { CampaignCard, campaignOrdinals } from '@/components/social/CampaignCard';
 import { CampaignTile } from '@/components/social/CampaignTile';
 import { CampaignHoursSheet } from '@/components/social/CampaignHoursSheet';
@@ -1366,7 +1366,7 @@ export default function CampaignsPage() {
         <CampaignHoursSheet
           open
           onClose={() => setHoursFor(null)}
-          campaignName={hoursFor.name}
+          campaignName={keep(hoursFor.name)}
           /* The campaign's own stored schedule, through the same reader the
              card uses — so an edit still settling is the one the sheet opens
              on rather than the row it has not replaced yet. */

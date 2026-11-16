@@ -343,17 +343,27 @@ eq(brandBroken, [], 'and a pattern never reaches one of them either — the bran
  * software to the people this was built for. These are the cases the rule
  * turns on, each run through the real engine.
  */
+/*
+ * THE VERB AGREES TOO, which is the half this table used to let through. The
+ * engine settles EVERY brace in the stretch after a §, so one sentence can
+ * carry both forms — and Russian needs both: "1 группа приостановлена" and
+ * "5 групп приостановлены". Seventeen sentences in the dictionary had a
+ * plural-only verb standing next to a noun that does change, so at one they
+ * read "1 группа не получили". Each row below pins the noun AND the verb.
+ */
 const agreement: [number, string][] = [
-  [3, '3 группы приостановлено'],
-  [4, '4 группы приостановлено'],
-  [5, '5 групп приостановлено'],
-  [11, '11 групп приостановлено'],
-  [14, '14 групп приостановлено'],
-  [21, '21 группа приостановлено'],
-  [22, '22 группы приостановлено'],
-  [25, '25 групп приостановлено'],
-  [101, '101 группа приостановлено'],
-  [112, '112 групп приостановлено'],
+  [1, '1 группа приостановлена'],
+  [2, '2 группы приостановлены'],
+  [3, '3 группы приостановлены'],
+  [4, '4 группы приостановлены'],
+  [5, '5 групп приостановлены'],
+  [11, '11 групп приостановлены'],
+  [14, '14 групп приостановлены'],
+  [21, '21 группа приостановлена'],
+  [22, '22 группы приостановлены'],
+  [25, '25 групп приостановлены'],
+  [101, '101 группа приостановлена'],
+  [112, '112 групп приостановлены'],
 ];
 const wrongForm = agreement
   .filter(([n, want]) => translate('ru', `${n} קבוצות הושהו`) !== want)
@@ -389,9 +399,30 @@ eq(notACount, '08:30 мин', 'and falls back to the form Russian uses when the 
  * .name, .query or .base_text is reading the customer's words, and those
  * three are never ours. A Card's own `title` is not in the list, because a
  * card title IS ours.
+ *
+ * AND A BARE IDENTIFIER COUNTS TOO, which is how three more got through the
+ * first version of this guard: `aria-label={`ימי פרסום ל${campaignName}`}`
+ * reads no property, so the rule above never looked at it — and a campaign
+ * he called "דפים" was announced as "Страницы". Anything whose NAME ends in
+ * Name is a name.
  */
-const ATTR_DATA = /\.(name|query|base_text)\b/;
-const ATTRS_WITH_TEXT = new Set(['aria-label', 'title', 'label', 'placeholder', 'alt']);
+const ATTR_DATA = /\.(name|query|base_text)\b|\b[a-z][A-Za-z]*Name\b/;
+/*
+ * MARKED ONE STEP EARLIER, not here. These two take campaignName as a PROP
+ * and use it in four labels and one visible line between them; marking it at
+ * the five call sites that pass campaign.name (CampaignCard, CampaignTile,
+ * LiveCampaignHero ×2, campaigns/page, PostEditor) protects all five uses at
+ * once, and the marks travel inside the string. The count is pinned so a new
+ * unmarked label in either file still fails.
+ */
+const MARKED_BY_CALLER = new Map([
+  ['src/components/social/CampaignSchedulePanel.tsx', 3],
+  ['src/components/social/CampaignScheduleBoard.tsx', 3],
+  ['src/components/social/CampaignHoursSheet.tsx', 1],
+]);
+/* `aria` is this app's own prop for an aria-label (ui.tsx puts it there), and
+   leaving it out hid three more labels in CampaignScheduleBoard. */
+const ATTRS_WITH_TEXT = new Set(['aria-label', 'aria', 'title', 'label', 'placeholder', 'alt']);
 function unkeptNames(): string[] {
   const out: string[] = [];
   const walk = (dir: string): void => {
@@ -435,7 +466,21 @@ function unkeptNames(): string[] {
   };
   walk(path.resolve('src/components/social'));
   walk(path.resolve('src/app/social'));
-  return out.sort();
+  /* the pinned files are allowed exactly as many as they have today */
+  const left: string[] = [];
+  const seen = new Map<string, number>();
+  for (const line of out.sort()) {
+    const file = line.slice(0, line.indexOf(':'));
+    const allowed = MARKED_BY_CALLER.get(file) ?? 0;
+    const used = seen.get(file) ?? 0;
+    if (used < allowed) seen.set(file, used + 1);
+    else left.push(line);
+  }
+  for (const [file, allowed] of MARKED_BY_CALLER) {
+    const used = seen.get(file) ?? 0;
+    if (used !== allowed) left.push(`${file}  is pinned at ${allowed} caller-marked labels and has ${used}`);
+  }
+  return left.sort();
 }
 eq(unkeptNames(), [], 'every name built into an attribute goes through keep(), or the dictionary rewrites it');
 
@@ -446,5 +491,69 @@ eq(
   'a marked name comes through a translated sentence untouched',
 );
 eq(translate('he', `בחר את ${keep('באר שבע ביחד')}`), 'בחר את באר שבע ביחד', 'and the marks never reach the Hebrew screen');
+
+/*
+ * ─── A PLURAL-ONLY VERB STANDING NEXT TO A COUNT THAT CHANGES ─────────────
+ *
+ * The table above pins one sentence. This reads all 2,427 and asks the same
+ * question of each, because the table could only ever pin what I thought to
+ * write down — and what I had not thought of was the verb. Seventeen
+ * sentences carried a noun with three forms and a verb with one:
+ *
+ *     § {публикация|публикации|публикаций} не записаны в очередь
+ *                  ↳ at 1:  "1 публикация не записаны"
+ *
+ * Wrong in the way he cannot check and a Russian reader cannot miss. The
+ * engine settles EVERY brace in the stretch after a §, so the verb can have
+ * its three forms too; this guard is what makes the next one fail here
+ * instead of on his screen.
+ *
+ * WHAT IT LOOKS AT: the stretch between a count-sensitive brace and the next
+ * value or sentence end — the span the brace actually governs. A word in it
+ * that can only be plural, and is not itself braced, is the bug.
+ */
+const PLURAL_ONLY = /^[а-яё]+(?:ли|ют|ут|ят|ат|ены|аны|ись)$/;
+/* The same bug wearing a pronoun: "В 1 группе … состоите ли вы в них".
+   "каждые" is left out on purpose — in "по одной каждые §" it agrees with the
+   interval, which is a different value. */
+const PLURAL_PRONOUN = new Set(['них', 'они', 'ними', 'свои', 'эти']);
+/* Words that end that way and are not verbs. Named rather than screened out
+   by length, because "ждут" and "вышли" are short and real. */
+const NOT_A_VERB = new Set([
+  'или', 'если', 'либо', 'ли', 'едва', 'ибо', 'хотя', 'между', 'тем', 'чтобы', 'пусть',
+  /* a noun, in the fixed phrase "две недели" */ 'недели',
+]);
+/* A clause that opens with one of these has its own subject — "…, но плитки
+   показывают §" is about the tiles, not about the count — so the span the
+   brace governs ends there. */
+const NEW_SUBJECT = /\s(?:но|а|однако|поэтому|чтобы|пока|когда|если)\s/;
+/* Russian's impersonal neuter — "обработано", "написано", "отнесено" — is
+   invariant on purpose and is how this dictionary says a thing about "§ из §",
+   where the number the verb belongs to is not the one next to it. */
+function disagreeing(ru: string): string[] {
+  const out: string[] = [];
+  for (const chunk of ru.split(PH)) {
+    const braces = [...chunk.matchAll(/\{([^{}]*)\}/g)];
+    if (!braces.length) continue;
+    const counted = braces.filter((b) => new Set(b[1].split('|')).size > 1);
+    if (!counted.length) continue;
+    /* only the span the first counted brace governs: up to the end of its
+       sentence, since a full stop starts a clause with its own subject */
+    const after = chunk.slice((counted[0].index ?? 0) + counted[0][0].length);
+    const span = after.split(/[.!?]/)[0].split(NEW_SUBJECT)[0];
+    /* A quoted name is the name of something on screen — «Ждут вас» is a
+       queue bucket, not a clause — and a name is never conjugated. */
+    const bare = span.replace(/\{[^{}]*\}/g, ' ').replace(/[«"][^«»"]*[»"]/g, ' ');
+    for (const w of bare.toLowerCase().match(/[а-яё]+/g) ?? []) {
+      const wrong = (PLURAL_ONLY.test(w) && !NOT_A_VERB.has(w)) || PLURAL_PRONOUN.has(w);
+      if (wrong) out.push(`${w}  ←  ${ru.slice(0, 80)}`);
+    }
+  }
+  return out;
+}
+const disagree: string[] = [];
+for (const k of translatedKeys()) disagree.push(...disagreeing(translatedValue(k) ?? ''));
+for (const p of translatedPatterns()) disagree.push(...disagreeing(translatedPatternValue(p) ?? ''));
+eq(disagree, [], 'no sentence puts a plural-only verb next to a count that can be one');
 
 console.log(`${NAME} OK — ${checks} assertions over ${plain.length} sentences and ${patterns.length} value shapes`);

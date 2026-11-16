@@ -284,7 +284,12 @@ is(
     is(/body: DELETE_GROUP_WARNING,/.test(row), 'behind the same warning the bulk bar shows — a delete takes the whole publication history');
     is(/danger: true,/.test(row), 'marked destructive');
     is(/h-11 w-11/.test(row), 'at the 44px tap floor');
-    is(/aria-label=\{`הסר את \$\{g\.name\}`\}/.test(row), 'and it names the group it would remove, for a screen reader and for a thumb that lands on the wrong row');
+    /* keep() around the name is the rest of the same idea, not a loosening:
+       the label is one string built from our word and his, so the dictionary
+       answered the whole thing and a group he called "באר שבע ביחד" was
+       announced as "Удалить наш район". What this still insists on is that
+       the GROUP'S OWN name is what gets announced. See keep() in i18n.ts. */
+    is(/aria-label=\{`הסר את \$\{keep\(g\.name\)\}`\}/.test(row), 'and it names the group it would remove, for a screen reader and for a thumb that lands on the wrong row');
   }
 }
 

@@ -25,10 +25,10 @@
   </div>
 
   <div class="form">
-    <!-- Первое, что видно: кто не читает на иврите, должен суметь это
-         изменить, не читая на иврите. -->
-    <div style="display:flex;justify-content:center;margin-bottom:var(--s4)"><div class="anxl-wrap" role="group" aria-label="בחירת שפה"><button type="button" class="anxl-btn" data-lang="he" lang="he" aria-pressed="true">עברית</button><button type="button" class="anxl-btn" data-lang="ru" lang="ru" aria-pressed="false">Русский</button></div></div>
     <div>
+      <!-- Внутри колонки, а не рядом с ней: #login .form — это flex-строка,
+           и соседний блок встал бы сбоку от полей. -->
+      <div style="display:flex;justify-content:center;margin-bottom:var(--s5)"><div class="anxl-wrap" role="group" aria-label="בחירת שפה"><button type="button" class="anxl-btn" data-lang="he" lang="he" aria-pressed="true">עברית</button><button type="button" class="anxl-btn" data-lang="ru" lang="ru" aria-pressed="false">Русский</button></div></div>
       <div class="logo" style="margin-bottom:var(--s7)">
         <span class="mark">A</span>
         <span><span class="name">ANX</span> <span class="name" style="font-weight:500">Worker</span><br /><span class="sub">PUBLISHING ENGINE</span></span>

@@ -1791,6 +1791,485 @@ body:has(.social-theme) .site-backdrop {
 }
 
 /*
+ * ─── THE SIGN-IN SCREEN (/social/login) ───────────────────────────────────
+ *
+ * "התמונה המצורפת היא רפרנס עיצובי מחייב … יש לשחזר אותה ברמת Pixel Perfect,
+ *  ככל שניתן במסגרת התאמה רספונסיבית."
+ *
+ * SCOPED TO `.anxa-page`, AND THAT IS THE WHOLE SAFETY STORY. The /social app
+ * runs in `.social-theme`, which is dark. This screen is light. Rather than
+ * touch a shared component or a shared token — "אין לשנות רכיבים משותפים
+ * שעלולים להשפיע על מסכים אחרים" — every colour here is a local custom
+ * property on this one wrapper, and every class is `anxa-`. Nothing outside
+ * this block can read them, so no other screen can change because of it.
+ *
+ * THE PALETTE IS SAMPLED FROM THE REFERENCE, not guessed. Measured with
+ * ImageMagick off the file the owner attached:
+ *
+ *   page           #F0F5FD → #E5EEFE      card            #FCFCFD (reads white)
+ *   title ink      #00081C                label ink       #2B3953
+ *   field fill     #F1F6FE                field border    #C7D7F1
+ *   button         #126FF8 → #0245CA      logo square     #095BE5 → #0C3EC9
+ *   accent / link  #1272F4                blob behind bot #CDE2FD
+ *
+ * THE SIZES ARE NOT SCALED FROM IT, and that is deliberate. The reference is
+ * a 1040×1512 artboard — a poster, not a phone spec. Its field is 74px inside
+ * an 890px card (8.3%), which on a real 380px card is 31px: below the touch
+ * floor, and against the owner's own rule, "אין להקטין את שדות ההתחברות
+ * באופן שפוגע בנוחות השימוש". So the PROPORTIONS, radii, shadows and order
+ * are the reference's; the absolute sizes are comfortable ones (field 52px,
+ * button 56px — the reference's own 74:89 ratio, rounded up to the floor).
+ */
+.anxa-page {
+  --a-page-1: #f2f7fe;
+  --a-page-2: #e4edfd;
+  --a-card: #ffffff;
+  --a-ink: #0a1020;
+  --a-label: #2b3953;
+  --a-muted: #68779a;
+  --a-line: #dce8fb;
+  --a-field: #f1f6fe;
+  --a-field-line: #c7d7f1;
+  --a-brand: #1272f4;
+  --a-brand-deep: #0245ca;
+  --a-logo-1: #095be5;
+  --a-logo-2: #0c3ec9;
+
+  position: relative;
+  min-height: 100dvh;
+  overflow-x: clip;
+  background: linear-gradient(170deg, var(--a-page-1) 0%, var(--a-page-2) 100%);
+  color: var(--a-ink);
+  /* The reference is a full screen with the card in the middle of it. Short
+     content (the sign-in mode) would otherwise sit at the top with a field of
+     empty blue under it; `safe center` keeps the tall content (sign-up, or an
+     error block open) from being clipped at the top instead. */
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-content: safe center;
+}
+
+/* ── the decorative waves, top and bottom ──────────────────────────────────
+   Drawn, not photographed: two stacked SVGs in a background-image, so they
+   scale to any width without a seam and cost no request. `clip` on the page
+   plus `pointer-events: none` is what keeps the owner's rule — "אין לאפשר
+   לרובוט או לגלים להסתיר תוכן". They sit behind everything (z-index 0) and
+   the content rides above them. */
+.anxa-wave {
+  position: absolute;
+  inset-inline: 0;
+  height: 190px;
+  pointer-events: none;
+  z-index: 0;
+  background-repeat: no-repeat;
+  background-size: 100% 100%;
+}
+.anxa-wave-top {
+  top: 0;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 390 190' preserveAspectRatio='none'><path d='M0 0h390v64c-54 26-104 10-168 28C158 110 86 132 0 108Z' fill='%23cfe0fb' opacity='.55'/><path d='M0 0h390v34c-70 32-128 6-196 26C136 80 70 96 0 74Z' fill='%23b9d3f9' opacity='.5'/></svg>");
+}
+.anxa-wave-bottom {
+  bottom: 0;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 390 190' preserveAspectRatio='none'><path d='M0 190V96c84-26 150 6 226-12 54-13 102-34 164-14v120Z' fill='%23cfe0fb' opacity='.6'/><path d='M0 190v-62c92-22 142 10 222-8 58-13 106-28 168-10v80Z' fill='%23a9c8f7' opacity='.55'/></svg>");
+}
+
+/* ── the column everything sits in ───────────────────────────────────────── */
+.anxa-wrap {
+  position: relative;
+  z-index: 1;
+  margin-inline: auto;
+  width: 100%;
+  max-width: 440px;
+  padding: 26px 20px 34px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 18px;
+}
+
+/* ── logo, name, tagline ─────────────────────────────────────────────────── */
+.anxa-brand { text-align: center; }
+.anxa-logo {
+  margin-inline: auto;
+  display: grid;
+  place-items: center;
+  width: 64px;
+  height: 64px;
+  border-radius: 18px;
+  background: linear-gradient(150deg, var(--a-logo-1), var(--a-logo-2));
+  color: #fff;
+  box-shadow: 0 12px 26px -8px rgb(9 91 229 / 0.55);
+}
+.anxa-logo svg { width: 32px; height: 32px; }
+.anxa-title {
+  margin-top: 12px;
+  font-size: 29px;
+  font-weight: 900;
+  letter-spacing: -0.4px;
+  line-height: 1.15;
+  color: var(--a-ink);
+}
+.anxa-tag {
+  margin-top: 4px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--a-muted);
+}
+
+/* ── the three benefit cards ─────────────────────────────────────────────── */
+.anxa-feats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 9px;
+}
+.anxa-feat {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  justify-items: center;
+  gap: 6px;
+  padding: 14px 4px;
+  border-radius: 14px;
+  background: var(--a-card);
+  border: 1px solid #e7eefa;
+  box-shadow: 0 8px 18px -12px rgb(18 114 244 / 0.45);
+  text-align: center;
+}
+.anxa-feat svg { width: 24px; height: 24px; color: var(--a-brand); }
+.anxa-feat span {
+  font-size: 11.5px;
+  font-weight: 800;
+  line-height: 1.2;
+  color: var(--a-label);
+}
+
+/* ── the sign-in card ────────────────────────────────────────────────────── */
+.anxa-card {
+  position: relative;
+  border-radius: 24px;
+  background: var(--a-card);
+  border: 1px solid #eaf1fb;
+  box-shadow: 0 26px 50px -26px rgb(13 60 150 / 0.4), 0 2px 6px -2px rgb(13 60 150 / 0.08);
+  padding: 18px;
+  overflow: hidden;
+}
+/* The robot, top-start, overlapping the heading exactly as the reference
+   draws it. `aria-hidden` in the markup and no pointer events here: it is
+   decoration, and it may never take a tap meant for a field. */
+.anxa-robot {
+  position: absolute;
+  inset-block-start: 0;
+  inset-inline-start: 0;
+  width: 118px;
+  height: auto;
+  pointer-events: none;
+  user-select: none;
+  /*
+   * THE CROP IS A RECTANGLE AND THE REFERENCE IS NOT.
+   *
+   * This asset is lifted from the owner's own reference, so it arrives with
+   * the blue blob behind the robot and white card around it. Dropped in flat
+   * it reads as a pale rectangle with two hard edges — measured on the first
+   * render. Extracting the robot to transparency is not an option: its body
+   * is white and connects to the white card through its own anti-aliasing, so
+   * every flood fill eats the robot (tried, at several tolerances).
+   *
+   * So the EDGES are faded instead. The mask keeps the robot and the near
+   * half of its blob at full strength and dissolves what is left into the
+   * card, which is the soft circular shape the reference draws anyway.
+   */
+  -webkit-mask-image: radial-gradient(125% 120% at 88% 22%, #000 52%, transparent 80%);
+  mask-image: radial-gradient(125% 120% at 88% 22%, #000 52%, transparent 80%);
+}
+.anxa-head { position: relative; padding-inline-start: 96px; min-height: 84px; }
+.anxa-h2 {
+  font-size: 23px;
+  font-weight: 900;
+  letter-spacing: -0.3px;
+  color: var(--a-ink);
+}
+.anxa-sub {
+  margin-top: 5px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--a-muted);
+}
+.anxa-rule {
+  display: block;
+  margin-top: 12px;
+  width: 92px;
+  height: 3px;
+  border-radius: 999px;
+  /* solid at the inline start (the right, in RTL) and fading away from it,
+     which is how the reference draws it under the heading. */
+  background: linear-gradient(to left, var(--a-brand), rgb(18 114 244 / 0));
+}
+
+/* ── fields ──────────────────────────────────────────────────────────────── */
+.anxa-fields { display: grid; grid-template-columns: minmax(0, 1fr); gap: 13px; margin-top: 16px; }
+.anxa-label {
+  display: block;
+  margin-bottom: 7px;
+  font-size: 13.5px;
+  font-weight: 800;
+  color: var(--a-label);
+}
+.anxa-box { position: relative; display: block; }
+/*
+ * THE INPUT IS dir="ltr" AND THE ICONS ARE PLACED IN PHYSICAL TERMS.
+ *
+ * An email and a password are Latin, so the field runs left-to-right inside a
+ * right-to-left card. Logical properties would follow the INPUT's direction,
+ * not the card's, and that is the trap the password eye already fell into
+ * once on this screen (see the ps-11 note that used to live in page.tsx).
+ * Left is left here, on purpose: the reference puts the envelope and the lock
+ * on the left of the field and the eye on the right, and so does this.
+ */
+.anxa-input {
+  width: 100%;
+  height: 52px;
+  border-radius: 14px;
+  background: var(--a-field);
+  border: 1px solid var(--a-field-line);
+  padding-left: 46px;
+  padding-right: 46px;
+  font-size: 15px;
+  color: var(--a-ink);
+  transition: border-color 0.15s, box-shadow 0.15s, background-color 0.15s;
+}
+.anxa-input::placeholder { color: #94a7c4; }
+.anxa-input:hover { border-color: #b3c9ee; }
+.anxa-input:focus {
+  outline: none;
+  background: #fff;
+  border-color: var(--a-brand);
+  box-shadow: 0 0 0 4px rgb(18 114 244 / 0.14);
+}
+.anxa-ico {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 46px;
+  display: grid;
+  place-items: center;
+  color: #7e93b4;
+  pointer-events: none;
+}
+.anxa-ico svg { width: 19px; height: 19px; }
+/* The reveal button: a real 44px target on the right, as the reference draws
+   it, and the one icon in the field that is NOT decoration. */
+.anxa-eye {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: 0;
+  width: 46px;
+  display: grid;
+  place-items: center;
+  color: #7e93b4;
+  border-radius: 0 14px 14px 0;
+  transition: color 0.15s;
+}
+.anxa-eye:hover { color: var(--a-brand); }
+.anxa-eye:focus-visible {
+  outline: 2px solid var(--a-brand);
+  outline-offset: -2px;
+  color: var(--a-brand);
+}
+.anxa-eye svg { width: 20px; height: 20px; }
+
+/* ── the row under the fields: remember me · forgot ──────────────────────── */
+.anxa-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: -2px;
+}
+.anxa-remember {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--a-label);
+  cursor: pointer;
+  min-height: 40px;
+}
+.anxa-check {
+  appearance: none;
+  width: 21px;
+  height: 21px;
+  border-radius: 6px;
+  border: 1.5px solid #bcd0ee;
+  background: #fff;
+  display: grid;
+  place-items: center;
+  transition: background-color 0.15s, border-color 0.15s;
+}
+.anxa-check:checked {
+  background: var(--a-brand);
+  border-color: var(--a-brand);
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3.4' stroke-linecap='round' stroke-linejoin='round'><path d='M20 6 9 17l-5-5'/></svg>");
+  background-size: 14px 14px;
+  background-repeat: no-repeat;
+  background-position: center;
+}
+.anxa-check:focus-visible { outline: 2px solid var(--a-brand); outline-offset: 2px; }
+
+/* ── the primary button ──────────────────────────────────────────────────── */
+.anxa-go {
+  margin-top: 9px;
+  width: 100%;
+  min-height: 56px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  border-radius: 14px;
+  background: linear-gradient(to left, var(--a-brand), var(--a-brand-deep));
+  color: #fff;
+  font-size: 16px;
+  font-weight: 800;
+  box-shadow: 0 14px 26px -12px rgb(2 69 202 / 0.65);
+  transition: filter 0.15s, box-shadow 0.15s, transform 0.08s;
+}
+.anxa-go svg { width: 20px; height: 20px; }
+.anxa-go:hover { filter: brightness(1.07); box-shadow: 0 16px 30px -12px rgb(2 69 202 / 0.72); }
+.anxa-go:active { transform: translateY(1px); }
+.anxa-go:focus-visible { outline: 3px solid rgb(18 114 244 / 0.45); outline-offset: 2px; }
+.anxa-go[disabled] { filter: grayscale(0.35) brightness(0.96); opacity: 0.75; box-shadow: none; }
+.anxa-go[data-busy='true'] { cursor: progress; }
+
+/* ── the "או" divider ────────────────────────────────────────────────────── */
+.anxa-or {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 12px;
+  margin-top: 18px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--a-muted);
+}
+.anxa-or::before,
+.anxa-or::after {
+  content: '';
+  height: 1px;
+  background: var(--a-line);
+}
+
+/* ── the foot line ───────────────────────────────────────────────────────── */
+.anxa-foot {
+  margin-top: 16px;
+  text-align: center;
+  font-size: 13.5px;
+  color: var(--a-muted);
+}
+.anxa-link {
+  /* Inline in a sentence, as the reference draws it, but a real 40px target:
+     the padding grows the hit area and the equal negative margin gives the
+     space back, so the line keeps its height and the thumb gets its box. */
+  display: inline-block;
+  padding-block: 10px;
+  margin-block: -10px;
+  font-weight: 800;
+  color: var(--a-brand);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.anxa-link:hover { color: var(--a-brand-deep); }
+.anxa-link:focus-visible { outline: 2px solid var(--a-brand); outline-offset: 2px; border-radius: 4px; }
+
+/* ── the error block, kept whole from the screen this replaced ───────────── */
+.anxa-err {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
+  margin-top: 14px;
+  border-radius: 14px;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  padding: 11px 13px;
+}
+.anxa-err-t { font-size: 13px; font-weight: 800; line-height: 1.55; color: #b42318; }
+.anxa-err-d {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  line-height: 1.45;
+  color: #8a94a6;
+  word-break: break-word;
+  text-align: start;
+}
+.anxa-err-btn {
+  width: 100%;
+  min-height: 42px;
+  border-radius: 11px;
+  background: #fff;
+  border: 1px solid #e2dada;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--a-label);
+}
+.anxa-err-btn:hover { background: #fcfcfd; }
+.anxa-verdict {
+  border-radius: 10px;
+  background: #f4f7fc;
+  padding: 8px 10px;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--a-label);
+}
+
+/* ── "איך זה עובד" — kept, and shown where it earns its place ───────────── */
+.anxa-how {
+  border-radius: 18px;
+  background: rgb(255 255 255 / 0.72);
+  border: 1px solid #e7eefa;
+  padding: 14px 16px;
+}
+.anxa-how p { font-size: 13px; font-weight: 800; color: var(--a-label); }
+.anxa-how ol { margin-top: 7px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; }
+.anxa-how li { font-size: 12.5px; line-height: 1.6; color: var(--a-muted); }
+
+/* ── the sent-the-email screen ───────────────────────────────────────────── */
+.anxa-sent { text-align: center; }
+.anxa-sent-ico {
+  margin-inline: auto;
+  margin-bottom: 12px;
+  display: grid;
+  place-items: center;
+  width: 50px;
+  height: 50px;
+  border-radius: 16px;
+  background: #ecfdf3;
+  color: #12834a;
+}
+.anxa-sent-ico svg { width: 25px; height: 25px; }
+
+/* ── small screens: the gutter the brief asks for, and nothing clipped ───── */
+@media (max-width: 359px) {
+  .anxa-wrap { padding-inline: 16px; }
+  .anxa-card { padding: 15px; }
+  .anxa-robot { width: 100px; }
+  .anxa-head { padding-inline-start: 82px; min-height: 74px; }
+  .anxa-title { font-size: 26px; }
+  .anxa-feat span { font-size: 10.5px; }
+}
+
+/* ── from tablet up the card stops growing and simply centres ────────────── */
+@media (min-width: 768px) {
+  .anxa-wrap { max-width: 460px; padding-block: 44px; }
+  .anxa-wave { height: 240px; }
+}
+
+/* Reduced motion: nothing here animates on its own, but the press/hover
+   transforms go when the viewer asks for stillness. */
+@media (prefers-reduced-motion: reduce) {
+  .anxa-go, .anxa-input, .anxa-eye, .anxa-check { transition: none; }
+  .anxa-go:active { transform: none; }
+}
+
+/*
  * ══════════════════════════════════════════════════════════════════════════
  * THE ANX ASSISTANT — a character that lives IN the card, not on it
  * ══════════════════════════════════════════════════════════════════════════

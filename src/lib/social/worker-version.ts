@@ -1007,7 +1007,28 @@
  * counted and nothing is held — the ceiling then is `limits.maxPerDay` from
  * Settings, which is 2000 on his account.
  */
-export const WORKER_VERSION = '4.70.0';
+/*
+ * 4.70.0 → 4.71.0 — THE 220 CAP DID NOT ACTUALLY HOLD.
+ *
+ * v4.70.0 was published today at 00:32 (asked, not assumed), so 4.71.0 is free.
+ *
+ * WHAT CHANGES ON HIS MACHINE: the worker bundles client.ts, and the switch's
+ * patch in it no longer resets `rounds_in_window` and `window_started_at`.
+ * Without that, pressing the switch off and then on — which is exactly what
+ * the card advertises as the way to resume after a pause — handed the account
+ * a brand-new day. Measured against a real Postgres: 220, press, 220 more,
+ * 440 inside 24 hours, and unbounded from there.
+ *
+ * The other half is the v43 SQL function, run by hand in Supabase like v41
+ * and v42. Until it is run, off-then-on still leaks one round — 330, not 440.
+ * Both halves together hold the day at 220, and worker/test/cycle-db.test.ts
+ * §7c measures exactly that.
+ *
+ * Also in it: the activity feed's pause headline no longer carries a frozen
+ * "100", and the card stops promising a daily ceiling while the mechanism is
+ * switched off.
+ */
+export const WORKER_VERSION = '4.71.0';
 
 /**
  * A FINGERPRINT OF EVERYTHING THE INSTALLER CARRIES.
@@ -1758,4 +1779,4 @@ export const WORKER_VERSION = '4.70.0';
  * worker/facebook/join.ts and written by worker/social-worker.ts, both of
  * which run only on his PC. Numbers under WORKER_VERSION above.
  */
-export const WORKER_FINGERPRINT = 'b950d76acdaa7d9c';
+export const WORKER_FINGERPRINT = '2d796482f360b5bf';

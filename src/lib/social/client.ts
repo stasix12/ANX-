@@ -470,10 +470,43 @@ export async function readPublishCycle(): Promise<PublishCycle | null> {
  * TURNING IT ON STARTS A FRESH ROUND rather than resuming a stale count from
  * whenever it was last off. A number the owner never chose is not a ceiling
  * he agreed to.
+ *
+ * ─── BUT IT STARTS A FRESH ROUND, NOT A FRESH DAY ─────────────────────────
+ *
+ * This patch used to send `rounds_in_window: 0` and a new `window_started_at`
+ * as well, and that turned the switch into an unlimited supply of days.
+ *
+ * MEASURED AGAINST A REAL POSTGRES, 16.11, with the engine's own constants:
+ *
+ *   220 published · the day closes · hold runs to the window's end
+ *   press OFF  → `rest_until` is cleared; the card says so, by design
+ *   press ON   → a brand-new window, rounds spent reset to zero
+ *   220 MORE PUBLISHED — 440 inside the same 24 hours, and unbounded:
+ *   every further press buys another 220.
+ *
+ * And this is not an exotic gesture. The hold is the moment the queue stops,
+ * the switch is on that same card, and turning it off is advertised two lines
+ * below as exactly the remedy — "הפסקה שהייתה בתוקף בוטלה והפרסום חוזר מיד".
+ * The owner pressing off and on when publishing stops is the expected use of
+ * this control, not a misuse of it. 440 a day sits far above the 210–265 band
+ * where every rate limit either account has ever hit landed.
+ *
+ * So the window is left exactly as it was. `cycle_count` still resets — that
+ * is the fresh round, and it is all the sentence above ever promised — while
+ * `rounds_in_window` and `window_started_at` stay with the day they belong to.
+ * If the day's rounds are already spent, v43's ceiling re-imposes the hold on
+ * the next call and nothing publishes until the window really ends. That is
+ * the cap doing its job, and the card shows the countdown for it.
+ *
+ * THE SQL HALF IS REQUIRED for the last round of this: without the v43
+ * function, a row with its rounds spent and no hold (which is what
+ * off-then-on leaves behind) still lets ONE more round through — 330 rather
+ * than 440. The two halves together are what hold it at 220. The migration
+ * sits beside the others in supabase/ and is run by hand, like v41 and v42.
  */
 export async function setPublishCycleEnabled(on: boolean): Promise<void> {
   const patch = on
-    ? { enabled: true, cycle_count: 0, rounds_in_window: 0, rest_until: null, window_started_at: new Date().toISOString(), cycle_started_at: new Date().toISOString() }
+    ? { enabled: true, cycle_count: 0, rest_until: null, cycle_started_at: new Date().toISOString() }
     : { enabled: false, rest_until: null };
   /*
    * UPSERT, because the row is created on demand by the counter function and a

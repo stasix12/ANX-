@@ -152,6 +152,35 @@ eq(cycleCountdown(61_000), '00:01:01', 'and the small numbers are padded, so the
   is(/cycleTick\(db\(\), false\)/.test(client), 'while the screen reads the state without advancing it');
 
   /*
+   * ─── THE SWITCH RESETS THE ROUND, NEVER THE DAY ─────────────────────────
+   *
+   * setPublishCycleEnabled(true) used to send `rounds_in_window: 0` and a
+   * fresh `window_started_at`, which made the switch an unlimited supply of
+   * days: 220 published, the hold lands, press off (the card advertises that
+   * as the way to resume), press on — and the account published 220 MORE.
+   * 440 in one day, measured against a real Postgres, and every further press
+   * bought another 220.
+   *
+   * The columns are named here rather than measured because a measurement
+   * cannot see the SHAPE of the patch — worker/test/cycle-db.test.ts §7c
+   * proves what the two statements do, and this proves they are the two
+   * statements the website actually sends.
+   */
+  const onAt = client.indexOf('export async function setPublishCycleEnabled');
+  is(onAt > -1, 'the switch is still here');
+  const sw = client.slice(onAt, client.indexOf('export ', onAt + 40));
+  const patch = sw.slice(sw.indexOf('const patch = on'), sw.indexOf('upsert'));
+  is(
+    !/rounds_in_window/.test(patch),
+    'turning the mechanism ON must not reset rounds_in_window — that is the day, not the round',
+  );
+  is(
+    !/window_started_at/.test(patch),
+    'and must not move window_started_at — a new window is a new day, and the switch may not grant one',
+  );
+  is(/cycle_count:\s*0/.test(patch), 'it does still start a fresh ROUND, which is what it promises');
+
+  /*
    * THE GATE SPARES THE IDLE CHORES, which is the whole reason it is not a
    * `return idle(...)` at the top of the tick. One of those chores is
    * verifySubmitted — the sweep that CONFIRMS a parked publication — so a

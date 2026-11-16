@@ -86,7 +86,12 @@ const TITLE: Record<string, string> = {
   /* שום דבר לא נהרס — וזה חצי הכותרת, כי זו השאלה הראשונה שהוא ישאל. */
   leave_failed: 'היציאה מהקבוצה לא הושלמה — הקבוצה לא שונתה',
   /* הכותרת אומרת מה קרה ולא מה שם המנגנון. השורה עצמה נושאת את שעת החזרה. */
-  cycle_rest: 'הושלמו 100 פרסומים — המערכת בהפסקה',
+  /* NO NUMBER HERE. This title is a constant, so it cannot follow a ceiling
+     that moves — it still read "100" on the day the round became 110, printed
+     directly above the worker's own detail line saying 110, in the feed the
+     owner reads to check whether the new cap took effect. The engine's real
+     figure is in the detail; the title just names the event. */
+  cycle_rest: 'הסבב הושלם — המערכת בהפסקה',
   cycle_enabled: 'מנגנון ההפסקה הופעל',
   cycle_disabled: 'מנגנון ההפסקה כובה',
   verify_window_full: 'יותר מדי פרסומים ממתינים לבדיקה',

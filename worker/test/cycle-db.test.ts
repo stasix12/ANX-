@@ -327,6 +327,100 @@ const engineTick = () =>
   eq(row('rounds_in_window'), String(CYCLE_ROUNDS_PER_WINDOW), 'and every round of the window is spent');
 }
 
+/* ══════════════ 7c. THE SWITCH MAY NOT BUY A SECOND DAY ════════════════ */
+
+/*
+ * ─── 440 IN ONE DAY, MEASURED, AND HOW IT WAS BOUGHT ─────────────────────
+ *
+ * The day's ceiling used to be re-imposed ONLY inside `if rest_until is not
+ * null`. So a row whose rounds were spent but whose hold was gone got a whole
+ * round more — and that is exactly the row the switch leaves behind:
+ *
+ *   220 published · the day closes · the hold runs to the window's end
+ *   OFF → `rest_until` cleared (by design; the card advertises it)
+ *   ON  → the old patch also sent `rounds_in_window: 0` and a NEW
+ *         `window_started_at`, i.e. a brand-new day
+ *   220 more. 440 inside 24 hours, and every further press bought another.
+ *
+ * It is the expected use of the control, not a misuse: the hold is when the
+ * queue stops, the switch is on that same card, and off-then-on is advertised
+ * two lines below as the way to resume.
+ *
+ * BOTH HALVES ARE ASSERTED HERE because either alone still leaks: with only
+ * the SQL guard the client's fresh window hides the spent rounds (440); with
+ * only the client fix a spent-rounds row with no hold still counts a round
+ * (330). The pair is what holds the day at 220.
+ */
+{
+  on();
+  reset();
+
+  /* ── spend the day exactly as the engine would ── */
+  let spent = 0;
+  let prev = 0;
+  let closed = false;
+  for (let guard = 0; guard < CYCLE_LIMIT * CYCLE_ROUNDS_PER_WINDOW * 2 + 50; guard += 1) {
+    const t = engineTick();
+    if (t.crossed || t.count > prev) spent += 1;
+    prev = t.crossed ? 0 : t.count;
+    if (t.restUntil) {
+      const dayOver = one(`select rest_until >= window_started_at + interval '24 hours' from public.social_publish_cycle`) === 't';
+      if (dayOver) { closed = true; break; }
+      exec(`update public.social_publish_cycle set rest_until = now() - interval '1 second'`);
+    }
+  }
+  is(closed, 'the day closed on its own');
+  eq(spent, CYCLE_LIMIT * CYCLE_ROUNDS_PER_WINDOW, `the day delivered its ${CYCLE_LIMIT * CYCLE_ROUNDS_PER_WINDOW}`);
+
+  /*
+   * ── NOW PRESS THE SWITCH, with the two statements the website really sends
+   *    (src/lib/social/client.ts, setPublishCycleEnabled). Written out rather
+   *    than imported because what is being asserted is the SHAPE of that
+   *    patch: the day's two columns must not appear in it.
+   */
+  exec(`update public.social_publish_cycle set enabled = false, rest_until = null`);
+  exec(`update public.social_publish_cycle set enabled = true, cycle_count = 0, rest_until = null, cycle_started_at = now()`);
+
+  let after = 0;
+  prev = 0;
+  for (let guard = 0; guard < CYCLE_LIMIT * CYCLE_ROUNDS_PER_WINDOW + 20; guard += 1) {
+    const t = engineTick();
+    if (t.crossed || t.count > prev) after += 1;
+    prev = t.crossed ? 0 : t.count;
+    if (t.restUntil) {
+      const dayOver = one(`select rest_until >= window_started_at + interval '24 hours' from public.social_publish_cycle`) === 't';
+      if (dayOver) break;
+      exec(`update public.social_publish_cycle set rest_until = now() - interval '1 second'`);
+    }
+  }
+  eq(after, 0, `pressing the switch off and on bought ${after} more publications — it must buy NONE while the day's rounds are spent`);
+  eq(row('rounds_in_window'), String(CYCLE_ROUNDS_PER_WINDOW), 'and the day still reads as spent');
+}
+
+{
+  /*
+   * ── AND THE BARE STATE, without the switch ──
+   *
+   * Rounds spent, no hold. However a row gets here — a hand edit, a repair, an
+   * older version of the website, the switch — the next call must count
+   * nothing and put the hold back. This is the assertion that fails if the
+   * ceiling is ever made conditional on a hold again.
+   */
+  on();
+  reset();
+  exec(`update public.social_publish_cycle set rounds_in_window = ${CYCLE_ROUNDS_PER_WINDOW}, rest_until = null,
+        window_started_at = now() - interval '1 hour', cycle_count = 0`);
+
+  const t = engineTick();
+  eq(t.count, 0, 'a spent day counts nothing, even with no hold on the row');
+  is(typeof t.restUntil === 'string' && t.restUntil.length > 0, 'and the hold is put back by that same call');
+  const toWindowEnd = Number(
+    one(`select round(extract(epoch from (rest_until - (window_started_at + interval '24 hours'))) / 60)::text from public.social_publish_cycle`),
+  );
+  eq(toWindowEnd, 0, 'running to the end of the window, not six hours from now');
+  eq(row('cycle_count'), '0', 'and the counter did not move');
+}
+
 async function main(): Promise<void> {
   /* ════════ 8. THE ONE A FAKE CANNOT ANSWER: AGENTS IN PARALLEL ═════════ */
 

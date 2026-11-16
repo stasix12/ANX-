@@ -185,7 +185,19 @@ export function CycleCard({
             first is what makes this sentence true on a day somebody changes
             it in one place.
           */}
+          {/*
+            AND IT IS A DESCRIPTION WHILE THE SWITCH IS OFF, not a promise.
+            Off, this block used to sit two lines under "המנגנון כבוי — אין
+            הפסקות אוטומטיות" and still say the system would pause after 110
+            and cap the day at 220. Both sentences on one card, one of them
+            false: with the mechanism off nothing is counted and nothing is
+            held, and the only ceiling is limits.maxPerDay from Settings
+            (2000 on his account). That is not a hypothetical state — his
+            switch was off for two days while the account published 252 and
+            250 a day.
+          */}
           <p className="anxc-sub">
+            {cycle.enabled ? '' : 'כשהמנגנון פעיל: '}
             לאחר {cycle.limit} פרסומים בקבוצות, המערכת תיכנס להפסקה של {CYCLE_REST_HOURS} שעות — עד{' '}
             {cycle.limit * (cycle.roundsPerWindow || CYCLE_ROUNDS_PER_WINDOW)} פרסומים ביממה.
           </p>

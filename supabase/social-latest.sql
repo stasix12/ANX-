@@ -2337,6 +2337,27 @@ begin
   end if;
 
   if p_count and row.rest_until is null then
+    -- ─── THE DAY'S CEILING, CHECKED BEFORE THE COUNT ───────────────────────
+    --
+    -- עד v42 תקרת היממה נאכפה רק כשכבר הייתה הפסקה בתוקף: הבלוק שמחזיר אותה
+    -- יושב בתוך `if row.rest_until is not null`. לכן שורה שבה הסבבים של
+    -- היממה נגמרו אבל אין הפסקה — בדיוק מה שכיבוי והדלקה של המתג משאירים
+    -- אחריהם — קיבלה סבב שלם נוסף.
+    --
+    -- נמדד מול Postgres אמיתי עם המספרים של המנוע (110 / 6 / 2), 16.11:
+    -- 220 פרסומים, ההפסקה בתוקף, כיבוי והדלקה — ועוד 220. 440 ביממה אחת,
+    -- וכל לחיצה נוספת קונה עוד 220.
+    --
+    -- כאן התקרה מפסיקה להיות מותנית: אם הסבבים של החלון נגמרו, הקריאה הזאת
+    -- לא סופרת כלום והיא מחזירה את ההפסקה עד סוף החלון. אין מסלול שמגיע
+    -- לספירה כששתי הסבבים כבר נוצלו.
+    --
+    -- בזרימה רגילה זה no-op: סגירת סבב כותבת rest_until באותו רגע, כך
+    -- שסבבים מנוצלים תמיד מגיעים עם הפסקה. הבלוק הזה הוא בשביל השורה
+    -- שנערכה ביד, השורה שנכתבה בגרסה ישנה, והמתג.
+    if row.rounds_in_window >= p_rounds_per_window then
+      row.rest_until := greatest(now_, row.window_started_at + interval '24 hours');
+    else
     row.cycle_count := row.cycle_count + 1;
     if row.cycle_count >= p_limit then
       row.cycle_count := 0;
@@ -2354,6 +2375,7 @@ begin
       end if;
       row.rest_until := rest_candidate;
       crossed := true;
+    end if;
     end if;
   end if;
 

@@ -77,7 +77,11 @@ const RU: Record<string, string> = {
   '3. המחשב מפרסם לפי התזמון. הסיסמה של פייסבוק נשארת אצלכם.':
     '3. Компьютер публикует по расписанию. Пароль от Facebook остаётся у вас.',
   /* ── מסכי האפליקציה ── */
-  'פורסמו מתוך המתוכננים להיום': 'опубликовано из запланированных на сегодня',
+  /* The figure line under the dashboard's ring is `white-space: nowrap` — it
+     cannot wrap, so a word too many pushes the whole page sideways. Measured
+     at 320px: the longer wording was 262px in a 235px gap and the page
+     scrolled 21px. This says the same in 32 characters instead of 42. */
+  'פורסמו מתוך המתוכננים להיום': 'опубликовано из плана на сегодня',
   'לפני יומיים': 'два дня назад',
   'לפני יום': 'день назад',
   'לפני שבוע': 'неделю назад',
@@ -1003,7 +1007,10 @@ const RU: Record<string, string> = {
   'המגבלה היומית (': 'Дневной лимит (',
   'המספרים של היום': 'Сегодняшние числа',
   'הסבב יתוכנן שוב': 'Цикл будет запланирован заново',
-  'הסתיים עם כשלים': 'Ошибки в цикле',
+  /* "Ошибки в цикле" says there are errors; the Hebrew says the round
+     FINISHED with errors — the difference between a warning and a result.
+     This is shorter still, so it fits wherever that did. */
+  'הסתיים עם כשלים': 'С ошибками',
   'הקבוצה לא נפתחה': 'Группа не открылась',
   'הקטגוריה נוקתה.': 'Категория очищена.',
   'חזרה ללוח הבקרה': 'Назад на панель управления',
@@ -1453,7 +1460,11 @@ const RU: Record<string, string> = {
   'בדוק שוב': 'Проверить снова',
   'בטל ומחק': 'Отменить и удалить',
   'במקום ב-': 'вместо',
-  'בתור הבא': 'Следующий',
+  /* The right-hand chip of a queue row never shrinks (flex 0 0 auto), so
+     whatever it needs is taken straight out of the group name beside it.
+     Measured at 360px: 34px here against the Hebrew's 47px, so the name ends
+     up WIDER in Russian than in Hebrew instead of being cut to 18px. */
+  'בתור הבא': 'Далее',
   'דקה וחצי': 'полторы минуты',
   'הוסף סבב': 'Добавить цикл',
   'הסר אותם': 'Убрать их',
@@ -1510,7 +1521,7 @@ const RU: Record<string, string> = {
   'אישי': 'Личный',
   'בודק': 'Проверяем',
   'בוטל': 'Отменено',
-  'בוצע': 'Выполнено',
+  'בוצע': 'Ушло',
   'בוקר': 'Утро',
   'בחרו': 'Выберите',
   'בעוד': 'Через',
@@ -2089,7 +2100,38 @@ const RU_PAT: Record<string, string> = {
   '§ נכשלו': '§ не удались',
   '§ פרסומים ממתינים לכם': '§ публикаций ждут вас',
   '§ פרסומים ממתינים להחלטה שלכם': '§ публикаций ждут вашего решения',
+  /*
+   * ─── THE WAIT, IN WORDS ───────────────────────────────────────────────
+   *
+   * src/lib/social/countdown.ts spells a duration out with counted() — a
+   * separate word for one and for two — and joins the halves with ו- before a
+   * digit and a bare ו before a letter. So "22 שעות ושתי דקות" is one of
+   * eighteen shapes, not one, and only the digit-and-digit shape was here.
+   * On the dashboard the rest came out as "через 22 שעות ושתי мин": a
+   * sub-pattern caught the last two words and left the Hebrew standing.
+   *
+   * All eighteen are written out. Russian says a duration in figures, which
+   * is both correct and shorter than the Hebrew it replaces.
+   */
   'בעוד § שעות ו-§ דקות': 'через § ч § мин',
+  'שעה ודקה': '1 ч 1 мин',
+  'שעה ושתי דקות': '1 ч 2 мин',
+  'שעה ו-§ דקות': '1 ч § мин',
+  'שעתיים ודקה': '2 ч 1 мин',
+  'שעתיים ושתי דקות': '2 ч 2 мин',
+  'שעתיים ו-§ דקות': '2 ч § мин',
+  '§ שעות ודקה': '§ ч 1 мин',
+  '§ שעות ושתי דקות': '§ ч 2 мин',
+  '§ שעות ו-§ דקות': '§ ч § мин',
+  'יום ושעה': '1 дн 1 ч',
+  'יום ושעתיים': '1 дн 2 ч',
+  'יום ו-§ שעות': '1 дн § ч',
+  'יומיים ושעה': '2 дн 1 ч',
+  'יומיים ושעתיים': '2 дн 2 ч',
+  'יומיים ו-§ שעות': '2 дн § ч',
+  '§ ימים ושעה': '§ дн 1 ч',
+  '§ ימים ושעתיים': '§ дн 2 ч',
+  '§ ימים ו-§ שעות': '§ дн § ч',
   'בעוד שעה ו-§ דקות': 'через час § мин',
   'בעוד § דקות': 'через § мин',
   '§% — § מתוך § טופלו היום': '§% — § из § обработано сегодня',

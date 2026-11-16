@@ -179,6 +179,50 @@ const src = (p: string) => readFileSync(new URL(`../../${p}`, import.meta.url), 
   eq(dupes, [], 'no Hebrew sentence is listed twice — the second would silently win');
 }
 
+/* ══════════════ 4c. EVERY t() HAS A RUSSIAN ═══════════════════════════ */
+
+/*
+ * THE COVERAGE GUARD FOR THE WEBSITE, the twin of the one over the desktop
+ * window in desktop-window.test.ts.
+ *
+ * The dictionary answers in Hebrew when it has no Russian, which is the right
+ * fallback and also a silent one: wrap a new screen's sentences, forget the
+ * translations, and the only symptom is one Hebrew paragraph in a Russian
+ * app. Nobody would see it until a customer did. This fails instead, and
+ * names the sentences.
+ */
+{
+  const fs = require('node:fs') as typeof import('node:fs');
+  const path = require('node:path') as typeof import('node:path');
+  const root = new URL('../../', import.meta.url).pathname;
+
+  const used = new Set<string>();
+  const walk = (dir: string) => {
+    for (const name of fs.readdirSync(dir)) {
+      const full = path.join(dir, name);
+      if (fs.statSync(full).isDirectory()) walk(full);
+      else if (/\.tsx?$/.test(name)) {
+        const text = fs.readFileSync(full, 'utf8');
+        for (const m of text.matchAll(/\bt\('((?:[^'\\]|\\.)*)'\)/g)) used.add(m[1]);
+      }
+    }
+  };
+  walk(path.join(root, 'src/app/social'));
+  walk(path.join(root, 'src/components/social'));
+
+  const dict = src('src/lib/social/i18n.ts');
+  const body = dict.slice(dict.indexOf('const RU:'), dict.indexOf('/** The Hebrew sentence'));
+  const keys = new Set([...body.matchAll(/^\s*'((?:[^'\\]|\\.)*)':/gm)].map((m) => m[1]));
+
+  is(used.size > 300, `the app really does call t() — ${used.size} sentences`);
+  const missing = [...used].filter((k) => !keys.has(k));
+  eq(
+    missing,
+    [],
+    `every sentence the app wraps has a Russian — ${missing.length} do not: ${missing.slice(0, 5).join(' | ')}`,
+  );
+}
+
 /* ══════════════ 5. THE SCREEN, IN A REAL BROWSER ═══════════════════════ */
 
 async function main(): Promise<void> {

@@ -1056,7 +1056,16 @@
  * installer — but the dictionary they call is bundled, so the installer's
  * stamp moves with it.
  */
-export const WORKER_VERSION = '4.73.0';
+/*
+ * 4.73.0 → 4.74.0 — המילון מלא: 390 מתוך 390.
+ *
+ * v4.73.0 published 16.11 at 04:58 (asked, not assumed), so 4.74.0 is free.
+ *
+ * The dictionary in src/lib/social/i18n.ts is a bundled file, so filling it
+ * moves the installer's stamp even though not one line of engine behaviour
+ * changed. Nothing here reaches the PC except a larger lookup table.
+ */
+export const WORKER_VERSION = '4.74.0';
 
 /**
  * A FINGERPRINT OF EVERYTHING THE INSTALLER CARRIES.
@@ -1807,4 +1816,4 @@ export const WORKER_VERSION = '4.73.0';
  * worker/facebook/join.ts and written by worker/social-worker.ts, both of
  * which run only on his PC. Numbers under WORKER_VERSION above.
  */
-export const WORKER_FINGERPRINT = '1d24f0550ed0f93d';
+export const WORKER_FINGERPRINT = 'ff6d9e664d049911';

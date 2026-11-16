@@ -270,7 +270,7 @@ const CASES: { id: string; what: string; node: React.ReactNode }[] = [
 
 const body = CASES.map(
   (c) => `
-  <p style="color:#9aa;font:12px sans-serif;margin:18px 0 6px" data-case="${c.id}">${c.what}</p>
+  <p data-no-translate style="color:#9aa;font:12px sans-serif;margin:18px 0 6px" data-case="${c.id}">${c.what}</p>
   <section class="surface rounded-card border border-ink-700 p-4">${renderToStaticMarkup(c.node)}</section>`,
 ).join('');
 

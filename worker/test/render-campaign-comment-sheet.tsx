@@ -233,7 +233,7 @@ const CASES: { id: string; what: string; props: Parameters<typeof CommentBody>[0
 
 const body = CASES.map(
   (c) => `
-  <p style="color:#9aa;font:12px sans-serif;margin:18px 0 6px" data-case="${c.id}">${c.what}</p>
+  <p data-no-translate style="color:#9aa;font:12px sans-serif;margin:18px 0 6px" data-case="${c.id}">${c.what}</p>
   ${renderToStaticMarkup(
     createElement(SheetShell, { title: 'הוסף תגובה לכל הפרסומים בסבב', children: createElement(CommentBody, c.props) }),
   )}`,

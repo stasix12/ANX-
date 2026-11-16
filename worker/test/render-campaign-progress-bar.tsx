@@ -106,7 +106,7 @@ const CASES: { id: string; what: string; progress: CampaignProgress }[] = [
  */
 const body = CASES.map(
   (c) => `
-  <p style="color:#9aa;font:12px sans-serif;margin:18px 0 6px" data-case="${c.id}">${c.what}</p>
+  <p data-no-translate style="color:#9aa;font:12px sans-serif;margin:18px 0 6px" data-case="${c.id}">${c.what}</p>
   <section class="surface rounded-card border border-ink-700 p-4">${renderToStaticMarkup(
     createElement('div', { className: 'mt-4' }, createElement(CampaignProgressBar, { progress: c.progress })),
   )}</section>`,

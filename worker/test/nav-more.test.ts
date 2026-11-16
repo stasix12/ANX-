@@ -38,7 +38,12 @@ eq(
   "const MOBILE_TABS = ['/social', '/social/campaigns', '/social/groups', '/social/library']",
   'the four tabs that remain are exactly the four that were always tabs',
 );
-const bar = shell.slice(shell.indexOf('aria-label="ניווט ראשי"'), shell.indexOf('</nav>', shell.indexOf('aria-label="ניווט ראשי"')));
+/* The label is translated now (`aria-label={t('ניווט ראשי')}`), so this
+   locator matches the sentence itself rather than one spelling of the
+   attribute — a Russian screen-reader user may not be read Hebrew. */
+const barAt = shell.search(/aria-label=\{?t?\(?'?"?ניווט ראשי/);
+is(barAt > -1, 'the main navigation is still findable by its label');
+const bar = shell.slice(barAt, shell.indexOf('</nav>', barAt));
 is(bar.includes('MOBILE_TABS.includes(n.href)'), 'and the bar still renders them from that one list');
 is(!bar.includes('<button'), 'with no button left in it — every tab in the bar is a link to a screen');
 
@@ -49,7 +54,9 @@ is(!bar.includes('<button'), 'with no button left in it — every tab in the bar
  * pinned harder than it was when it had a twin.
  */
 is(/href="\/social\/settings"/.test(shell), 'the header still links to settings');
-is(/aria-label="הגדרות"/.test(shell), 'with the label that makes the gear reachable by name');
+/* Translated at render time now, so the assertion is about the NAME being
+   there, not about the attribute's spelling. */
+is(/aria-label=\{?t?\(?'?"?הגדרות/.test(shell), 'with the label that makes the gear reachable by name');
 is(/settingsActive={isActive\('\/social\/settings', false\)}/.test(shell), 'and it still lights up on its own screen');
 
 // ───────────────── 3. The way out moved under the face ─────────────────────

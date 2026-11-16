@@ -149,6 +149,36 @@ const src = (p: string) => readFileSync(new URL(`../../${p}`, import.meta.url), 
   is(block.length > 2000, 'and the block is actually present');
 }
 
+/* ══════════════ 4b. THE DICTIONARY ITSELF ══════════════════════════════ */
+
+/*
+ * "תוסיף אופציה גם לרוסית."
+ *
+ * The dictionary is keyed by the Hebrew sentence, which makes one mistake
+ * silent and cheap: an entry whose Russian IS the Hebrew looks translated in
+ * the file and renders Hebrew on the screen. These catch that, and the empty
+ * value, which renders nothing at all.
+ */
+{
+  const dict = src('src/lib/social/i18n.ts');
+  const body = dict.slice(dict.indexOf('const RU:'), dict.indexOf('/** The Hebrew sentence'));
+  const entries = [...body.matchAll(/^\s*'((?:[^'\\]|\\.)*)':\s*'((?:[^'\\]|\\.)*)',?$/gm)].map((m) => [m[1], m[2]]);
+  is(entries.length >= 30, `the dictionary has entries — found ${entries.length}`);
+
+  const empty = entries.filter(([, ru]) => ru.trim().length === 0).map(([he]) => he);
+  eq(empty, [], 'no entry translates to nothing');
+
+  const untouched = entries.filter(([he, ru]) => he.trim() === ru.trim()).map(([he]) => he);
+  eq(untouched, [], 'no entry is its own translation — that renders Hebrew while looking done');
+
+  /* Cyrillic, not Latin transliteration and not Hebrew left behind. */
+  const notRussian = entries.filter(([, ru]) => !/[\u0400-\u04FF]/.test(ru)).map(([he]) => he);
+  eq(notRussian, [], 'every translation is actually in Cyrillic');
+
+  const dupes = entries.map(([he]) => he).filter((he, i, all) => all.indexOf(he) !== i);
+  eq(dupes, [], 'no Hebrew sentence is listed twice — the second would silently win');
+}
+
 /* ══════════════ 5. THE SCREEN, IN A REAL BROWSER ═══════════════════════ */
 
 async function main(): Promise<void> {
@@ -413,6 +443,72 @@ async function main(): Promise<void> {
       eq(err.role, 'alert', 'and announced, not just drawn');
       is(err.check, 'with the connection check beside it, for the failures that are not the customer\'s');
       eq(err.remembered, null, 'and a refused address is NOT remembered — the next visit would pre-fill a wrong one');
+      await page.close();
+    }
+    /* ── the switch actually switches, and the choice survives ── */
+    {
+      const page = await browser.newPage({ viewport: { width: 390, height: 900 } });
+      await page.goto(base);
+      await page.waitForSelector('.anxa-card');
+
+      eq(
+        await page.evaluate(() => document.documentElement.getAttribute('dir')),
+        'rtl',
+        'the screen opens in Hebrew, right-to-left',
+      );
+
+      await page.click('.anxl-btn[lang="ru"]');
+      await page.waitForTimeout(150);
+      const ru = await page.evaluate(() => ({
+        dir: document.documentElement.getAttribute('dir'),
+        lang: document.documentElement.getAttribute('lang'),
+        h2: document.querySelector('.anxa-h2')?.textContent ?? '',
+        go: document.querySelector('.anxa-go')?.textContent ?? '',
+        feats: [...document.querySelectorAll('.anxa-feat span')].map((e) => e.textContent ?? ''),
+        over: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+        stored: (() => {
+          try {
+            return window.localStorage.getItem('anx.social.lang');
+          } catch {
+            return null;
+          }
+        })(),
+      }));
+      /* Russian reads left-to-right. A translation that left the page RTL
+         would be the half of this feature nobody notices until a customer
+         sends a screenshot of a sentence running the wrong way. */
+      eq(ru.dir, 'ltr', 'choosing Russian turns the document left-to-right');
+      eq(ru.lang, 'ru', 'and says so in lang, which is what a screen reader reads');
+      eq(ru.h2.trim(), 'Добро пожаловать', 'the heading is Russian');
+      is(ru.go.includes('Войти'), `and so is the button — got "${ru.go}"`);
+      eq(
+        ru.feats.map((f) => f.trim()),
+        ['Автопубликация', 'Несколько аккаунтов', 'Быстро и эффективно'],
+        'and the three benefit cards',
+      );
+      eq(ru.over, 0, 'and nothing overflows once the direction flips');
+      eq(ru.stored, 'ru', 'the choice is written down');
+
+      /* It has to still be Russian after a reload, or it is not a setting. */
+      await page.reload();
+      await page.waitForSelector('.anxa-card');
+      await page.waitForTimeout(150);
+      const back = await page.evaluate(() => ({
+        dir: document.documentElement.getAttribute('dir'),
+        h2: document.querySelector('.anxa-h2')?.textContent ?? '',
+      }));
+      eq(back.dir, 'ltr', 'and it is still Russian after a reload');
+      eq(back.h2.trim(), 'Добро пожаловать', 'with the Russian heading still in place');
+
+      /* And back again — a one-way switch is a trap for whoever presses it. */
+      await page.click('.anxl-btn[lang="he"]');
+      await page.waitForTimeout(150);
+      const he = await page.evaluate(() => ({
+        dir: document.documentElement.getAttribute('dir'),
+        h2: document.querySelector('.anxa-h2')?.textContent ?? '',
+      }));
+      eq(he.dir, 'rtl', 'and Hebrew brings the direction back');
+      eq(he.h2.trim(), 'ברוכים הבאים', 'and the Hebrew heading');
       await page.close();
     }
   } finally {

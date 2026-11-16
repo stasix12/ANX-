@@ -489,7 +489,9 @@ async function main(): Promise<void> {
       const starts = [...shell.matchAll(/^ {2}const (\w+) = \(\s*$/gm)].map((m) => ({ name: m[1], at: m.index ?? 0 }));
       is(starts.length >= 2, `the shell renders from ${starts.length} top-level JSX blocks`);
       const blocks = starts.map((b, i) => ({ ...b, end: i + 1 < starts.length ? starts[i + 1].at : shell.length }));
-      const holder = blocks.find((b) => shell.slice(b.at, b.end).includes('aria-label="ניווט ראשי"'));
+      /* Same reason as nav-more.test.ts: the label is translated at render
+         time now, so match the sentence, not the attribute's old spelling. */
+      const holder = blocks.find((b) => /ניווט ראשי/.test(shell.slice(b.at, b.end)));
       is(holder, 'one of them renders the bottom navigation bar');
       const lifted = shell.match(/<PullToRefresh onRefresh=\{onRefresh\}>\{(\w+)\}<\/PullToRefresh>/);
       is(lifted, 'and the screen is still wrapped in PullToRefresh');

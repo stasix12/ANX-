@@ -21,6 +21,7 @@ import {
   UsersIcon,
 } from '@/components/icons';
 import { signOut, useAdminSession } from '@/lib/adminAuth';
+import { useT } from '@/lib/social/i18n';
 import { getControl, listWorkers, sendWorkerCommand, waitForWorkerCommand } from '@/lib/social/client';
 import { SYSTEM_STATE_LABEL, SYSTEM_STATE_TONE, type SystemState } from './systemState';
 import { InstallPrompt } from './InstallPrompt';
@@ -164,6 +165,7 @@ export function IdentityBar({
   /** The connection panel and the desktop tab row, which drop out of the bar. */
   children?: React.ReactNode;
 }) {
+  const t = useT();
   return (
     <header
       /*
@@ -308,7 +310,7 @@ export function IdentityBar({
               className={`inline-flex min-w-0 max-w-full items-center gap-1 rounded-full px-2 py-0.5 text-[10.5px] font-extrabold leading-[14px] ${TONE_TINT[state.tone]} ${TONE_TEXT[state.tone]}`}
             >
               <span dir="auto" className="min-w-0 truncate">
-                {state.label}
+                {t(state.label)}
               </span>
               {/* The dot closes the pill, which is the side the reference
                   draws it on. It is the second channel for the tone: a pill
@@ -373,7 +375,7 @@ export function IdentityBar({
               onClick={onPc}
               aria-expanded={pcOpen}
               aria-controls="pc-panel"
-              aria-label={pcOnline ? 'המחשב מחובר — פרטי החיבור' : 'המחשב לא מחובר — פרטי החיבור'}
+              aria-label={pcOnline ? t('המחשב מחובר — פרטי החיבור') : t('המחשב לא מחובר — פרטי החיבור')}
               /* A column, not a grid, and still exactly 44px tall: the icon
                  (20) plus a 9px label on a 10px line plus the 1px gap is 31px
                  inside the 44 the touch floor already required, so the word
@@ -419,7 +421,7 @@ export function IdentityBar({
                 the existing one. */}
             <Link
               href="/social/settings"
-              aria-label="הגדרות"
+              aria-label={t('הגדרות')}
               aria-current={settingsActive ? 'page' : undefined}
               className={`grid h-10 w-10 shrink-0 place-items-center rounded-full transition-colors ${
                 settingsActive ? 'bg-brand-300/12 text-brand-400' : 'text-mist-300 hover:bg-ink-800 hover:text-mist-100'
@@ -546,6 +548,7 @@ export function SocialShell({
   onControlChanged?: () => void;
   children: React.ReactNode;
 }) {
+  const t = useT();
   const { session, loading } = useAdminSession();
   const router = useRouter();
   const pathname = usePathname();
@@ -1236,7 +1239,7 @@ export function SocialShell({
           </>
         )}
         {/* Desktop / tablet: pill toolbar under the title. Phones use the bottom bar below. */}
-        <nav aria-label="ניווט פרסום" className="mx-auto hidden min-w-0 max-w-6xl overflow-x-auto px-2 [scrollbar-width:none] md:block">
+        <nav aria-label={t('ניווט פרסום')} className="mx-auto hidden min-w-0 max-w-6xl overflow-x-auto px-2 [scrollbar-width:none] md:block">
           <ul className="flex min-w-max items-stretch gap-1 pb-1.5">
             {nav.map(({ href, label, icon: Icon, exact }) => {
               const active = isActive(href, exact);
@@ -1257,7 +1260,7 @@ export function SocialShell({
                     }`}
                   >
                     <Icon className="h-4 w-4" />
-                    {label}
+                    {t(label)}
                   </Link>
                 </li>
               );
@@ -1349,7 +1352,7 @@ export function SocialShell({
     <>
       {/* Phone: iOS-style bottom tab bar, thumb-reachable. */}
       <nav
-        aria-label="ניווט ראשי"
+        aria-label={t('ניווט ראשי')}
         // The bar lifts off the content in the ground's own hue, darkened —
         // a violet shade rather than black, which on a white-purple page
         // reads as grey dirt rather than as depth.
@@ -1370,7 +1373,7 @@ export function SocialShell({
                     <span className={`grid h-7 w-13 place-items-center rounded-full transition-[background-color,transform] duration-200 ${active ? 'scale-105 bg-brand-300/12 shadow-[0_4px_12px_rgba(124,58,237,0.18)]' : ''}`}>
                       <Icon className="h-5.5 w-5.5" />
                     </span>
-                    {label}
+                    {t(label)}
                   </Link>
                 </li>
               );

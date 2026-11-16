@@ -98,6 +98,10 @@ async function main(): Promise<void> {
       btnTitle: document.querySelector('#btn')?.getAttribute('title'),
       typed: (document.querySelector('#typed') as HTMLInputElement | null)?.value,
       kept: document.querySelector('#kept')?.textContent?.trim(),
+      keptTitle: document.querySelector('#kept')?.getAttribute('title'),
+      keptLabel: document.querySelector('#kept')?.getAttribute('aria-label'),
+      keptKid: document.querySelector('#keptkid')?.textContent?.trim(),
+      keptKidTitle: document.querySelector('#keptkid')?.getAttribute('title'),
       dir: document.documentElement.getAttribute('dir'),
     }));
 
@@ -115,6 +119,10 @@ async function main(): Promise<void> {
     /* The two things it must never touch. */
     eq(after.typed, 'ארכיון', "what the customer typed is NEVER rewritten, even when it matches the dictionary");
     eq(after.kept, 'הגדרות', 'and nothing inside [data-no-translate] is touched');
+    eq(after.keptTitle, 'הגדרות', 'its title is not touched either — paintAttrs honours the attribute now');
+    eq(after.keptLabel, 'ארכיון', 'nor its aria-label, which is what a screen reader would have read in Russian');
+    eq(after.keptKid, 'ארכיון', 'a child of a protected element is protected');
+    eq(after.keptKidTitle, 'הגדרות', "and so is the child's title");
 
     /* ─── A VALUE INSIDE THE SENTENCE ───────────────────────────────────
      *

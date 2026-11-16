@@ -116,6 +116,19 @@ function paintText(node: Marked) {
 }
 
 function paintAttrs(el: MarkedEl) {
+  /*
+   * data-no-translate HAS TO MEAN THE ATTRIBUTES TOO.
+   *
+   * The header of this file says "any node inside [data-no-translate]" is
+   * left alone, and paintText honours that — but this pass did not, so a
+   * protected element's placeholder, aria-label and title were still being
+   * rewritten. The attribute is used on exactly the thing that must never be
+   * rewritten: the owner's own post text, in the three places that show what
+   * is about to go out to Facebook. A title or an aria-label carrying that
+   * same text is the same text, and a screen reader reading the Russian
+   * translation of a Hebrew post is the same lie as showing it.
+   */
+  if (el.closest?.('[data-no-translate]')) return;
   for (const name of ATTRS) {
     if (!el.hasAttribute?.(name)) continue;
     const store = `__anxAttr_${name}`;

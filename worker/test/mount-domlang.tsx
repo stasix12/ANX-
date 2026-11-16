@@ -60,8 +60,21 @@ function Screen() {
       </button>
       {/* the customer's own typing must never be rewritten */}
       <input id="typed" readOnly value="ארכיון" />
-      <span id="kept" data-no-translate>
+      {/*
+          data-no-translate covers the attributes too, and until 2026-11-16 it
+          did not: paintText honoured it and paintAttrs did not, so a protected
+          element's title and aria-label were still rewritten. The one place
+          this attribute is used is the owner's own post text, in the three
+          screens that show what is about to go to Facebook — and a screen
+          reader reading a Russian translation of a Hebrew post is the same
+          lie as printing it.
+      */}
+      <span id="kept" data-no-translate title="הגדרות" aria-label="ארכיון">
         הגדרות
+      </span>
+      {/* and a child of a protected element is protected as well */}
+      <span id="keptwrap" data-no-translate>
+        <span id="keptkid" title="הגדרות">ארכיון</span>
       </span>
     </div>
   );

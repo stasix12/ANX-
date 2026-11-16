@@ -1102,7 +1102,23 @@
  *
  * The engine that publishes is untouched. "מאד חשוב לא לגעת כלום חוץ מזה."
  */
-export const WORKER_VERSION = '4.77.0';
+/*
+ * 4.77.0 → 4.78.0 — המספר קובע את צורת שם־העצם ברוסית.
+ *
+ * v4.77.0 published 16.11 at 06:49 (asked, not assumed), so 4.78.0 is free.
+ *
+ * Hebrew has one plural; Russian has three, chosen by the number in front of
+ * the noun. One form for all of them is not a missing translation — it is a
+ * wrong one, which is why it passed every coverage guard while reading as
+ * broken software to the people this was built for: "3 групп" where Russian
+ * wants "3 группы". 90 of the counted lines now carry the three forms and the
+ * engine settles each against the value beside it.
+ *
+ * Website only. The window on the PC has no counted noun in a pattern, so
+ * the stamp moves because src/lib/social ships whole, not because anything
+ * on the PC behaves differently.
+ */
+export const WORKER_VERSION = '4.78.0';
 
 /**
  * A FINGERPRINT OF EVERYTHING THE INSTALLER CARRIES.
@@ -1853,4 +1869,4 @@ export const WORKER_VERSION = '4.77.0';
  * worker/facebook/join.ts and written by worker/social-worker.ts, both of
  * which run only on his PC. Numbers under WORKER_VERSION above.
  */
-export const WORKER_FINGERPRINT = '9ea200be0e84b9c2';
+export const WORKER_FINGERPRINT = '971c38af323b87a6';

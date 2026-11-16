@@ -236,6 +236,33 @@ const src = (p: string) => readFileSync(new URL(`../../${p}`, import.meta.url), 
   const patDupes = pats.map(([he]) => he).filter((he, i, all) => all.indexOf(he) !== i);
   eq(patDupes, [], 'no pattern is listed twice');
 
+  /* ── THE THREE FORMS A RUSSIAN NOUN TAKES AFTER A NUMBER ───────────────
+   *
+   * A counted noun is written {one|few|many}. Three ways that goes wrong in
+   * the file and nowhere else:
+   *
+   *   · a group with two or four forms  → the wrong one is picked, silently
+   *   · a stray brace                   → a brace is printed on the screen
+   *   · a group before the first value  → nothing to agree with
+   */
+  const GROUP = /\{([^{}]*)\}/g;
+  const malformed: string[] = [];
+  const strayBrace: string[] = [];
+  const nothingToAgreeWith: string[] = [];
+  for (const [he, ru] of pats) {
+    for (const m of ru.matchAll(GROUP)) {
+      if (m[1].split('|').length !== 3) malformed.push(`${he}  →  {${m[1]}}`);
+      /* A noun can only agree with a value that comes before it. */
+      if (!ru.slice(0, m.index).includes('§')) nothingToAgreeWith.push(`${he}  →  {${m[1]}}`);
+    }
+    if (ru.replace(GROUP, '').includes('{') || ru.replace(GROUP, '').includes('}')) strayBrace.push(he);
+    /* The Hebrew side is matched literally, so a brace there would be text. */
+    if (he.includes('{') || he.includes('}')) strayBrace.push(he);
+  }
+  eq(malformed, [], 'every counted noun gives exactly three forms — one, few and many');
+  eq(strayBrace, [], 'no stray brace, which would be printed on the screen as a brace');
+  eq(nothingToAgreeWith, [], 'every counted noun has a value before it to agree with');
+
   /* A pattern must not be reachable by the plain dictionary too — the exact
      entry would always win and the pattern would be dead code. */
   const shadowed = pats.filter(([he]) => entries.some(([k]) => k === he)).map(([he]) => he);

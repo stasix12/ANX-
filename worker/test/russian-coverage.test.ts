@@ -210,11 +210,15 @@ eq(
  */
 const MARKER = 'ЗНАЧЕНИЕ';
 
+/* The marker is not a number, so a counted noun takes its third form —
+   the same choice the engine makes for a value it cannot count. */
+const resolve = (ru: string) => ru.replace(/\{[^{}|]*\|[^{}|]*\|([^{}|]*)\}/g, '$1');
+
 const stolen: string[] = [];
 for (const shape of havePattern) {
   const filled = shape.split(PH).join(MARKER);
   const got = translate('ru', filled);
-  const want = (translatedPatternValue(shape) ?? '').split(PH).join(MARKER);
+  const want = resolve(translatedPatternValue(shape) ?? '').split(PH).join(MARKER);
   if (got !== want) stolen.push(`${shape}\n      filled: ${filled}\n      got:    ${got}\n      want:   ${want}`);
 }
 eq(stolen, [], 'every pattern matches its own sentence — none is claimed by a different pattern first');
@@ -254,5 +258,37 @@ const skipped = plain
 is(skipped.length > 0, `there are sentences deliberately left in Hebrew — ${skipped.length}`);
 const brandBroken = skipped.filter((text) => translate('ru', text) !== text);
 eq(brandBroken, [], 'and a pattern never reaches one of them either — the brand name stays the brand name');
+
+/*
+ * ─── AND THE NUMBER AGREES WITH ITS NOUN ──────────────────────────────────
+ *
+ * Russian picks one of three forms by the last digits of the number. A single
+ * form would be wrong for most counts on screen, and wrong in a way no
+ * coverage guard can see: the sentence IS translated, it just reads as broken
+ * software to the people this was built for. These are the cases the rule
+ * turns on, each run through the real engine.
+ */
+const agreement: [number, string][] = [
+  [3, '3 группы приостановлено'],
+  [4, '4 группы приостановлено'],
+  [5, '5 групп приостановлено'],
+  [11, '11 групп приостановлено'],
+  [14, '14 групп приостановлено'],
+  [21, '21 группа приостановлено'],
+  [22, '22 группы приостановлено'],
+  [25, '25 групп приостановлено'],
+  [101, '101 группа приостановлено'],
+  [112, '112 групп приостановлено'],
+];
+const wrongForm = agreement
+  .filter(([n, want]) => translate('ru', `${n} קבוצות הושהו`) !== want)
+  .map(([n, want]) => `${n}: got "${translate('ru', `${n} קבוצות הושהו`)}", want "${want}"`);
+eq(wrongForm, [], "a count and its noun agree, by Russian's own rule and not by one form for all");
+
+/* A value that is not a whole number has nothing to agree with, and must
+   not produce a brace or an empty gap on the screen. */
+const notACount = translate('ru', 'לפני 08:30 דקות');
+eq(notACount.includes('{'), false, 'a value that is not a count never leaves a brace on the screen');
+eq(notACount, '08:30 минут назад', 'and falls back to the form Russian uses when the count is unknown');
 
 console.log(`${NAME} OK — ${checks} assertions over ${plain.length} sentences and ${patterns.length} value shapes`);

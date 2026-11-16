@@ -12,18 +12,27 @@
  */
 import { createRoot } from 'react-dom/client';
 import { LiveFlow } from '@/components/social/LiveFlow';
-import type { PublishCycle } from '@/lib/social/publish-cycle';
+import { CYCLE_LIMIT, CYCLE_ROUNDS_PER_WINDOW, type PublishCycle } from '@/lib/social/publish-cycle';
 
 const base: PublishCycle = {
   ok: true,
   enabled: true,
   crossed: false,
   count: 0,
-  limit: 100,
+  /*
+   * THE ENGINE'S OWN TWO NUMBERS, not literals beside them.
+   *
+   * The card prints `cycle.limit` — the figure the DATABASE answered with,
+   * which is the figure the worker passed it — so a fixture carrying its own
+   * 100 would keep this suite green through a change to the ceiling the
+   * engine actually enforces. That is exactly what happened when the round
+   * became 110 on 15.11.
+   */
+  limit: CYCLE_LIMIT,
   restUntil: null,
   resting: false,
   roundsInWindow: 0,
-  roundsPerWindow: 2,
+  roundsPerWindow: CYCLE_ROUNDS_PER_WINDOW,
   windowStartedAt: null,
   cycleStartedAt: null,
 };

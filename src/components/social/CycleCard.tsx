@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { CYCLE_REST_HOURS, cycleCountdown, cycleRestLeftMs, cycleResting, type PublishCycle } from '@/lib/social/publish-cycle';
+import { CYCLE_REST_HOURS, CYCLE_ROUNDS_PER_WINDOW, cycleCountdown, cycleRestLeftMs, cycleResting, type PublishCycle } from '@/lib/social/publish-cycle';
 
 /*
  * ─── WHY THIS CARD HAS ITS OWN FILE ───────────────────────────────────────
@@ -171,8 +171,23 @@ export function CycleCard({
             </svg>
             הפסקה אוטומטית אחרי {cycle.limit} פרסומים
           </h3>
+          {/*
+            AND THE DAY'S OWN NUMBER, because that is the one he asked for:
+            "הגבלה לעשות ל 220 קבוצות". The round is half of it by design — two
+            stretches with a rest between them rather than one long burst — so
+            the card states both, and states the day's figure as the PRODUCT
+            of the two the engine uses. A literal 220 typed here would be a
+            number that could drift away from what the engine enforces.
+
+            `roundsPerWindow` comes from the database's own answer when it has
+            one, and from the constant the engine passes it when it does not;
+            they are the same number by construction, and reading the row's
+            first is what makes this sentence true on a day somebody changes
+            it in one place.
+          */}
           <p className="anxc-sub">
-            לאחר {cycle.limit} פרסומים בקבוצות, המערכת תיכנס להפסקה של {CYCLE_REST_HOURS} שעות.
+            לאחר {cycle.limit} פרסומים בקבוצות, המערכת תיכנס להפסקה של {CYCLE_REST_HOURS} שעות — עד{' '}
+            {cycle.limit * (cycle.roundsPerWindow || CYCLE_ROUNDS_PER_WINDOW)} פרסומים ביממה.
           </p>
         </div>
 

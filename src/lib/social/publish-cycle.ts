@@ -1,10 +1,17 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 /**
- * ─── THE PUBLISHING CYCLE: 100 PUBLICATIONS, THEN EIGHT HOURS OFF ─────────
+ * ─── THE PUBLISHING CYCLE: 110 PUBLICATIONS, THEN SIX HOURS OFF ───────────
+ *
+ * TWO ROUNDS A DAY, SO THE DAY IS 220. Both numbers below were amended by the
+ * owner after the first version — the rest went 8h → 6h on 12.11, and the
+ * round went 100 → 110 on 15.11 to make the day the 220 he asked for. His
+ * original words, which the shape still follows:
  *
  * "כל 100 פרסומים מוצלחים בקבוצות פייסבוק תתחיל הפסקה של 8 שעות."
  * "ביממה של 24 שעות אפשר עד שתי סבבים (200) קבוצות ככה אנחנו בסדר."
+ *
+ * The live numbers are the four constants below — never these quotes.
  *
  * ALL OF THE ARITHMETIC IS IN THE DATABASE, in social_publish_cycle_tick()
  * (supabase/social-latest.sql, v41). This file is the one door to it, shared
@@ -35,7 +42,37 @@ import type { SupabaseClient } from '@supabase/supabase-js';
  */
 
 /** The owner's numbers. Changing one of these changes the engine and the card together. */
-export const CYCLE_LIMIT = 100;
+/*
+ * ─── 100 → 110, AND THE NUMBER THAT MATTERS IS 220 ────────────────────────
+ *
+ *   "הגבלה לעשות ל 220 קבוצות" — 15.11.2026, answering the question of
+ *   whether to switch the mechanism back on.
+ *
+ * THE DAY'S CEILING IS THIS TIMES CYCLE_ROUNDS_PER_WINDOW, and that product
+ * is the number he asked for: 110 × 2 = 220. The two factors are not
+ * interchangeable and the other arrangement is worse:
+ *
+ *   · 110 and two rounds — two bursts about six hours apart. At his measured
+ *     pace (a publication every 40 seconds, 31–45 an hour) a round is between
+ *     two and three hours, so the day is two working stretches with a rest
+ *     between them.
+ *   · 220 and ONE round — the same 220 published in one unbroken stretch,
+ *     and then silence. Same total, roughly double the pressure per hour,
+ *     which is the thing a rate limit actually measures. Every limit either
+ *     account has hit landed between 210 and 265 publications in a day, and
+ *     the pace they arrived at is the part this mechanism can change.
+ *
+ * SO THE ROUND IS HALF THE DAY, DELIBERATELY. If he ever wants a different
+ * daily number, it is this constant that moves — the day is always
+ * CYCLE_LIMIT × CYCLE_ROUNDS_PER_WINDOW, and the card prints that product so
+ * the screen cannot disagree with the engine about it.
+ *
+ * AND IT ONLY BINDS WHILE THE MECHANISM IS ON. With the switch off nothing is
+ * counted and nothing is held; the only ceiling then is `limits.maxPerDay`
+ * from Settings, which is 2000 on his account and is enforced separately in
+ * rules.ts.
+ */
+export const CYCLE_LIMIT = 110;
 /*
  * ─── SIX HOURS, AMENDED BY THE OWNER ON 12.11 ─────────────────────────────
  *

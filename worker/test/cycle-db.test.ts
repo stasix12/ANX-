@@ -1,5 +1,8 @@
 /**
- * THE 100-PUBLICATION CYCLE, AGAINST A REAL POSTGRES.
+ * THE PUBLISHING CYCLE, AGAINST A REAL POSTGRES.
+ *
+ * The round is CYCLE_LIMIT and the day is CYCLE_LIMIT × CYCLE_ROUNDS_PER_WINDOW
+ * — 110 and 220 since 15.11. His original words, which the shape still follows:
  *
  * "כל 100 פרסומים מוצלחים בקבוצות פייסבוק תתחיל הפסקה של 8 שעות."
  * "ביממה של 24 שעות אפשר עד שתי סבבים (200) קבוצות ככה אנחנו בסדר."
@@ -32,6 +35,7 @@
 import assert from 'node:assert/strict';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { CYCLE_LIMIT, CYCLE_REST_HOURS, CYCLE_ROUNDS_PER_WINDOW } from '@/lib/social/publish-cycle';
 import { applySchema, available, exec, lastValue, one, race, refusedQuiet, resetSchema, skip } from './db/harness';
 
 const NAME = 'publish cycle (real postgres)';
@@ -201,6 +205,126 @@ reset();
   field('count');
   field('count');
   eq(row('cycle_count'), before, 'p_count=false reads the state without advancing it');
+}
+
+/* ══════════════ 7b. THE ENGINE'S OWN NUMBERS, AND HIS 220 ═══════════════ */
+
+/*
+ * ─── THE HOLE THIS SECTION CLOSES ────────────────────────────────────────
+ *
+ * Every other call in this file passes a LITERAL `100, 8, 2`. That is the
+ * right way to test a parameterised function — it proves the shape holds for
+ * the arguments it is given — but it leaves one thing unproven, and it is the
+ * thing his request actually rests on:
+ *
+ *   NOTHING HERE EVER PASSED A LIMIT OTHER THAN 100.
+ *
+ * So a function that ignored `p_limit` and paused at a hardcoded hundred
+ * would keep this whole file green, while the card promised 220 and his
+ * account enforced 200. That is not a hypothetical shape of defect: it is the
+ * same shape as the fixture that carried its own `limit: 100` and kept
+ * cycle.test.ts green straight through this change.
+ *
+ * This section therefore passes the ENGINE'S constants — the exact numbers
+ * cycleTick() sends in production — and asserts that a real Postgres honours
+ * them: the round really ends at CYCLE_LIMIT, and the day really yields
+ * CYCLE_LIMIT × CYCLE_ROUNDS_PER_WINDOW.
+ *
+ * AND WHAT THIS SECTION CANNOT DO, said plainly so nobody leans on it for
+ * more than it proves: it cannot pin the number 220. Both sides of its
+ * arithmetic move together, so setting the round to 3 rounds of 110 leaves it
+ * green at 330 — measured, not assumed. The literal 220 he asked for is
+ * pinned in worker/test/cycle.test.ts, which fails on exactly that change.
+ * The division of labour is deliberate:
+ *
+ *   · cycle.test.ts     — the product is 220, because that is what he said.
+ *   · THIS file         — whatever the engine passes, the database obeys.
+ *
+ * Neither alone is enough. A function that ignored p_limit would keep
+ * cycle.test.ts green; a constant changed to 3 rounds would keep this green.
+ *
+ *   "הגבלה לעשות ל 220 קבוצות"
+ */
+
+/** One publication with exactly the arguments production sends. */
+const engineTick = () =>
+  JSON.parse(
+    one(`select public.social_publish_cycle_tick(${CYCLE_LIMIT}, ${CYCLE_REST_HOURS}, ${CYCLE_ROUNDS_PER_WINDOW}, true)::text`),
+  ) as { count: number; crossed: boolean; restUntil: string | null };
+
+{
+  on();
+  reset();
+
+  /* ── the round is the engine's limit, not a hundred ── */
+  let last = { count: -1, crossed: false, restUntil: null as string | null };
+  for (let i = 0; i < CYCLE_LIMIT - 1; i += 1) last = engineTick();
+  eq(last.count, CYCLE_LIMIT - 1, `${CYCLE_LIMIT - 1} publications leave the counter one short of the round`);
+  eq(last.restUntil, null, 'and NOTHING is holding yet — a function that paused at a hardcoded 100 would already be holding here');
+
+  const crossing = engineTick();
+  is(
+    typeof crossing.restUntil === 'string' && crossing.restUntil.length > 0,
+    `publication number ${CYCLE_LIMIT} is the one that starts the pause`,
+  );
+  eq(crossing.count, 0, 'and the next round starts from zero');
+  eq(crossing.crossed, true, 'the function says so itself');
+
+  const hours = Number(one(`select round(extract(epoch from (rest_until - now())) / 3600)::text from public.social_publish_cycle`));
+  eq(hours, CYCLE_REST_HOURS, `the pause is the engine's own ${CYCLE_REST_HOURS} hours`);
+}
+
+{
+  /*
+   * ── AND NOW THE WHOLE DAY, COUNTED ──
+   *
+   * Publish until the mechanism will not let the day go further, stepping
+   * over each rest as though its hours had passed — because the hours are not
+   * what is being tested here, the DAY'S TOTAL is. The window itself is never
+   * touched, so when a hold reaches the end of the window the day is over and
+   * the loop stops. Whatever was published by then IS his daily ceiling.
+   *
+   * WHAT COUNTS AS PUBLISHED IS THE FUNCTION'S OWN ANSWER, not this loop's
+   * opinion of whether a hold was in force. The first version of this block
+   * asked the row `(rest_until > now())::text` and compared it to 't' — but
+   * `boolean::text` in Postgres is 'true', not 't', so the hold was never
+   * seen, the loop ticked straight through it, and 490 calls that counted
+   * nothing were all tallied as publications. The number below has to come
+   * from the thing being measured.
+   */
+  on();
+  reset();
+
+  let published = 0;
+  let rests = 0;
+  let ended = false;
+  let prev = 0;
+  for (let guard = 0; guard < CYCLE_LIMIT * CYCLE_ROUNDS_PER_WINDOW * 2 + 50; guard += 1) {
+    const t = engineTick();
+    /* It counted iff the counter advanced, or it rolled the round over. */
+    if (t.crossed || t.count > prev) published += 1;
+    prev = t.crossed ? 0 : t.count;
+
+    if (t.restUntil) {
+      const dayOver = one(`select rest_until >= window_started_at + interval '24 hours' from public.social_publish_cycle`) === 't';
+      if (dayOver) {
+        ended = true;
+        break;
+      }
+      /* The rest between rounds — stepped over, not waited out. */
+      rests += 1;
+      exec(`update public.social_publish_cycle set rest_until = now() - interval '1 second'`);
+    }
+  }
+
+  is(ended, 'the day closed by itself rather than running out the loop — otherwise the number below means nothing');
+  eq(
+    published,
+    CYCLE_LIMIT * CYCLE_ROUNDS_PER_WINDOW,
+    `a real Postgres let exactly ${CYCLE_LIMIT * CYCLE_ROUNDS_PER_WINDOW} publications through in one 24-hour window — "הגבלה לעשות ל 220 קבוצות"`,
+  );
+  eq(rests, CYCLE_ROUNDS_PER_WINDOW - 1, `with ${CYCLE_ROUNDS_PER_WINDOW - 1} rest(s) inside the day, and the last hold closing it`);
+  eq(row('rounds_in_window'), String(CYCLE_ROUNDS_PER_WINDOW), 'and every round of the window is spent');
 }
 
 async function main(): Promise<void> {
@@ -529,7 +653,7 @@ async function main(): Promise<void> {
   eq(stranger.ok, false, 'somebody who belongs to no business gets no cycle at all');
   is(!refusedAs(A.user, `select public.social_publish_cycle_tick(100, 8, 2, false)`), 'while a real customer is never refused the read the card needs');
 
-  console.log(`${NAME} OK — ${checks} assertions against a real Postgres, ${lanes} lanes raced at the hundredth slot, a pause survived a restart, and two businesses were kept apart under RLS`);
+  console.log(`${NAME} OK — ${checks} assertions against a real Postgres, ${lanes} lanes raced at the round's last slot, a pause survived a restart, and two businesses were kept apart under RLS`);
 }
 
 void main();

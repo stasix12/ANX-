@@ -31,7 +31,22 @@ const src = (p: string) => readFileSync(new URL(`../../${p}`, import.meta.url), 
 
 /* ══════════════ 1. THE OWNER'S NUMBERS ══════════════════════════════════ */
 
-eq(CYCLE_LIMIT, 100, '"כל 100 פרסומים מוצלחים"');
+/*
+ * ─── 100 → 110 ON 15.11, AND THE NUMBER HE NAMED WAS THE DAY'S ────────────
+ *
+ *   "הגבלה לעשות ל 220 קבוצות"
+ *
+ * The round is half the day on purpose: 110 × 2 rounds = 220, published as
+ * two stretches with a six-hour rest between them. The other arrangement with
+ * the same total — one round of 220 — is the same volume at roughly double
+ * the pressure per hour, and the pace is the part a rate limit measures.
+ *
+ * BOTH FACTORS ARE PINNED AND SO IS THEIR PRODUCT, because the product is the
+ * only one of the three he actually said. A change to either constant that
+ * does not keep it at 220 fails here rather than on his account.
+ */
+eq(CYCLE_LIMIT, 110, 'a round is 110 publications');
+eq(CYCLE_LIMIT * CYCLE_ROUNDS_PER_WINDOW, 220, 'and the day is 220 — "הגבלה לעשות ל 220 קבוצות", 15.11');
 /*
  * EIGHT IN THE BRIEF, SIX BY HIS DECISION ON 12.11 — after he had watched a
  * real round close on his own account. Pinned rather than left loose because
@@ -343,10 +358,14 @@ async function main(): Promise<void> {
         eq(crashes, [], `${w}/${which}: the card threw`);
 
         if (which === 'running') {
-          eq(seen.count, '37 / 100', `${w}: the meter prints the database's own two numbers`);
-          /* THE BAR IS THE COUNT, not a decoration. 37 of 100 is 37% of the
-             track, measured in pixels off the rendered element. */
-          is(Math.abs(seen.barPct - 37) <= 2, `${w}: the bar is ${seen.barPct}% for 37/100`);
+          /* The engine's own ceiling, not a literal: the fixture is handed
+             CYCLE_LIMIT and the card prints what it was handed, so a change to
+             the ceiling moves both and neither can drift. */
+          eq(seen.count, `37 / ${CYCLE_LIMIT}`, `${w}: the meter prints the database's own two numbers`);
+          /* THE BAR IS THE COUNT, not a decoration — measured in pixels off
+             the rendered element against the same two numbers. */
+          const want = Math.round((37 / CYCLE_LIMIT) * 100);
+          is(Math.abs(seen.barPct - want) <= 2, `${w}: the bar is ${seen.barPct}% for 37/${CYCLE_LIMIT} (expected ~${want}%)`);
           eq(seen.rest, 0, `${w}: nothing is holding, so no hold band is drawn`);
           eq(seen.switchOn, 'true', `${w}: the switch reads as on`);
           /*
@@ -361,6 +380,16 @@ async function main(): Promise<void> {
             `${w}: the card promises the engine's own pause (${CYCLE_REST_HOURS}h) — got "${seen.promise}"`,
           );
           is(seen.promise.includes(String(CYCLE_LIMIT)), `${w}: and the engine's own ceiling`);
+          /*
+           * AND THE DAY'S TOTAL, which is the number he asked for and the one
+           * he will look for. Computed from the engine's own two numbers, so
+           * a card saying 220 while the engine enforces something else is not
+           * a state this suite can be green in.
+           */
+          is(
+            seen.promise.includes(String(CYCLE_LIMIT * CYCLE_ROUNDS_PER_WINDOW)),
+            `${w}: the card states the day's ceiling (${CYCLE_LIMIT * CYCLE_ROUNDS_PER_WINDOW}) — got "${seen.promise}"`,
+          );
         }
         if (which === 'resting') {
           eq(seen.rest, 1, `${w}: the hold band is drawn`);

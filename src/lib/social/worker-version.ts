@@ -989,7 +989,25 @@
  * What the PC DOES gain is nothing new: 4.68.0's two corrected error messages
  * are already in it. He needs one update either way, and this makes it one.
  */
-export const WORKER_VERSION = '4.69.0';
+/*
+ * 4.69.0 → 4.70.0, AND THIS ONE REALLY HAS TO REACH THE PC.
+ *
+ * v4.69.0 was published on 13.11 at 18:40 — asked, not assumed — so 4.70.0 is
+ * free.
+ *
+ * WHAT CHANGES ON HIS MACHINE: the round is 110 publications instead of 100,
+ * which makes the day 220 — "הגבלה לעשות ל 220 קבוצות". The worker is what
+ * passes that ceiling to the database (cycleTick sends CYCLE_LIMIT as
+ * p_limit on every publication), so until the installer carries this number
+ * his PC would go on enforcing 100 and the website would go on promising 220.
+ * That gap is the exact failure the fingerprint exists to prevent, and it is
+ * the reason this is not a cosmetic bump.
+ *
+ * IT BINDS ONLY WHILE THE MECHANISM IS ON. With the switch off nothing is
+ * counted and nothing is held — the ceiling then is `limits.maxPerDay` from
+ * Settings, which is 2000 on his account.
+ */
+export const WORKER_VERSION = '4.70.0';
 
 /**
  * A FINGERPRINT OF EVERYTHING THE INSTALLER CARRIES.
@@ -1740,4 +1758,4 @@ export const WORKER_VERSION = '4.69.0';
  * worker/facebook/join.ts and written by worker/social-worker.ts, both of
  * which run only on his PC. Numbers under WORKER_VERSION above.
  */
-export const WORKER_FINGERPRINT = 'a5ed5d419e69cf7b';
+export const WORKER_FINGERPRINT = 'b950d76acdaa7d9c';

@@ -209,5 +209,5 @@ grant execute on function public.social_publish_cycle_tick(integer, integer, int
 
 do $$
 begin
-  raise notice 'v42: ההפסקה שרצה עכשיו תתעדכן לאורך ההפסקה המוגדר במנוע, בסבב הבא שלו. רק מקצר, ותקרת שני הסבבים ביממה נשמרת.';
+  raise notice 'v43 הותקן: תקרת היממה נאכפת מעכשיו גם כשאין הפסקה בתוקף. כיבוי והדלקה של מתג ההמתנה כבר לא קונים סבב נוסף.';
 end $$;

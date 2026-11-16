@@ -1869,4 +1869,31 @@ export const WORKER_VERSION = '4.78.0';
  * worker/facebook/join.ts and written by worker/social-worker.ts, both of
  * which run only on his PC. Numbers under WORKER_VERSION above.
  */
-export const WORKER_FINGERPRINT = '971c38af323b87a6';
+/*
+ * ─── 16.11.2026 — 4.78.0 נשארת: שינוי שאינו מגיע למחשב בשום צורה ──
+ *
+ * DOES THIS HAVE TO REACH THE PC? NO — and this is the first time the answer
+ * is no and the version therefore stays where it is. The whole change under
+ * the three roots is src/lib/social/i18n.ts, the website's dictionary.
+ *
+ * The three rounds before this one (4.76, 4.77, 4.78) each moved the stamp for
+ * dictionary work on the grounds that src/lib/social "ships whole with the
+ * installer". That sentence was never measured. It is wrong, and this is the
+ * measurement, against a bundle built from this exact tree
+ * (node scripts/build-app.mjs, then grep -oF … | wc -l):
+ *
+ *   dist/app/worker.cjs    Группы 0   Опубликовано 0   Для комментария 0
+ *   (the controls)         planQueue 4   readMyGroups 4   round_at 4
+ *
+ * Zero. Nothing under worker/ or desktop/ imports the dictionary, and inside
+ * src/lib/social only dom-translate.ts does — which the worker never loads —
+ * so esbuild drops the entire table. The one Cyrillic file in the payload is
+ * dist/app/renderer/i18n.js, the window's own translator, unchanged since
+ * 597c4bb and already published inside v4.78.0.
+ *
+ * So the fingerprint is pasted and the number is left alone, which is exactly
+ * what the guard says to do when the answer is no. Bumping would have told
+ * every installed copy it was out of date and asked for a re-install that
+ * changes not one byte on the machine.
+ */
+export const WORKER_FINGERPRINT = '449eed2293b68d8a';

@@ -1791,6 +1791,59 @@ body:has(.social-theme) .site-backdrop {
 }
 
 /*
+ * ─── THE LANGUAGE SWITCH (עברית · Русский) ────────────────────────────────
+ *
+ * Its own block, outside the sign-in screen's, because it is not only the
+ * sign-in screen's: the app shows the same control. Light styling here with a
+ * dark variant under .social-theme, so one component serves both.
+ */
+.anxl-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 999px;
+  background: rgb(255 255 255 / 0.72);
+  border: 1px solid #dfe9f8;
+  box-shadow: 0 6px 14px -10px rgb(13 60 150 / 0.5);
+}
+.anxl-btn {
+  /* 40px, not the 34 it started at: these are the first controls a customer
+     who cannot read the current language has to hit, and worker/test/
+     auth-screen.test.ts refused them at 34. */
+  min-height: 40px;
+  padding-inline: 15px;
+  border-radius: 999px;
+  font-size: 12.5px;
+  font-weight: 800;
+  line-height: 1;
+  color: #5b6b85;
+  transition: background-color 0.15s, color 0.15s;
+}
+.anxl-btn:hover { color: #1272f4; }
+.anxl-btn[aria-pressed='true'] {
+  background: linear-gradient(to left, #1272f4, #0245ca);
+  color: #fff;
+}
+.anxl-btn:focus-visible {
+  outline: 2px solid #1272f4;
+  outline-offset: 2px;
+}
+/* The same control inside the dark app, from its own tokens. */
+.social-theme .anxl-wrap {
+  background: var(--color-ink-800);
+  border-color: var(--color-ink-700);
+  box-shadow: none;
+}
+.social-theme .anxl-btn { color: var(--color-mist-300); }
+.social-theme .anxl-btn:hover { color: var(--color-mist-100); }
+.social-theme .anxl-btn[aria-pressed='true'] {
+  background: var(--color-brand-500);
+  color: var(--color-on-brand);
+}
+
+
+/*
  * ─── THE SIGN-IN SCREEN (/social/login) ───────────────────────────────────
  *
  * "התמונה המצורפת היא רפרנס עיצובי מחייב … יש לשחזר אותה ברמת Pixel Perfect,
@@ -1886,6 +1939,9 @@ body:has(.social-theme) .site-backdrop {
   gap: 18px;
 }
 
+/* ── the language switch sits above everything ───────────────────────────── */
+.anxa-lang { display: flex; justify-content: center; }
+
 /* ── logo, name, tagline ─────────────────────────────────────────────────── */
 .anxa-brand { text-align: center; }
 .anxa-logo {
@@ -1976,8 +2032,20 @@ body:has(.social-theme) .site-backdrop {
    * half of its blob at full strength and dissolves what is left into the
    * card, which is the soft circular shape the reference draws anyway.
    */
-  -webkit-mask-image: radial-gradient(125% 120% at 88% 22%, #000 52%, transparent 80%);
-  mask-image: radial-gradient(125% 120% at 88% 22%, #000 52%, transparent 80%);
+  /*
+   * THE FOCAL POINT FOLLOWS THE WRITING DIRECTION. The robot sits at the
+   * inline start, which is the RIGHT in Hebrew and the LEFT in Russian, so a
+   * single fixed focus fades the wrong edge in one of them — in Russian it
+   * left the crop's rectangle plainly visible against the card. Measured on
+   * the first Russian render; there is no logical property for a gradient
+   * position, so the two cases are written out.
+   */
+  -webkit-mask-image: radial-gradient(125% 120% at 88% 22%, #000 52%, transparent 82%);
+  mask-image: radial-gradient(125% 120% at 88% 22%, #000 52%, transparent 82%);
+}
+[dir='ltr'] .anxa-robot {
+  -webkit-mask-image: radial-gradient(125% 120% at 12% 22%, #000 52%, transparent 82%);
+  mask-image: radial-gradient(125% 120% at 12% 22%, #000 52%, transparent 82%);
 }
 .anxa-head { position: relative; padding-inline-start: 96px; min-height: 84px; }
 .anxa-h2 {

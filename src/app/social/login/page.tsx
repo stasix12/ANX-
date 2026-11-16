@@ -12,9 +12,11 @@ import {
   SpinnerIcon,
   UsersIcon,
 } from '@/components/icons';
+import { LangSwitch } from '@/components/social/LangSwitch';
 import { signInToSocial, signUpToSocial, useSocialSession } from '@/lib/social/auth';
 import type { Blame } from '@/lib/social/auth-trouble';
 import { checkConnection, verdictText } from '@/lib/social/connection-check';
+import { useT } from '@/lib/social/i18n';
 
 /**
  * The door /social never had.
@@ -70,6 +72,12 @@ function LoginScreen() {
   const router = useRouter();
   const params = useSearchParams();
   const { session, loading } = useSocialSession();
+  /*
+   * RUSSIAN, AND HEBREW WHEREVER THERE IS NO RUSSIAN YET. t() is keyed by the
+   * Hebrew sentence, so every string below reads as it always did and simply
+   * answers in Russian once the dictionary has it — see lib/social/i18n.ts.
+   */
+  const t = useT();
 
   const [mode, setMode] = useState<'in' | 'up'>(params.get('mode') === 'up' ? 'up' : 'in');
   const [business, setBusiness] = useState('');
@@ -214,13 +222,13 @@ function LoginScreen() {
             <span className="anxa-sent-ico">
               <CheckCircleIcon />
             </span>
-            <h2 className="anxa-h2">שלחנו לכם מייל</h2>
+            <h2 className="anxa-h2">{t('שלחנו לכם מייל')}</h2>
             <p dir="auto" className="anxa-sub">
               פתחו את ההודעה ששלחנו ל־<b style={{ color: 'var(--a-ink)' }}>{email}</b> ולחצו על הקישור שבה. אחרי זה אפשר
               להיכנס כאן עם אותו מייל וסיסמה.
             </p>
             <button type="button" className="anxa-err-btn" style={{ marginTop: 16 }} onClick={() => { setSent(false); setMode('in'); }}>
-              חזרה למסך הכניסה
+              {t('חזרה למסך הכניסה')}
             </button>
           </div>
         </div>
@@ -234,12 +242,18 @@ function LoginScreen() {
       <span aria-hidden className="anxa-wave anxa-wave-bottom" />
 
       <div className="anxa-wrap">
+        {/* First thing on the screen, deliberately: somebody who cannot read
+            Hebrew must be able to change that without reading Hebrew. */}
+        <div className="anxa-lang">
+          <LangSwitch />
+        </div>
+
         <header className="anxa-brand">
           <span className="anxa-logo">
             <SendIcon />
           </span>
           <h1 className="anxa-title">הפתרון המבריק</h1>
-          <p className="anxa-tag">פרסום לקבוצות פייסבוק</p>
+          <p className="anxa-tag">{t('פרסום לקבוצות פייסבוק')}</p>
         </header>
 
         {/* The three benefit cards, in the reference's own order (RTL: the
@@ -248,15 +262,15 @@ function LoginScreen() {
         <ul className="anxa-feats">
           <li className="anxa-feat">
             <CalendarIcon aria-hidden />
-            <span>פרסום אוטומטי</span>
+            <span>{t('פרסום אוטומטי')}</span>
           </li>
           <li className="anxa-feat">
             <UsersIcon aria-hidden />
-            <span>ריבוי חשבונות</span>
+            <span>{t('ריבוי חשבונות')}</span>
           </li>
           <li className="anxa-feat">
             <BoltIcon aria-hidden />
-            <span>מהיר ויעיל</span>
+            <span>{t('מהיר ויעיל')}</span>
           </li>
         </ul>
 
@@ -267,9 +281,9 @@ function LoginScreen() {
           <img src="/social/auth-robot.webp" alt="" aria-hidden className="anxa-robot" width={239} height={200} />
 
           <div className="anxa-head">
-            <h2 className="anxa-h2">{up ? 'פתיחת חשבון' : 'ברוכים הבאים'}</h2>
+            <h2 className="anxa-h2">{up ? t('פתיחת חשבון') : t('ברוכים הבאים')}</h2>
             <p className="anxa-sub">
-              {up ? 'דקה אחת, ואפשר להתחיל לפרסם.' : 'הזינו את הפרטים כדי להיכנס למערכת.'}
+              {up ? t('דקה אחת, ואפשר להתחיל לפרסם.') : t('הזינו את הפרטים כדי להיכנס למערכת.')}
             </p>
             <span aria-hidden className="anxa-rule" />
           </div>
@@ -278,7 +292,7 @@ function LoginScreen() {
             {up && (
               <div>
                 <label className="anxa-label" htmlFor="anxa-business">
-                  שם העסק
+                  {t('שם העסק')}
                 </label>
                 <span className="anxa-box">
                   <span className="anxa-ico">
@@ -289,7 +303,7 @@ function LoginScreen() {
                     dir="auto"
                     value={business}
                     onChange={(e) => setBusiness(e.target.value)}
-                    placeholder="לדוגמה: ניקוי ספות בדרום"
+                    placeholder={t('לדוגמה: ניקוי ספות בדרום')}
                     autoComplete="organization"
                     className="anxa-input"
                   />
@@ -299,7 +313,7 @@ function LoginScreen() {
 
             <div>
               <label className="anxa-label" htmlFor="anxa-email">
-                אימייל
+                {t('אימייל')}
               </label>
               <span className="anxa-box">
                 <span className="anxa-ico">
@@ -324,7 +338,7 @@ function LoginScreen() {
 
             <div>
               <label className="anxa-label" htmlFor="anxa-password">
-                סיסמה
+                {t('סיסמה')}
               </label>
               <span className="anxa-box">
                 <span className="anxa-ico">
@@ -348,7 +362,7 @@ function LoginScreen() {
                 <button
                   type="button"
                   onClick={() => setReveal(!reveal)}
-                  aria-label={reveal ? 'הסתר סיסמה' : 'הצג סיסמה'}
+                  aria-label={reveal ? t('הסתר סיסמה') : t('הצג סיסמה')}
                   className="anxa-eye"
                 >
                   {reveal ? <EyeOffIcon /> : <EyeIcon />}
@@ -356,7 +370,7 @@ function LoginScreen() {
               </span>
               {up && (
                 <span className="anxa-sub" style={{ display: 'block', marginTop: 6, fontSize: 12 }}>
-                  לפחות 8 תווים
+                  {t('לפחות 8 תווים')}
                 </span>
               )}
             </div>
@@ -374,7 +388,7 @@ function LoginScreen() {
                     if (!e.target.checked) rememberEmail(false, '');
                   }}
                 />
-                זכור אותי
+                {t('זכור אותי')}
               </label>
             </div>
 
@@ -399,7 +413,7 @@ function LoginScreen() {
                       </p>
                     )}
                     <button type="button" className="anxa-err-btn" onClick={runCheck} disabled={checking}>
-                      {checking ? 'בודק את החיבור…' : 'בדיקת חיבור לשרת'}
+                      {checking ? t('בודק את החיבור…') : t('בדיקת חיבור לשרת')}
                     </button>
                   </>
                 )}
@@ -421,7 +435,7 @@ function LoginScreen() {
                   <path d="M14 3.5h4a2.5 2.5 0 0 1 2.5 2.5v12a2.5 2.5 0 0 1-2.5 2.5h-4" />
                 </svg>
               )}
-              {up ? 'פתחו חשבון' : 'כניסה למערכת'}
+              {up ? t('פתחו חשבון') : t('כניסה למערכת')}
             </button>
           </div>
 
@@ -433,13 +447,13 @@ function LoginScreen() {
             announce a choice the screen cannot offer.
           */}
           <p className="anxa-foot">
-            {up ? 'כבר יש לכם חשבון? ' : 'אין לכם עדיין חשבון? '}
+            {up ? t('כבר יש לכם חשבון? ') : t('אין לכם עדיין חשבון? ')}
             <button
               type="button"
               onClick={() => { setMode(up ? 'in' : 'up'); setError(''); setTrouble(null); setVerdict(''); }}
               className="anxa-link"
             >
-              {up ? 'כניסה למערכת' : 'פתחו חשבון חדש'}
+              {up ? t('כניסה למערכת') : t('פתחו חשבון חדש')}
             </button>
           </p>
         </form>
@@ -450,11 +464,11 @@ function LoginScreen() {
             case, which is why it is not in it. */}
         {up && (
           <div className="anxa-how">
-            <p>איך זה עובד</p>
+            <p>{t('איך זה עובד')}</p>
             <ol>
-              <li>1. נרשמים כאן ובונים פוסטים וקבוצות — מהטלפון, מכל מקום.</li>
-              <li>2. מתקינים את התוכנה על המחשב ומקלידים בה את אותו מייל.</li>
-              <li>3. המחשב מפרסם לפי התזמון. הסיסמה של פייסבוק נשארת אצלכם.</li>
+              <li>{t('1. נרשמים כאן ובונים פוסטים וקבוצות — מהטלפון, מכל מקום.')}</li>
+              <li>{t('2. מתקינים את התוכנה על המחשב ומקלידים בה את אותו מייל.')}</li>
+              <li>{t('3. המחשב מפרסם לפי התזמון. הסיסמה של פייסבוק נשארת אצלכם.')}</li>
             </ol>
           </div>
         )}

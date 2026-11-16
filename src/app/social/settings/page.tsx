@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Stamp } from '@/components/social/DateTime';
 import { ScreenProbe } from '@/components/social/ScreenProbe';
 import { SocialShell } from '@/components/social/SocialShell';
+import { LangSwitch } from '@/components/social/LangSwitch';
 import { Button, Card, Field, Loading, Notice, SegmentedControl, inputClass, useToast } from '@/components/social/ui';
 import { clearMetaHold, getBrowserSettings, getControl, getLimits, loadAdminPresence, saveSetting } from '@/lib/social/client';
 import { DEFAULT_BROWSER, DEFAULT_LIMITS, type AdminPresence, type BrowserSettings, type ControlSettings, type LimitsSettings } from '@/lib/social/types';
@@ -328,6 +329,18 @@ export default function SettingsPage() {
               ]}
             />
           )}
+
+          {/*
+            ─── שפה ───
+            "תוסיף אופציה גם לרוסית באפליקציה גם בחיבור וגם בתוכנה עצמה."
+
+            Above the tabs, so it is reachable whichever tab is open and
+            whatever the customer can read. The sign-in screen carries the
+            same control; this is the one for somebody already inside.
+          */}
+          <Card title="שפה" subtitle="בוחרים פעם אחת, והבחירה נשמרת במכשיר הזה">
+            <LangSwitch />
+          </Card>
 
           {tab === 'limits' && (
             <>

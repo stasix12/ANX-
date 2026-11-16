@@ -38,7 +38,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 import ts from 'typescript';
 
-import { translatedKeys } from '../../src/lib/social/i18n';
+import { translatedKeys, translatedPatterns, translatedPatternValue, translatedValue } from '../../src/lib/social/i18n';
 
 const NAME = 'russian rendered';
 let checks = 0;
@@ -591,6 +591,75 @@ async function main(): Promise<void> {
    * this check did, and passed with the mark deliberately removed.
    */
   const nameLeaked: string[] = [];
+  /*
+   * ─── AND EVERY COUNT ON SCREEN AGREES WITH ITS NOUN ─────────────────────
+   *
+   * The dictionary's braces are checked where they are written; this checks
+   * them where they LAND, because a composed line can reach the screen with
+   * no brace in it at all. "טרם פורסם · 84 דולגו" is two facts joined by the
+   * screen, the pattern that answers it has a slot for each, and each slot is
+   * translated on its own — so the count never meets its noun and the tile
+   * read "Ещё не вышло · 84 Пропущены".
+   *
+   * HOW IT KNOWS: every three-form brace in the dictionary says which form
+   * belongs to which count. A word that appears in one of them, standing on
+   * screen right after a number, must be the form that number asks for — in
+   * ANY triple it belongs to, since "группы" is the 2–4 form of one and the
+   * 1 form of another. A word no brace knows is not judged.
+   */
+  const FORM_FOR = new Map<string, Set<number>>();
+  for (const k of translatedKeys()) addForms(translatedValue(k) ?? '');
+  for (const p of translatedPatterns()) addForms(translatedPatternValue(p) ?? '');
+  function addForms(ru: string): void {
+    for (const m of ru.matchAll(/\{([^{}]*)\}/g)) {
+      const f = m[1].split('|');
+      if (f.length !== 3) continue;
+      f.forEach((form, i) => {
+        const word = form.trim().split(/\s+/).pop() ?? '';
+        if (!word) return;
+        if (!FORM_FOR.has(word)) FORM_FOR.set(word, new Set());
+        FORM_FOR.get(word)!.add(i);
+      });
+    }
+  }
+  const bucket = (n: number): number => {
+    const hundred = n % 100;
+    if (hundred >= 11 && hundred <= 14) return 2;
+    const ten = n % 10;
+    if (ten === 1) return 0;
+    if (ten >= 2 && ten <= 4) return 1;
+    return 2;
+  };
+  /*
+   * TWO THINGS THIS DOES NOT JUDGE, both measured before they were written in:
+   *
+   * · A WORD ON ITS OWN LINE. A stat tile is a number with its label under it
+   *   — "2" over "дней" — and innerText joins them with a newline, which read
+   *   as "2 дней". A label under a number is not a counted phrase, and Russian
+   *   dashboards write the genitive plural there, so only same-line adjacency
+   *   is judged.
+   * · AFTER A PREPOSITION THAT TAKES THE GENITIVE. "в очередь для 292 целей"
+   *   is right exactly as it stands: after "для" the whole phrase is genitive
+   *   and the noun stops following the count. russian-coverage checks those
+   *   braces by their own rule.
+   */
+  const GENITIVE_BEFORE = /(?:из|для|от|до|без|у|сверх|кроме|около|после|вместо)\s+$/i;
+  /* Russian's impersonal neuter — "84 пропущено" — is invariant on purpose and
+     is how this dictionary states a count of things done to. It is also the
+     third form of a brace elsewhere, which is why it has to be named here. */
+  const INVARIANT = new Set(['пропущено', 'опубликовано', 'обработано', 'написано', 'отнесено', 'найдено', 'записано', 'добавлено']);
+  const disagreed: string[] = [];
+  const countsAgree = (text: string, screen: string): void => {
+    for (const m of text.matchAll(/(?:^|[^\d.,])(\d{1,6})[ \u00a0]+([А-Яа-яЁё]+)/g)) {
+      const n = Number(m[1]);
+      const word = m[2];
+      if (INVARIANT.has(word)) continue;
+      const ok = FORM_FOR.get(word);
+      if (!ok || ok.has(bucket(n))) continue;
+      if (GENITIVE_BEFORE.test(text.slice(Math.max(0, (m.index ?? 0) - 24), (m.index ?? 0) + m[0].length - m[1].length - word.length))) continue;
+      disagreed.push(`${n} ${word}  ←  ${screen}`);
+    }
+  };
 
   try {
     /* One tall window: this suite is about words, not boxes — russian-layout
@@ -622,6 +691,7 @@ async function main(): Promise<void> {
       await page.waitForTimeout(250);
       examine((await page.evaluate(PROBE)) as string[], m);
       if (await page.evaluate(`document.documentElement.outerHTML.toLowerCase().includes('наш район')`)) nameLeaked.push(m);
+      countsAgree((await page.evaluate('document.body.innerText')) as string, m);
       screens += 1;
     }
     for (const r of SNAPSHOTS) {
@@ -631,6 +701,7 @@ async function main(): Promise<void> {
       await page.waitForTimeout(150);
       examine((await page.evaluate(PROBE)) as string[], r);
       if (await page.evaluate(`document.documentElement.outerHTML.toLowerCase().includes('наш район')`)) nameLeaked.push(r);
+      countsAgree((await page.evaluate('document.body.innerText')) as string, r);
       screens += 1;
       if (r === 'render-group-card') {
         nameKept = (await page.evaluate(`(() => {
@@ -662,6 +733,7 @@ async function main(): Promise<void> {
    */
   eq(nameKept, { hebrew: true, russian: false }, 'a group whose name is also a dictionary sentence keeps its name');
   eq(nameLeaked.sort(), [], 'and no screen turns that name into Russian anywhere in its document, attributes included');
+  eq([...new Set(disagreed)].sort(), [], 'and every count on screen is followed by the form that number asks for');
 
   is(screens === FIXTURES.length + SNAPSHOTS.length, `every screen was read — ${screens}`);
   eq(crashed, [], 'no screen throws with the translator over it');

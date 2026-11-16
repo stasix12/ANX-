@@ -2127,7 +2127,7 @@ const RU_PAT: Record<string, string> = {
   '§ דפים': '§ {страница|страницы|страниц}',
   '§ יעדים נבחרו': 'Выбрано § {цель|цели|целей}',
   '§ יעדים נבחרים לא מוצגים': 'Не показано § {выбранная цель|выбранные цели|выбранных целей}',
-  '§ לתור עבור § יעדים.': '§ в очередь для § целей.',
+  '§ לתור עבור § יעדים.': '§ в очередь для § {цели|целей|целей}.',
   '§ לתור עבור יעד אחד.': '§ в очередь для одной цели.',
   '§ לתור עבור שני יעדים.': '§ в очередь для двух целей.',
   '§ מועדים בשבועיים הקרובים': '§ {срок|срока|сроков} в ближайшие две недели',
@@ -2190,7 +2190,7 @@ const RU_PAT: Record<string, string> = {
    * is both correct and shorter than the Hebrew it replaces.
    */
   'בעוד § שעות ו-§ דקות': 'через § ч § мин',
-  'פרסום אחד נכנס לתור עבור § יעדים.': 'Одна публикация добавлена в очередь для § целей.',
+  'פרסום אחד נכנס לתור עבור § יעדים.': 'Одна публикация добавлена в очередь для § {цели|целей|целей}.',
   'פרסום אחד תוזמן מחדש, מרווח של § ביניהם.': 'Одна публикация запланирована заново, с интервалом § между ними.',
   'שני פרסומים תוזמנו מחדש, מרווח של § ביניהם.': 'Две публикации запланированы заново — интервал § между ними.',
   'שעה ו-§ דקות': '1 ч § мин',
@@ -2530,6 +2530,8 @@ const RU_PAT: Record<string, string> = {
   'חזרה יומית עבור §': 'Ежедневный повтор для §',
   'חזרה יומית פעילה — הסבב הבא ייפתח §,': 'Ежедневный повтор активен — следующий цикл откроется §,',
   'טקסט הגרסה §': 'Текст версии §',
+  'טרם פורסם · § דולג': 'Ещё не вышло · § пропущено',
+  'טרם פורסם · § דולגו': 'Ещё не вышло · § пропущено',
   'טרם פורסם · § §': 'Ещё не вышло · § §',
   'ימי פרסום ל§': 'Дни публикации для §',
   'ימי פרסום: §. פתיחת עריכת התזמון של §': 'Дни публикации: §. Открытие редактирования расписания §',
@@ -2898,7 +2900,19 @@ function matchPattern(hebrew: string, deep: boolean, depth = 1): string | null {
     const values = m.slice(1).map((v, i) => {
       if (!deep) return v;
       const before = parts[i] ?? '';
-      const atStart = before.trim() === '' || /[.!?:]\s*$/.test(before);
+      /*
+       * WHAT STANDS IN FRONT OF THIS VALUE is not always the pattern's own
+       * words. Where two slots sit side by side — "טרם פורסם · § §", 84 and
+       * then דולגו — the stretch between them is one space, which read as
+       * "nothing before it, so this starts a sentence" and capitalised a word
+       * in the middle of a line: the library tile said "Ещё не вышло · 84
+       * Пропущены". What is really in front of it is the PREVIOUS VALUE, so
+       * that is what the question is asked about; a previous value that ends
+       * in a full stop still starts a sentence here, which is the case this
+       * rule exists for.
+       */
+      const front = i > 0 && before.trim() === '' ? `${m[i] ?? ''}${before}` : before;
+      const atStart = front.trim() === '' || /[.!?:]\s*$/.test(front);
       return translateValue(v, atStart, depth);
     });
     return fill(out, values);

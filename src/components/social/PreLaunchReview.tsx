@@ -81,8 +81,13 @@ export function PreLaunchReview({
               // eslint-disable-next-line @next/next/no-img-element
               <img src={cover.url} alt="" className="h-16 w-16 shrink-0 rounded-lg object-cover" />
             )}
+            {/* The words that are about to be published, shown so they can be
+                checked. data-no-translate keeps them exactly as written — a
+                preview in a different language from the post is worse than no
+                preview. The empty-state note beside it is ours, and is not
+                protected. */}
             <p dir="auto" className="max-h-40 min-w-0 overflow-y-auto whitespace-pre-wrap text-sm leading-relaxed text-mist-100">
-              {text || '(ריק — ייצא רק מדיה)'}
+              {text ? <span data-no-translate>{text}</span> : '(ריק — ייצא רק מדיה)'}
             </p>
           </div>
           {media.length > 0 && (

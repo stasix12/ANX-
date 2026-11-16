@@ -457,7 +457,15 @@ export function PublicationItem({
           {bodyText !== null && bodyText !== '' && (
             <div>
               <p className="mb-1 text-xs font-bold text-mist-500">{t('הטקסט שיוצא / יצא')}</p>
-              <p dir="auto" className="max-h-56 overflow-y-auto whitespace-pre-wrap rounded-xl border border-ink-700 bg-ink-900 p-3 text-sm leading-relaxed text-mist-100">
+              {/* "הטקסט שיוצא / יצא" — the exact words that went to Facebook
+                  or are about to. Translating them would make this panel lie
+                  about what was published, which is the one thing it exists
+                  to report. */}
+              <p
+                dir="auto"
+                data-no-translate
+                className="max-h-56 overflow-y-auto whitespace-pre-wrap rounded-xl border border-ink-700 bg-ink-900 p-3 text-sm leading-relaxed text-mist-100"
+              >
                 {bodyText}
               </p>
             </div>

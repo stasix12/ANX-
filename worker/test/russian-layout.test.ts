@@ -83,6 +83,26 @@ const SNAPSHOTS = [
 /* The widths the rest of this repo measures at — a small phone through a desk. */
 const WIDTHS = [320, 360, 390, 430, 768, 1280];
 
+/*
+ * ─── THE SAME FAULT AT TWO SEVERITIES IS STILL THE SAME FAULT ─────────────
+ *
+ * "clipped", "crushed" and "spilled" are one problem — text that does not fit
+ * its box — reported at different severities so a fix can be aimed properly.
+ * Comparing kind-and-place against Hebrew therefore reported a Russian
+ * regression where there was none: on the hero card with the longest status,
+ * Hebrew gives the caption 0px (crushed) and Russian gives it 9px (clipped).
+ * Russian is BETTER there, and the suite called it a break because the label
+ * changed.
+ *
+ * So for that family the baseline is the PLACE alone: a box that already
+ * fails to hold its text in Hebrew is not Russian's doing, however the
+ * severity lands. "escaped" and "tiny-tap" are different faults and keep
+ * their own keys — a control that shrank under a thumb is not the same thing
+ * as a caption that is a few pixels too long.
+ */
+const FITTING = new Set(['clipped', 'crushed', 'spilled']);
+const baselineKey = (n: { kind: string; p: string }) => (FITTING.has(n.kind) ? `fit|${n.p}` : `${n.kind}|${n.p}`);
+
 type Finding = {
   screen: string;
   width: number;
@@ -264,7 +284,11 @@ async function main(): Promise<void> {
       }
       /* A control that shrank below a comfortable tap. */
       const tappable = el.matches('button, a[href], [role="button"], input:not([type="hidden"]), select');
-      if (tappable && r.height > 0 && r.height < 40) {
+      /* 39.5, not 40: a control laid out at 39.98px is a sub-pixel of
+         rounding, not a tap target that shrank, and reporting it sends a fix
+         at nothing. Anything genuinely short of a comfortable tap is still
+         caught. */
+      if (tappable && r.height > 0 && r.height < 39.5) {
         out.push({ p: path(el), kind: 'tiny-tap', tag: el.tagName.toLowerCase(), text: text(el),
                    detail: Math.round(r.height) + 'px tall' });
       }
@@ -322,9 +346,9 @@ async function main(): Promise<void> {
         }
 
         /* Element by element, by position in the tree. */
-        const before = new Set(he.nodes.map((n) => `${n.kind}|${n.p}`));
+        const before = new Set(he.nodes.map(baselineKey));
         for (const n of ru.nodes) {
-          if (before.has(`${n.kind}|${n.p}`)) continue;
+          if (before.has(baselineKey(n))) continue;
           newFindings.push({
             screen: `${screen.what} (${screen.m})`,
             width,
@@ -366,9 +390,9 @@ async function main(): Promise<void> {
           shared.push(`${snap.what} (${snap.r}) at ${width}px — ${ru.page}px in both languages`);
         }
 
-        const before = new Set(he.nodes.map((n) => `${n.kind}|${n.p}`));
+        const before = new Set(he.nodes.map(baselineKey));
         for (const n of ru.nodes) {
-          if (before.has(`${n.kind}|${n.p}`)) continue;
+          if (before.has(baselineKey(n))) continue;
           newFindings.push({
             screen: `${snap.what} (${snap.r})`,
             width,

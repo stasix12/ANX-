@@ -47,14 +47,28 @@ export function PostPreview({
         </div>
       </div>
 
+      {/*
+        ─── THE POST ITSELF IS NEVER TRANSLATED ───────────────────────────
+        *
+        * This block answers one question: what will Facebook show? The
+        * translator that puts the app into Russian walks the whole page and
+        * rewrites any sentence it recognises — including, until now, the
+        * post's own words. A customer writing in Hebrew and reading the app
+        * in Russian saw a preview in Russian and published Hebrew.
+        *
+        * data-no-translate goes on the TEXT, not on the paragraph, so the
+        * chrome around it still speaks the reader's language: "עוד" is
+        * Facebook's own control and the empty-state line is ours.
+      */}
       <p className="whitespace-pre-wrap px-4 py-3 text-[15px] leading-relaxed">
         {text.trim() ? (
           text.length > 400 ? (
             <>
-              {text.slice(0, 400)}… <span className="font-semibold text-slate-500">{t('עוד')}</span>
+              <span data-no-translate>{text.slice(0, 400)}</span>…{' '}
+              <span className="font-semibold text-slate-500">{t('עוד')}</span>
             </>
           ) : (
-            text
+            <span data-no-translate>{text}</span>
           )
         ) : (
           <span className="text-slate-400">{t('הטקסט של הפוסט יופיע כאן')}</span>

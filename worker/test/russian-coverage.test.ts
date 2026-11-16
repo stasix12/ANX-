@@ -53,7 +53,30 @@ const HEBREW = /[֐-׿]/;
  * Each of these is skipped for a stated reason, and the list is short on
  * purpose: a long one is how "translated" stops meaning anything.
  */
+/*
+ * ─── WORDS THAT GO TO FACEBOOK, NOT TO THE SCREEN ─────────────────────────
+ *
+ * src/lib/social/compose.ts writes post text. These five strings are the
+ * service names and benefit lines it puts INSIDE a Hebrew post — they are
+ * published, not displayed as interface, and a Russian translation of one
+ * would be a lie: the preview would read Russian while Hebrew went out to
+ * the group. The post text is marked data-no-translate wherever it is shown
+ * (PostPreview, PreLaunchReview, PublicationItem), and these must stay out
+ * of the dictionary as well, which the assertion below enforces.
+ *
+ * The tone titles in the same file ("מכירתי", "אישי") are NOT here: those
+ * label the variant on screen, so they are interface and must be translated.
+ */
+const POST_CONTENT = [
+  'ניקוי ספות וריפודים',
+  'ניקוי מזגנים',
+  'הסרת כתמים, ריחות וקרדית האבק — הספה חוזרת להיות חדשה',
+  'אוויר נקי, פחות חשמל ובלי ריח של עובש',
+  'תוצאה מקצועית שרואים מיד',
+];
+
 const SKIP = new Set([
+  ...POST_CONTENT,
   /* The product's name. "אין לשנות את הלוגו או שם האפליקציה" — and a name is
      not a word to translate anyway. */
   'הפתרון המבריק',
@@ -175,6 +198,11 @@ is(patterns.length > 300, `and the sentences built around a value — ${patterns
 
 const haveExact = new Set(translatedKeys());
 const havePattern = new Set(translatedPatterns());
+
+/* The inverse: none of them may have a translation, or the protection above
+   is undone by the dictionary. */
+const translatedContent = POST_CONTENT.filter((x) => haveExact.has(x));
+eq(translatedContent, [], 'no words that get published to Facebook have a Russian translation');
 
 const missingPlain = plain
   .filter((f) => !haveExact.has(f.text) && !SKIP.has(f.text) && !isConnector(f.text))

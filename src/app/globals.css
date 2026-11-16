@@ -2980,6 +2980,24 @@ body:has(.social-theme) .site-backdrop {
   padding: 5px 9px;
   min-height: 44px;
 }
+/*
+ * ─── SIX PIXELS, IN RUSSIAN ONLY ──────────────────────────────────────────
+ *
+ * The row's trailing chip does not shrink, so its width comes out of the
+ * group name beside it. Russian's shortest honest wording for the finished
+ * state, "· Ушло", is 65px against the Hebrew "· בוצע" at 59px — Cyrillic is
+ * simply wider per letter — and that 6px was enough to clip the customer's
+ * own group name at 360px (101px of text in a 95px box).
+ *
+ * No shorter Russian word exists for it, so the six pixels come out of the
+ * row's five gaps instead. Scoped to [dir='ltr'], which is a selector that
+ * CANNOT match while the app is in Hebrew: the Hebrew row keeps its 8px and
+ * every pixel measurement in the Hebrew suites stands.
+ */
+[dir='ltr'] .anxf-row {
+  gap: 6px;
+}
+
 .anxf-row-go {
   width: 17px;
   height: 17px;

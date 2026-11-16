@@ -248,7 +248,11 @@ export function ActivityDetailSheet({
                     group was deleted says nothing at all.
                   */}
                   <p dir="auto" className="truncate text-[15px] font-extrabold leading-5 text-mist-100">
-                    {row.post?.title || row.target?.name || 'הקבוצה נמחקה מהרשימה'}
+                    {row.post?.title || row.target?.name ? (
+                      <span data-no-translate>{row.post?.title || row.target?.name}</span>
+                    ) : (
+                      t('הקבוצה נמחקה מהרשימה')
+                    )}
                   </p>
                   {/*
                     THE OUTCOME SITS BESIDE THE TWO LINES BELOW THE TITLE, not
@@ -355,7 +359,7 @@ export function ActivityDetailSheet({
                     to a deleted row is a dead end with a pointer.
                   */}
                   {row.target ? (
-                    <Link href={`/social/groups/${row.target.id}`} onClick={onClose} className="truncate hover:text-brand-500">
+                    <Link href={`/social/groups/${row.target.id}`} onClick={onClose} data-no-translate className="truncate hover:text-brand-500">
                       {row.target.name}
                     </Link>
                   ) : (

@@ -98,7 +98,7 @@ export function StartFromLibrary({ onPick, hidden }: { onPick: (post: Post) => v
                 {/* dir="auto": a post named in Russian or English inside an RTL
                     card clips at the wrong end without it. */}
                 <span dir="auto" className="mt-1 block truncate text-[11px] font-bold leading-4 text-mist-100">
-                  {p.title || 'ללא שם'}
+                  {p.title ? <span data-no-translate>{p.title}</span> : t('ללא שם')}
                 </span>
               </button>
             </li>

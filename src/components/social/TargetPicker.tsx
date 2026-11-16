@@ -510,7 +510,7 @@ export function TargetPicker({
                         <StarIcon className="me-1 inline h-3.5 w-3.5 align-[-1px] text-warning-400" fill="currentColor" aria-hidden />
                       </>
                     )}
-                    {t.name}
+                    <span data-no-translate>{t.name}</span>
                   </p>
                   <div className="mt-0.5 flex flex-wrap items-center gap-1">
                     {mixedChannels && <MethodBadge channel={t.channel} />}

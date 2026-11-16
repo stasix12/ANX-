@@ -303,7 +303,7 @@ export function QuickCommentsCard({
                     </span>
                   )}
                 </span>
-                <span dir="auto" className="mt-1.5 block truncate text-[13px] font-bold leading-tight text-mist-100">
+                <span dir="auto" data-no-translate className="mt-1.5 block truncate text-[13px] font-bold leading-tight text-mist-100">
                   {campaign.name}
                 </span>
                 <span className="mt-1 block truncate text-[11px] leading-4 text-mist-500">
@@ -359,7 +359,7 @@ export function QuickCommentsCard({
             הוסף תגובה מהירה
           </button>
           <p dir="auto" className="mt-1.5 truncate text-center text-[11px] text-mist-500">
-            לפרסום האחרון: {newest.name}
+            לפרסום האחרון: <span data-no-translate>{newest.name}</span>
           </p>
         </>
       )}

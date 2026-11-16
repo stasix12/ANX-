@@ -42,14 +42,30 @@ function when(iso) {
   if (d >= today) return time(iso);
   return `${DAY.format(d)} ${time(iso)}`;
 }
+/*
+ * ─── "לפני 1 ימים" ─────────────────────────────────────────────────────────
+ *
+ * Anything between 24 and 36 hours old printed that line, which is wrong in
+ * Hebrew before it is anything to do with Russian: one day is "לפני יום" and
+ * two are "לפני יומיים", neither of them a number followed by a plural. The
+ * minute and the hour had the same hole at one.
+ *
+ * It matters more in Russian than in Hebrew, because the dictionary matches a
+ * SHAPE: "לפני § ימים" could only ever be answered with one form of the noun,
+ * so the window said "1 дней назад" — and now the shapes that reach it are
+ * the ones a person really reads.
+ */
 function ago(iso) {
   if (!iso) return '—';
   const m = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
   if (m < 1) return 'עכשיו';
-  if (m < 60) return `לפני ${m} דק׳`;
+  if (m < 60) return m === 1 ? 'לפני דקה' : `לפני ${m} דק׳`;
   const h = Math.round(m / 60);
-  if (h < 24) return `לפני ${h} שע׳`;
-  return `לפני ${Math.round(h / 24)} ימים`;
+  if (h < 24) return h === 1 ? 'לפני שעה' : `לפני ${h} שע׳`;
+  const d = Math.round(h / 24);
+  if (d === 1) return 'לפני יום';
+  if (d === 2) return 'לפני יומיים';
+  return `לפני ${d} ימים`;
 }
 
 /* The words a person uses, not the words the database uses. */

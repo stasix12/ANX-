@@ -223,7 +223,7 @@ export default function ManualKitPage() {
                   </div>
                   {remaining.length > 0 && (
                     <div className="mt-2.5 flex items-center justify-between gap-2 text-xs">
-                      <span className="text-mist-500">הבאה בתור: {remaining[0].target?.name ?? '—'}</span>
+                      <span className="text-mist-500">הבאה בתור: <span data-no-translate>{remaining[0].target?.name ?? '—'}</span></span>
                       <button type="button" onClick={goNext} className="min-h-11 px-1 font-bold text-brand-400">
                         {t('עבור לבא בלי לשנות →')}
                       </button>

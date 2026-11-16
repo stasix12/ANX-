@@ -636,7 +636,7 @@ export function CampaignCard({
               href={link}
               className="relative mt-0.5 min-w-0 grow rounded-lg after:absolute after:inset-x-0 after:-inset-y-3 after:content-[''] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-300"
             >
-              <span dir="auto" className="block truncate text-[18px] font-extrabold leading-6 text-mist-100">
+              <span dir="auto" data-no-translate className="block truncate text-[18px] font-extrabold leading-6 text-mist-100">
                 {campaign.name}
               </span>
             </Link>

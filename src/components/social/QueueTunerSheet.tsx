@@ -1013,7 +1013,7 @@ export function QueueTunerSheet({
                   <li key={t.target.id} className="flex items-center gap-2.5 py-2">
                     <TargetAvatar name={t.target.name} imageUrl={t.target.image_url} channel={t.target.channel} size={36} />
                     <div className="min-w-0 grow">
-                      <p dir="auto" className="truncate text-sm font-bold text-mist-100">
+                      <p dir="auto" data-no-translate className="truncate text-sm font-bold text-mist-100">
                         {t.target.name}
                       </p>
                       <p className="mt-0.5 text-xs text-mist-500">
@@ -1095,7 +1095,7 @@ export function QueueTunerSheet({
                                 onChange={(e) => setPicked((prev) => (e.target.checked ? [...prev, t.id] : prev.filter((id) => id !== t.id)))}
                               />
                               <TargetAvatar name={t.name} imageUrl={t.image_url} channel={t.channel} size={32} />
-                              <span dir="auto" className="min-w-0 grow truncate text-sm font-bold text-mist-100">
+                              <span dir="auto" data-no-translate className="min-w-0 grow truncate text-sm font-bold text-mist-100">
                                 {t.name}
                               </span>
                             </label>

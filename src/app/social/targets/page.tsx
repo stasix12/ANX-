@@ -168,7 +168,7 @@ function TargetsScreen() {
             <div className="space-y-3">
               <div className="grid gap-2 text-sm sm:grid-cols-2 [&>*]:min-w-0">
                 <p>
-                  <span className="text-mist-500">מחובר בתור:</span> <strong className="text-mist-100">{account.name}</strong>
+                  <span className="text-mist-500">מחובר בתור:</span> <strong className="text-mist-100" data-no-translate>{account.name}</strong>
                 </p>
                 <p>
                   <span className="text-mist-500">תוקף הטוקן:</span> <strong className="text-mist-100">{account.token_expires_at ? <Stamp iso={account.token_expires_at} /> : 'ללא תפוגה'}</strong>
@@ -246,7 +246,7 @@ function TargetsScreen() {
                           letters — rather than its tail. The anchor carried
                           the attribute and the span did not, which is exactly
                           what layout.test.ts scans for. */}
-                      <span dir="auto" className="truncate">{t.name}</span>
+                      <span dir="auto" data-no-translate className="truncate">{t.name}</span>
                     </a>
                     <div className="mt-1 flex flex-wrap items-center gap-1.5">
                       <MethodBadge method="api" />

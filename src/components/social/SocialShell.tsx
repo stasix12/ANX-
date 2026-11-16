@@ -1082,7 +1082,7 @@ export function SocialShell({
                           </span>
                         )}
                         <span className="flex min-w-0 flex-1 flex-col">
-                          <span dir="auto" className="truncate">{p.name}</span>
+                          <span dir="auto" data-no-translate className="truncate">{p.name}</span>
                           {p.kind === 'page' && <span className="text-[10px] font-bold text-mist-500">דף עסקי</span>}
                         </span>
                         {active && <span className="shrink-0 text-[10px] font-extrabold">מפרסם</span>}

@@ -183,7 +183,7 @@ export default function GroupProfilePage() {
                     <StarIcon className="me-1 inline h-4 w-4 align-[-2px] text-warning-400" fill="currentColor" aria-hidden />
                   </>
                 )}
-                {group.name}
+                <span data-no-translate>{group.name}</span>
               </h2>
               <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
                 <Badge tone={group.enabled ? 'good' : 'neutral'}>{group.enabled ? 'פעילה' : 'מושהית'}</Badge>
@@ -284,7 +284,7 @@ export default function GroupProfilePage() {
                 return (
                   <li key={cid}>
                     <Link href={`/social/campaigns/${cid}`} className="inline-flex min-h-11 items-center rounded-full bg-ink-800 px-3 text-sm font-bold text-brand-400">
-                      {c?.name ?? 'סבב'}
+                      {c?.name ? <span data-no-translate>{c.name}</span> : 'סבב'}
                     </Link>
                   </li>
                 );

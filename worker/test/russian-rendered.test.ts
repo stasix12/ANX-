@@ -227,22 +227,64 @@ const DATA = fixtureData();
 /*
  * ─── THE OPT-OUT IS PINNED, OR IT WOULD BECOME A WAY TO PASS ──────────────
  *
- * This suite skips everything inside [data-no-translate], which is correct —
- * it is the owner's own post text — and is also exactly how somebody would
- * silence a real miss: put the attribute on the caption and the suite stops
- * reading it. So the call sites are listed by file and line. A fourth one
- * fails this suite, and whoever added it has to say here why that element is
- * the customer's data rather than the app's words.
+ * This suite skips everything inside [data-no-translate], and the attribute
+ * marks two different things, both of them the customer's and neither of
+ * them ours to reword:
+ *
+ *   · THE POST ITSELF, in the four places that show what is about to go out
+ *     to Facebook. src/lib/social/compose.ts builds its suggested text from
+ *     a template that is a dictionary pattern, so a post written with that
+ *     help came back part Russian on screen while Facebook would receive the
+ *     Hebrew.
+ *   · THE NAMES. A group, a page, a campaign, a saved search, a profile, a
+ *     computer, an uploaded file. The dictionary holds 'באר שבע ביחד' —
+ *     because it is the group-name field's own placeholder — so a customer
+ *     whose group really has that name watched it become "Наш район". A name
+ *     identifies something OUTSIDE this app: translated, it stops matching
+ *     the thing it names.
+ *
+ * WHAT IS NOT PROTECTED, deliberately: a city ("באר שבע" → "Беэр-Шева" is a
+ * place and reads better in Russian), the fallbacks the app prints when the
+ * name is missing ("יעד", "קבוצה", "ללא שם"), and every caption.
+ *
+ * Skipping is also exactly how somebody would silence a real miss: put the
+ * attribute on a caption and this suite stops reading it. So the files are
+ * listed with HOW MANY elements in each carry it — counted, not pinned by
+ * line, so moving code does not fail the suite while a new opt-out does.
  */
-/* file → how many elements in it carry the attribute. Counted rather than
-   pinned by line, so moving a component's code does not fail this suite while
-   a NEW opt-out anywhere still does. */
 const NO_TRANSLATE_SITES = [
+  'src/app/social/account/page.tsx:4',
+  'src/app/social/campaigns/[id]/page.tsx:2',
+  'src/app/social/discover/page.tsx:1',
+  'src/app/social/groups/[id]/page.tsx:2',
+  'src/app/social/groups/page.tsx:1',
+  'src/app/social/library/page.tsx:2',
+  'src/app/social/manual/[id]/page.tsx:1',
+  'src/app/social/page.tsx:2',
+  'src/app/social/settings/page.tsx:1',
+  'src/app/social/targets/page.tsx:2',
+  'src/components/social/ActivityDetailSheet.tsx:2',
+  'src/components/social/BrowserStatusCard.tsx:2',
+  'src/components/social/CampaignCard.tsx:1',
+  'src/components/social/CampaignTile.tsx:1',
+  'src/components/social/CommentQueueCard.tsx:2',
+  'src/components/social/CommentTimeline.tsx:3',
   'src/components/social/ContentCard.tsx:1',
+  'src/components/social/Discovery.tsx:4',
+  'src/components/social/GroupCard.tsx:1',
+  'src/components/social/LiveCampaignHero.tsx:1',
+  'src/components/social/LiveFlow.tsx:2',
+  'src/components/social/MediaUploader.tsx:1',
   'src/components/social/PostPreview.tsx:2',
-  'src/components/social/PreLaunchReview.tsx:1',
-  'src/components/social/PublicationItem.tsx:1',
-  'src/components/social/QuickPublishSheet.tsx:2',
+  'src/components/social/PreLaunchReview.tsx:2',
+  'src/components/social/PublicationItem.tsx:4',
+  'src/components/social/QueueTunerSheet.tsx:2',
+  'src/components/social/QuickCommentsCard.tsx:2',
+  'src/components/social/QuickPublishSheet.tsx:3',
+  'src/components/social/SocialShell.tsx:1',
+  'src/components/social/StartFromLibrary.tsx:1',
+  'src/components/social/TargetPicker.tsx:1',
+  'src/components/social/Timeline.tsx:1',
 ];
 
 function noTranslateSites(): string[] {
@@ -371,7 +413,7 @@ type Seen = { text: string; screens: Set<string> };
 
 async function main(): Promise<void> {
   const { build } = await import('esbuild');
-  const { mkdtempSync, statSync, writeFileSync, copyFileSync } = await import('node:fs');
+  const { mkdtempSync, statSync, writeFileSync, copyFileSync, mkdirSync } = await import('node:fs');
   const { execFileSync } = await import('node:child_process');
   const { tmpdir } = await import('node:os');
   const { chromium } = await import('playwright-core');
@@ -402,6 +444,48 @@ async function main(): Promise<void> {
 
   const dir = mkdtempSync(path.join(tmpdir(), 'rurender-'));
   copyFileSync(best.file, path.join(dir, 'app.css'));
+  /*
+   * ─── THE TYPEFACE, OR THIS MEASURES SOMEBODY ELSE'S FONT ──────────────
+   *
+   * The @font-face rules are in their own small chunk, and this harness used
+   * to copy only the LARGEST css file — so every number here was measured in
+   * the container's fallback font, in both languages. The rules also point at
+   * ../media/*.woff2, which resolves to nothing from a temporary directory.
+   *
+   * So the font chunk is copied with its urls rewritten, the woff2 files go
+   * beside it, and every page waits for document.fonts.ready before anything
+   * is measured. Without that wait font-display:swap gives the first paint to
+   * the fallback and the probe reads the wrong width.
+   */
+  const allCss = readdirSync(CHUNKS)
+    .filter((n) => n.endsWith('.css'))
+    .map((n) => readFileSync(path.join(CHUNKS, n), 'utf8'));
+  const fontCss = allCss
+    .filter((css) => css.includes('@font-face'))
+    .join('\n')
+    .replace(/url\(\.\.\/media\//g, 'url(media/');
+  /*
+   * ─── AND THE PAGE HAS TO ASK FOR IT ───────────────────────────────────
+   *
+   * Loading the @font-face rules is not enough. next/font puts
+   * --font-heebo on a generated class that the real <html> carries, and the
+   * real <body> carries Tailwind's font-sans; a fixture page has neither, so
+   * the family resolved to Tailwind's preflight stack and the measurement was
+   * of Arial. The declarations are read out of the built css rather than
+   * written here, so this follows whatever the app actually ships.
+   */
+  const vars = [...new Set(allCss.join('\n').match(/--font-[a-z-]+:\s*[^;}]+/g) ?? [])];
+  writeFileSync(
+    path.join(dir, 'fonts.css'),
+    `${fontCss}\n:root{${vars.join(';')}}\nbody{font-family:var(--font-sans)}\n`,
+  );
+  mkdirSync(path.join(dir, 'media'), { recursive: true });
+  const MEDIA = path.resolve('.next/static/media');
+  for (const name of readdirSync(MEDIA)) {
+    if (name.endsWith('.woff2')) copyFileSync(path.join(MEDIA, name), path.join(dir, 'media', name));
+  }
+  const FONTS_LINK = '<link rel="stylesheet" href="fonts.css">';
+
   const common = {
     bundle: true as const,
     format: 'iife' as const,
@@ -429,7 +513,7 @@ async function main(): Promise<void> {
   writeFileSync(
     path.join(dir, 'index.html'),
     `<!doctype html><html lang="he" dir="rtl"><meta charset="utf-8">
-<link rel="stylesheet" href="app.css"><body class="social-theme"><div id="root"></div><script src="m.js"></script></body></html>`,
+<link rel="stylesheet" href="app.css">${FONTS_LINK}<body class="social-theme"><div id="root"></div><script src="m.js"></script></body></html>`,
   );
   for (const r of SNAPSHOTS) {
     /* ANX_SPLIT_TEXT: the node boundaries the real app has — see
@@ -442,9 +526,12 @@ async function main(): Promise<void> {
     });
     writeFileSync(
       path.join(dir, `${r}.html`),
-      html.includes('</body>')
-        ? html.replace('</body>', '<script src="lang.js"></script></body>')
-        : `${html}<script src="lang.js"></script>`,
+      (() => {
+        const withFont = html.replace('<link rel="stylesheet" href="app.css">', `<link rel="stylesheet" href="app.css">${FONTS_LINK}`);
+        return withFont.includes('</body>')
+          ? withFont.replace('</body>', '<script src="lang.js"></script></body>')
+          : `${withFont}<script src="lang.js"></script>`;
+      })(),
     );
   }
 
@@ -482,6 +569,7 @@ async function main(): Promise<void> {
   const halfTranslated = new Map<string, Seen>();
   const crashed: string[] = [];
   let screens = 0;
+  let nameKept: { hebrew: boolean; russian: boolean } = { hebrew: false, russian: true };
 
   try {
     /* One tall window: this suite is about words, not boxes — russian-layout
@@ -509,6 +597,7 @@ async function main(): Promise<void> {
     for (const m of FIXTURES) {
       await page.goto(`file://${path.join(dir, 'index.html')}?m=${m}&lang=ru`);
       await page.waitForFunction('window.__langReady === true', null, { timeout: 20000 });
+      await page.evaluate('document.fonts.ready');
       await page.waitForTimeout(250);
       examine((await page.evaluate(PROBE)) as string[], m);
       screens += 1;
@@ -516,14 +605,39 @@ async function main(): Promise<void> {
     for (const r of SNAPSHOTS) {
       await page.goto(`file://${path.join(dir, `${r}.html`)}?lang=ru`);
       await page.waitForFunction('window.__langReady === true', null, { timeout: 20000 });
+      await page.evaluate('document.fonts.ready');
       await page.waitForTimeout(150);
       examine((await page.evaluate(PROBE)) as string[], r);
       screens += 1;
+      if (r === 'render-group-card') {
+        nameKept = (await page.evaluate(`(() => {
+          const want = 'באר שבע ביחד';
+          const kept = [...document.querySelectorAll('[data-no-translate]')].some((e) => (e.textContent || '').trim() === want);
+          return { hebrew: kept, russian: (document.body.textContent || '').includes('Наш район') };
+        })()`)) as { hebrew: boolean; russian: boolean };
+      }
     }
     await page.close();
   } finally {
     await browser.close();
   }
+
+  /*
+   * ─── AND ONE THING READ THE OTHER WAY ROUND ───────────────────────────
+   *
+   * Everything above asks "is any of the app's own Hebrew left". This asks
+   * the opposite, because the opposite failure is worse and silent: a group
+   * the customer really called "באר שבע ביחד" came out as "Наш район" on
+   * every screen that printed it. The dictionary holds that sentence because
+   * it is the group-name field's own PLACEHOLDER, and the DOM translator
+   * cannot tell a placeholder from a name — only the component can, which is
+   * what data-no-translate is for.
+   *
+   * render-group-card prints exactly that case on purpose, so the proof is
+   * here rather than in a comment: the name is still Hebrew, and the Russian
+   * it used to become is nowhere on the page.
+   */
+  eq(nameKept, { hebrew: true, russian: false }, 'a group whose name is also a dictionary sentence keeps its name');
 
   is(screens === FIXTURES.length + SNAPSHOTS.length, `every screen was read — ${screens}`);
   eq(crashed, [], 'no screen throws with the translator over it');

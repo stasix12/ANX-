@@ -710,7 +710,7 @@ export function QuickPublishSheet({
                     {plan.rows.map((r, i) => (
                       <li key={`${r.targetId}-${i}`} className="flex items-center gap-2 text-xs">
                         <span className="w-12 shrink-0 font-extrabold tabular-nums text-brand-400">{formatInstantHe(r.at)}</span>
-                        <span dir="auto" className="min-w-0 truncate text-mist-300">{r.name}</span>
+                        <span dir="auto" data-no-translate className="min-w-0 truncate text-mist-300">{r.name}</span>
                         <span className="ms-auto shrink-0 text-[11px] font-bold tabular-nums text-mist-500">{formatDayMonthHe(r.at)}</span>
                       </li>
                     ))}

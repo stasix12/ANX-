@@ -549,7 +549,7 @@ export default function SettingsPage() {
                             aria-hidden
                             className={`h-2.5 w-2.5 shrink-0 rounded-full ${w.online ? 'bg-success-400' : 'bg-ink-600'}`}
                           />
-                          <span dir="auto" className="min-w-0 grow truncate font-bold text-mist-100">{w.name || w.host || '—'}</span>
+                          <span dir="auto" data-no-translate className="min-w-0 grow truncate font-bold text-mist-100">{w.name || w.host || '—'}</span>
                           <span className={`shrink-0 text-[11px] font-extrabold ${w.online ? 'text-success-400' : 'text-mist-500'}`}>
                             {w.online ? (w.busy ? 'מפרסם עכשיו' : 'מחובר') : 'מנותק'}
                           </span>

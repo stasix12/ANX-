@@ -443,7 +443,7 @@ export default function LibraryPage() {
                       { value: '', label: 'כל הקטגוריות', count: categoryCounts[''] },
                       ...categories.map((c) => ({
                         value: c.id,
-                        label: <span dir="auto">{c.name}</span>,
+                        label: <span dir="auto" data-no-translate>{c.name}</span>,
                         count: categoryCounts[c.id] ?? 0,
                       })),
                       { value: UNCATEGORISED, label: 'ללא קטגוריה', count: categoryCounts[UNCATEGORISED] ?? 0 },
@@ -632,7 +632,7 @@ export default function LibraryPage() {
                 }}
                 className="flex min-h-11 w-full items-center justify-between gap-2 rounded-xl border border-ink-600 px-3 text-start text-sm font-bold text-mist-100"
               >
-                <span dir="auto" className="min-w-0 truncate">{c.name}</span>
+                <span dir="auto" data-no-translate className="min-w-0 truncate">{c.name}</span>
                 <span className="shrink-0 tabular-nums text-mist-500">{categoryCounts[c.id] ?? 0}</span>
               </button>
             ))}

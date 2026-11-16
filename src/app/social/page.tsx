@@ -2305,8 +2305,10 @@ export default function SocialDashboard() {
                 {data.manual.slice(0, 4).map((item) => (
                   <li key={item.id} className="flex items-center justify-between gap-3 py-2.5">
                     <div className="min-w-0">
-                      <p dir="auto" className="truncate font-bold text-mist-100">{item.target?.name}</p>
-                      <p dir="auto" className="truncate text-xs text-mist-500">{item.post?.title || 'פוסט'}</p>
+                      <p dir="auto" data-no-translate className="truncate font-bold text-mist-100">{item.target?.name}</p>
+                      <p dir="auto" className="truncate text-xs text-mist-500">
+                        {item.post?.title ? <span data-no-translate>{item.post.title}</span> : 'פוסט'}
+                      </p>
                     </div>
                     <Link href={`/social/manual/${item.id}`} className="inline-flex min-h-11 shrink-0 items-center rounded-xl bg-warning-400 px-3.5 text-sm font-bold text-ink-950">
                       פתח

@@ -245,7 +245,7 @@ export function BrowserStatusCard({
       <p className="mt-1 text-xs text-mist-500">
         {worker ? (
           <>
-            {worker.name} · {worker.host || '—'} · נראה לאחרונה <Stamp iso={worker.last_seen_at} />
+            <span data-no-translate>{worker.name}</span> · <span data-no-translate>{worker.host || '—'}</span> · נראה לאחרונה <Stamp iso={worker.last_seen_at} />
             {worker.debug_mode && ' · חלון גלוי (מצב בדיקה)'}
           </>
         ) : (

@@ -537,7 +537,7 @@ export function LiveFlow({
               <p className="anxf-now-kicker">פרסום נוכחי</p>
               <p className="anxf-now-name" dir="auto">
                 <PeopleMark />
-                <span>{now.name}</span>
+                <span data-no-translate>{now.name}</span>
               </p>
               <p className="anxf-now-step">{stepLabel}…</p>
             </div>
@@ -615,7 +615,7 @@ export function LiveFlow({
                 <GroupPic src={r.image} />
                 <PeopleMark />
                 <span className="anxf-row-words">
-                  <span className="anxf-row-name" dir="auto">{r.name}</span>
+                  <span className="anxf-row-name" dir="auto" data-no-translate>{r.name}</span>
                   {r.state === 'live' && r.note && <span className="anxf-row-note">{r.note}…</span>}
                   {/* THE REASON, WHEN THERE IS ONE. A failed row that only
                       said "נכשל" sent the owner hunting through the history

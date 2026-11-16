@@ -99,7 +99,10 @@ async function main(): Promise<void> {
     }));
     eq(crashes, [], 'no page error');
     eq(ru.fixed, 'Всё работает само', 'a line app.js wrote turns Russian');
-    eq(ru.live, '7 мин назад', 'and so does one built around a number, with the number kept');
+    /* The age forms are abbreviated now — measured against the activity
+       pill in the web app, and kept the same here so that one product does
+       not speak two ways. worker/test/russian-clock carries the numbers. */
+    eq(ru.live, '7 мин', 'and so does one built around a number, with the number kept');
     eq(ru.gap, '3 задач', 'a count and its word, which app.js writes as one line');
     /*
      * THE REAL WHITESPACE CASE, already in this window: index.html holds the
@@ -112,6 +115,48 @@ async function main(): Promise<void> {
     eq(ru.dir, 'ltr', 'the window turns left to right');
     eq(ru.pressed, 'true', 'and the switch says which language is on');
     eq(ru.switchLabel, 'עברית', 'while the way back is still named in Hebrew');
+
+    /*
+     * ─── THE CLOCK THIS WINDOW BUILDS, DRIVEN BY THE WINDOW ──────────────
+     *
+     * "לפני 1 ימים" was on this screen for anything between 24 and 36 hours
+     * old, and "לפני 1 דק׳" at one minute. Wrong in Hebrew before it is
+     * anything to do with Russian — one day is "לפני יום" — and worse in
+     * Russian, where the dictionary answers a SHAPE: 'לפני § ימים' could
+     * only ever carry one form of the noun, so the window said "1 дней
+     * назад" and "2 дней назад".
+     *
+     * ago() is a plain function declaration in a classic script, so it is a
+     * global on this page and the real one can be driven here rather than
+     * copied. Thirteen ages, each read back off the screen after the
+     * translator has had it.
+     */
+    const AGES: [number, string, string][] = [
+      [20 * 1000, 'עכשיו', 'Сейчас'],
+      [60 * 1000, 'לפני דקה', '1 мин'],
+      [7 * 60 * 1000, 'לפני 7 דק׳', '7 мин'],
+      [59 * 60 * 1000, 'לפני 59 דק׳', '59 мин'],
+      [60 * 60 * 1000, 'לפני שעה', '1 ч'],
+      [5 * 3600 * 1000, 'לפני 5 שע׳', '5 ч'],
+      [23 * 3600 * 1000, 'לפני 23 שע׳', '23 ч'],
+      [25 * 3600 * 1000, 'לפני יום', 'день назад'],
+      [36 * 3600 * 1000, 'לפני יומיים', 'два дня назад'],
+      [3 * 86400 * 1000, 'לפני 3 ימים', '3 дня назад'],
+      [5 * 86400 * 1000, 'לפני 5 ימים', '5 дней назад'],
+      [11 * 86400 * 1000, 'לפני 11 ימים', '11 дней назад'],
+      [21 * 86400 * 1000, 'לפני 21 ימים', '21 день назад'],
+    ];
+    const built = (await page.evaluate(
+      `((offs) => offs.map((o) => ago(new Date(Date.now() - o).toISOString())))(${JSON.stringify(AGES.map((a) => a[0]))})`,
+    )) as string[];
+    eq(built, AGES.map((a) => a[1]), 'ago() spells every age the way Hebrew does — no "לפני 1 ימים" at any of them');
+    const painted: string[] = [];
+    for (const [, hebrew] of AGES) {
+      await page.evaluate(`document.getElementById('live').textContent = ${JSON.stringify(hebrew)}`);
+      await page.waitForTimeout(90);
+      painted.push((await page.evaluate(() => document.getElementById('live')?.textContent)) as string);
+    }
+    eq(painted, AGES.map((a) => a[2]), 'and the window says each of them in Russian, with the form the number asks for');
 
     /*
      * ─── app.js WRITES AGAIN, AND THE SCREEN HAS TO FOLLOW ───────────────
@@ -127,7 +172,7 @@ async function main(): Promise<void> {
     await page.waitForTimeout(120);
     eq(
       await page.evaluate(() => document.getElementById('live')?.textContent),
-      '8 мин назад',
+      '8 мин',
       'when app.js writes a new number, the screen shows the NEW one — not a cached translation of the old',
     );
 

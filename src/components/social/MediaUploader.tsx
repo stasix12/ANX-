@@ -69,7 +69,7 @@ export function MediaUploader({
                  board" before the file name. */
               <div className="grid h-full w-full place-items-center gap-1 px-1 text-center text-[11px] font-bold text-mist-300">
                 <PlayIcon className="h-5 w-5" />
-                <span dir="auto" className="w-full break-words">
+                <span dir="auto" data-no-translate className="w-full break-words">
                   {item.name}
                 </span>
               </div>

@@ -832,7 +832,13 @@ export function PostEditor({ postId }: { postId?: string }) {
                 <div role="group" className="flex rounded-xl bg-ink-800 p-0.5 text-xs font-bold">
                   {(
                     [
-                      ['distribute', 'Distribute variants'],
+                      /* This read "Distribute variants" — English, between
+                         two Hebrew labels, on a Hebrew screen. Wrong before
+                         Russian was ever asked about, and it would have come
+                         out English there too. The wording is the sentence
+                         below it: the approved versions are split between the
+                         targets. */
+                      ['distribute', 'חלוקה בין היעדים'],
                       ['rotate', 'סבב לכל יעד'],
                       ['fixed', 'רק הקצאה ידנית'],
                     ] as const

@@ -165,7 +165,7 @@ export function CampaignTile({
       {/* ── the head: picture, name, number, status, and the ⋯ ── */}
       <div className="anxt-head">
         <span className="anxt-words">
-          <span className="anxt-name" dir="auto">{campaign.name}</span>
+          <span className="anxt-name" dir="auto" data-no-translate>{campaign.name}</span>
           <span className="anxt-no">
             <svg aria-hidden viewBox="0 0 24 24" fill="currentColor" style={{ color: identity.ink }}>
               <path d="M6 3h12l4 6-10 12L2 9z" />

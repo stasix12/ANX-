@@ -1118,7 +1118,31 @@
  * the stamp moves because src/lib/social ships whole, not because anything
  * on the PC behaves differently.
  */
-export const WORKER_VERSION = '4.78.0';
+/*
+ * 4.78.0 → 4.79.0 — החלון שעל המחשב: "לפני 1 ימים" ו-"1 дней назад".
+ *
+ * v4.78.0 published 16.11 at 06:58 (asked GitHub, not assumed), so 4.79.0 is
+ * free. THIS ONE HAS TO REACH THE PC, which is why the version moves rather
+ * than only the stamp:
+ *
+ *   · desktop/renderer/app.js printed "לפני 1 ימים" for anything between 24
+ *     and 36 hours old, and "לפני 1 דק׳" / "לפני 1 שע׳" at one minute and one
+ *     hour. That is wrong in Hebrew before it is anything to do with Russian:
+ *     one day is "לפני יום" and two are "לפני יומיים".
+ *   · desktop/renderer/i18n.js had no plural machinery at all, so the shape
+ *     'לפני § ימים' could only be answered with one form — the window said
+ *     "1 дней назад" and "2 дней назад". It now carries the same
+ *     {one|few|many} notation the website uses, settled against the value in
+ *     front of it, so the two dictionaries read alike.
+ *   · And the ages are abbreviated the same way the website's are, so one
+ *     product does not speak two ways: "7 мин", "3 ч", "5 дней назад".
+ *
+ * The engine that publishes is untouched. "מאד חשוב לא לגעת כלום חוץ מזה."
+ *
+ * HE MUST RE-INSTALL ONCE for this: the Hebrew day line and the Russian
+ * plural both live in the window on his machine.
+ */
+export const WORKER_VERSION = '4.79.0';
 
 /**
  * A FINGERPRINT OF EVERYTHING THE INSTALLER CARRIES.
@@ -1922,4 +1946,4 @@ export const WORKER_VERSION = '4.78.0';
  * his machine, so it waits for the version bump at the end of this work
  * rather than costing him a second re-install now.
  */
-export const WORKER_FINGERPRINT = '8fd773486e86821d';
+export const WORKER_FINGERPRINT = '874bc83f1faef91c';

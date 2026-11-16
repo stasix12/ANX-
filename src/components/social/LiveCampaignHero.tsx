@@ -571,7 +571,7 @@ export function LiveCampaignHero({
                the row it is in has to come down by a third. */
             className="flex min-h-10 min-w-0 items-center truncate py-0.5 text-[14px] font-extrabold leading-[18px] text-white"
           >
-            {campaign.name}
+            <span data-no-translate>{campaign.name}</span>
           </Link>
           {/*
             THE PILL IS GONE AND ITS NUMBER IS NOT. It carried "252 קבוצות",

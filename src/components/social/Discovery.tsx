@@ -210,7 +210,7 @@ export function GroupRow({
             ברוסית". Found by its dir attribute, the test could not tell a
             deleted attribute from a name that never rendered.
           */}
-          <p data-group-name dir="auto" className="line-clamp-2 text-sm font-extrabold leading-tight text-mist-100">
+          <p data-group-name dir="auto" data-no-translate className="line-clamp-2 text-sm font-extrabold leading-tight text-mist-100">
             {row.name}
           </p>
 
@@ -478,7 +478,7 @@ export function WalkThrough({
         <div className="mt-1 flex items-center gap-3">
           <TargetAvatar name={row.name} imageUrl={row.image_url || pictures?.get(row.external_id) || null} channel="facebook_group" size={52} />
           <div className="min-w-0">
-            <p dir="auto" className="text-base font-extrabold leading-tight text-mist-100">
+            <p dir="auto" data-no-translate className="text-base font-extrabold leading-tight text-mist-100">
               {row.name}
             </p>
             <p className="mt-0.5 text-xs text-mist-500">
@@ -661,7 +661,7 @@ export function SearchCard({
                       : 'border-ink-700 bg-ink-900 text-mist-300 hover:border-ink-600 hover:bg-ink-800'
                   }`}
                 >
-                  {s.query}
+                  <span data-no-translate>{s.query}</span>
                 </button>
               );
             })}
@@ -961,7 +961,7 @@ export function MyGroupsCard({
               {missing.slice(0, 8).map((row) => (
                 <li key={row.id} className="flex items-center gap-2 rounded-xl bg-ink-800/60 px-1.5 py-0.5">
                   <TargetAvatar name={row.name} imageUrl={row.image_url || pictures?.get(row.external_id) || null} channel="facebook_group" size={28} />
-                  <span dir="auto" className="min-w-0 flex-1 truncate text-[13px] text-mist-300">
+                  <span dir="auto" data-no-translate className="min-w-0 flex-1 truncate text-[13px] text-mist-300">
                     {row.name}
                   </span>
                   {/* The one control on this card that is not mine to get

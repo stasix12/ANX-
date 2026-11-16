@@ -700,7 +700,7 @@ export default function CampaignControlCenter() {
                           <li key={r.id} className="min-w-0 px-3 py-2">
                             <div className="flex min-w-0 items-center gap-2">
                               <span aria-hidden className={`h-2 w-2 shrink-0 rounded-full ${TONE_FILL[COMMENT_TONE[r.comment_status as CommentStatus] ?? 'neutral']}`} />
-                              <span dir="auto" className="min-w-0 flex-1 truncate text-[13px] text-mist-100">{r.target?.name ?? '—'}</span>
+                              <span dir="auto" data-no-translate className="min-w-0 flex-1 truncate text-[13px] text-mist-100">{r.target?.name ?? '—'}</span>
                               <CommentState status={r.comment_status} permalink={r.permalink} />
                             </div>
                             {/* Why, not just that. A post the admin deleted and
@@ -844,7 +844,13 @@ export default function CampaignControlCenter() {
                     onClick={() => router.push(`/social/posts/${p.id}`)}
                     className="flex w-full items-center justify-between gap-3 py-3 text-start"
                   >
-                    <span dir="auto" className="min-w-0 truncate font-bold text-mist-100">{p.title || p.base_text.slice(0, 50) || 'ללא כותרת'}</span>
+                    <span dir="auto" className="min-w-0 truncate font-bold text-mist-100">
+                      {p.title || p.base_text.slice(0, 50) ? (
+                        <span data-no-translate>{p.title || p.base_text.slice(0, 50)}</span>
+                      ) : (
+                        'ללא כותרת'
+                      )}
+                    </span>
                     <Badge tone={p.status === 'ready' ? 'good' : 'neutral'}>{p.status === 'ready' ? 'מוכן' : 'טיוטה'}</Badge>
                   </button>
                 </li>

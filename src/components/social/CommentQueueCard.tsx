@@ -300,7 +300,7 @@ export function CommentQueueCard({
                       {/* dir="auto": these names are Russian and English inside
                           an RTL card, and forcing either direction puts the
                           punctuation on the wrong end. */}
-                      <p dir="auto" className="min-w-0 flex-1 truncate text-[13px] font-bold text-mist-100">{r.target?.name ?? '—'}</p>
+                      <p dir="auto" data-no-translate className="min-w-0 flex-1 truncate text-[13px] font-bold text-mist-100">{r.target?.name ?? '—'}</p>
                       {href && (
                         <Link
                           href={href}
@@ -423,7 +423,7 @@ export function CommentQueueCard({
                         {/* dir="auto" and nothing else: these names are Russian
                             and English inside an RTL card, and forcing either
                             direction puts the punctuation on the wrong end. */}
-                        <p dir="auto" className="min-w-0 flex-1 truncate text-[13px] font-bold text-mist-100">{r.target?.name ?? '—'}</p>
+                        <p dir="auto" data-no-translate className="min-w-0 flex-1 truncate text-[13px] font-bold text-mist-100">{r.target?.name ?? '—'}</p>
                         {/* The reason and the screenshot, folded away: it is
                             the same sentence on every row and it was printed
                             twenty-seven times. */}

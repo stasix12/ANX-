@@ -865,7 +865,7 @@ export default function DiscoverPage() {
           <Card padded={false} className="px-3 py-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="min-w-0">
-                <p className="text-sm font-extrabold text-mist-100">במעקב: {stale.map((x) => x.query).join(' · ')}</p>
+                <p className="text-sm font-extrabold text-mist-100">במעקב: <span data-no-translate>{stale.map((x) => x.query).join(' · ')}</span></p>
                 <p className="mt-0.5 text-xs text-mist-500">
                   {stale[0].last_run_at ? `נבדק לאחרונה ${relativeHe(stale[0].last_run_at)}` : 'עוד לא נבדק'} — אפשר לבדוק אם נוספו קבוצות חדשות.
                 </p>

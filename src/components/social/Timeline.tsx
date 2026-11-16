@@ -353,7 +353,9 @@ const doneAt = (row: { published_at?: string | null; updated_at?: string | null;
             </span>
             <TargetAvatar name={row.target?.name ?? '?'} imageUrl={row.target?.image_url} channel={row.target?.channel} size={30} />
             <div className="min-w-0 grow">
-              <p dir="auto" className="truncate text-sm font-bold text-mist-100">{row.target?.name ?? 'יעד'}</p>
+              <p dir="auto" className="truncate text-sm font-bold text-mist-100">
+                {row.target?.name ? <span data-no-translate>{row.target.name}</span> : t('יעד')}
+              </p>
               {/* The forecast, not the column — and the same number the
                   campaign card prints for this row. See the header. */}
               {row.status === 'scheduled' && <Countdown at={at} now={now} />}

@@ -922,7 +922,7 @@ export default function GroupsPage() {
                           to change how much of a group's name was readable. */}
                       <p dir="auto" className={`line-clamp-2 text-sm font-bold ${g.enabled ? 'text-mist-100' : 'text-mist-500'}`}>
                         {g.favorite && <StarIcon aria-hidden className="me-1 inline h-3.5 w-3.5 align-[-0.15em] text-warning-400" fill="currentColor" />}
-                        {g.name}
+                        <span data-no-translate>{g.name}</span>
                       </p>
                       {/* The reason it is off, where the eye already is. A
                           group that switched itself off with no explanation is

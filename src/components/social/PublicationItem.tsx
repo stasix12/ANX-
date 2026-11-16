@@ -361,7 +361,9 @@ export function PublicationItem({
     <li className={`flex min-w-0 items-center gap-2 py-2.5 ${running ? `rounded-xl px-2 ${TONE_TINT.brand}` : ''}`}>
       <TargetAvatar name={row.target?.name ?? '?'} imageUrl={row.target?.image_url} channel={row.target?.channel} size={38} />
       <button type="button" onClick={() => setOpen(true)} className="min-h-11 min-w-0 grow text-start">
-        <p dir="auto" className="truncate text-sm font-bold text-mist-100">{row.target?.name ?? 'יעד'}</p>
+        <p dir="auto" className="truncate text-sm font-bold text-mist-100">
+          {row.target?.name ? <span data-no-translate>{row.target.name}</span> : t('יעד')}
+        </p>
         {/* anx-ru-wrap on the STATUS line only: the name above it is the
             customer's and stays on one line whatever language is on. */}
         <p dir="auto" className={`anx-ru-wrap truncate text-xs font-semibold ${line.cls}`}>{when}</p>
@@ -389,7 +391,7 @@ export function PublicationItem({
       >
         <div className="space-y-3">
           <p dir="auto" className="text-sm font-bold text-mist-100">
-            {row.target?.name ?? 'הקבוצה'}
+            {row.target?.name ? <span data-no-translate>{row.target.name}</span> : t('הקבוצה')}
           </p>
           {/* WHAT IT ACTUALLY DOES, IN THE ORDER IT HAPPENS, and the cost
               named rather than implied. "בחלק מהקבוצות" is the honest
@@ -452,7 +454,7 @@ export function PublicationItem({
               <Detail label={t('ייצא ב')}><Stamp iso={projectedAt} /></Detail>
             )}
             <Detail label={t('פורסם ב')}>{row.published_at ? <Stamp iso={row.published_at} /> : '—'}</Detail>
-            <Detail label={t('פוסט')}>{row.post?.title || '—'}</Detail>
+            <Detail label={t('פוסט')}>{row.post?.title ? <span data-no-translate>{row.post.title}</span> : '—'}</Detail>
             <Detail label={t('ניסיונות')}>{row.attempts}</Detail>
           </dl>
           {(row.error || row.skip_reason) && <ErrorDetail row={row} technical />}

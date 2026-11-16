@@ -437,7 +437,9 @@ export function CommentTimeline({
           <ul className="mt-1 space-y-1">
             {attentionTop.map((r) => (
               <li key={r.id} className="flex items-start gap-2 text-[11px] leading-snug">
-                <span dir="auto" className="w-24 shrink-0 truncate font-bold text-mist-200">{r.target?.name ?? 'קבוצה'}</span>
+                <span dir="auto" className="w-24 shrink-0 truncate font-bold text-mist-200">
+                  {r.target?.name ? <span data-no-translate>{r.target.name}</span> : t('קבוצה')}
+                </span>
                 <span dir="auto" className="min-w-0 flex-1 text-mist-400">
                   {r.comment_note || commentLabel(r.comment_status)}
                 </span>
@@ -470,7 +472,9 @@ export function CommentTimeline({
       {next && (
         <p className="mt-2 flex flex-wrap items-baseline gap-x-2 gap-y-0.5 rounded-xl bg-ink-800/50 px-2.5 py-2 text-[11.5px]">
           <span className="font-extrabold text-brand-400">{t('הבא בתור')}</span>
-          <span dir="auto" className="min-w-0 flex-1 truncate font-bold text-mist-100">{next.target?.name ?? 'קבוצה'}</span>
+          <span dir="auto" className="min-w-0 flex-1 truncate font-bold text-mist-100">
+            {next.target?.name ? <span data-no-translate>{next.target.name}</span> : t('קבוצה')}
+          </span>
           <span className="font-bold text-mist-300">
             {next.comment_status === 'commenting' ? 'כותב עכשיו' : inAbout(0)}
           </span>
@@ -574,7 +578,9 @@ export function CommentTimeline({
                       {/* dir="auto": these group names are Russian and English
                           inside an RTL card, and forcing either direction puts
                           the punctuation on the wrong end. */}
-                      <p dir="auto" className="truncate text-sm font-bold text-mist-100">{row.target?.name ?? 'קבוצה'}</p>
+                      <p dir="auto" className="truncate text-sm font-bold text-mist-100">
+                        {row.target?.name ? <span data-no-translate>{row.target.name}</span> : t('קבוצה')}
+                      </p>
                       {/*
                         A QUEUED ROW SAYS WHEN, NOT "ממתין". That the row is
                         waiting is already told by its place in the rail and by

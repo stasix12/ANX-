@@ -104,7 +104,7 @@ const skin = `surface flex h-full flex-col items-center rounded-tile border p-2 
         owner is actually reading.
       */}
       <TargetAvatar name={group.name} imageUrl={group.image_url} channel={group.channel} size={48} />
-      <p dir="auto" className="mt-1 line-clamp-2 w-full text-[11px] font-bold leading-[14px] text-mist-100" title={group.name}>
+      <p dir="auto" data-no-translate className="mt-1 line-clamp-2 w-full text-[11px] font-bold leading-[14px] text-mist-100" title={group.name}>
         {group.name}
       </p>
       {/*

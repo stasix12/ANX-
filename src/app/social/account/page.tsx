@@ -325,7 +325,7 @@ export default function AccountPage() {
                   <TargetAvatar name={account.name} size={56} />
                 )}
                 <div className="min-w-0">
-                  <p dir="auto" className="truncate text-lg font-extrabold text-ink-100">{account.name}</p>
+                  <p dir="auto" data-no-translate className="truncate text-lg font-extrabold text-ink-100">{account.name}</p>
                   <p className="mt-0.5 text-xs text-mist-500">
                     {connected ? 'כל פרסום לקבוצה יוצא בשם הזה.' : 'זה החשבון האחרון שנקרא מהמחשב — כרגע החיבור לא מאומת.'}
                   </p>
@@ -341,7 +341,7 @@ export default function AccountPage() {
             <p className="mt-3 text-xs text-mist-500">
               {worker ? (
                 <>
-                  המחשב: {worker.name} · {worker.host || '—'} · נבדק לאחרונה <Stamp iso={worker.last_seen_at} />
+                  המחשב: <span data-no-translate>{worker.name}</span> · <span data-no-translate>{worker.host || '—'}</span> · נבדק לאחרונה <Stamp iso={worker.last_seen_at} />
                 </>
               ) : (
                 <>
@@ -558,7 +558,7 @@ export default function AccountPage() {
                           </span>
                         )}
                         <span className="flex min-w-0 flex-1 flex-col">
-                          <span dir="auto" className="truncate text-sm font-bold text-mist-100">
+                          <span dir="auto" data-no-translate className="truncate text-sm font-bold text-mist-100">
                             {p.name}
                           </span>
                           {/*

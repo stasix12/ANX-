@@ -84,6 +84,13 @@
     'עדכונים אוטומטיים לא פעילים כאן': 'Автоматические обновления здесь не активны',
     'עוד לא נבדק': 'Ещё не проверялось',
     'עוד לא קרה כלום': 'Пока ничего не произошло',
+    /* ago() prints these four whole, because a count of one or two is a
+       word in Hebrew and not a number — see app.js. The web app answers the
+       same four the same way (src/lib/social/i18n.ts). */
+    'לפני דקה': '1 мин',
+    'לפני יום': 'день назад',
+    'לפני יומיים': 'два дня назад',
+    'לפני שעה': '1 ч',
     'עכשיו': 'Сейчас',
     'ערב טוב': 'Добрый вечер',
     'פותח…': 'Открываем…',
@@ -211,12 +218,12 @@
     '§ משימות': '§ задач',
     'הבאה ב־§': 'Следующая в §',
     'לא הצלחנו לקרוא: §': 'Прочитать не удалось: §',
-    'לפני § דק׳': '§ мин назад',
-    'לפני § ימים': '§ дней назад',
-    'לפני § שע׳': '§ ч назад',
+    'לפני § דק׳': '§ мин',
+    'לפני § ימים': '§ {день|дня|дней} назад',
+    'לפני § שע׳': '§ ч',
     'מתוזמן ל־§': 'Запланировано на §',
     'נבדק לאחרונה §§': 'Последняя проверка §§',
-    'פורסם §': 'Опубликовано §',
+    'פורסם §': 'Вышло §',
     /* ── filled in below ── */
   };
 
@@ -244,10 +251,46 @@
     return compiled;
   }
 
+  /*
+   * ─── A NUMBER CHANGES THE NOUN IN RUSSIAN ──────────────────────────────
+   *
+   * Hebrew has one plural and Russian has three, chosen by the last digits
+   * of the number in front of the noun. A shape with one fixed form is wrong
+   * two thirds of the time — this window said "1 дней назад" and "2 дней
+   * назад" — and it is not a missing translation, which is why no coverage
+   * check would ever see it. The same {one|few|many} notation the web app
+   * uses (src/lib/social/i18n.ts), so the two dictionaries read alike.
+   */
+  var PLURAL = /\{([^{}|]*)\|([^{}|]*)\|([^{}|]*)\}/g;
+
+  function pickForm(a, b, c, value) {
+    var n = Math.abs(Number(String(value).replace(/[\s,\u00a0]/g, '')));
+    if (!isFinite(n) || Math.floor(n) !== n) return c;
+    var hundred = n % 100;
+    if (hundred >= 11 && hundred <= 14) return c;
+    var ten = n % 10;
+    if (ten === 1) return a;
+    if (ten >= 2 && ten <= 4) return b;
+    return c;
+  }
+
+  /* Every braced noun in one piece of the Russian, settled against the value
+     that stands in front of it. */
+  function settle(text, value) {
+    return text.replace(PLURAL, function (_m, a, b, c) {
+      return pickForm(a, b, c, value);
+    });
+  }
+
   function fill(out, values) {
     var parts = out.split('\u00a7');
-    var text = parts[0];
-    for (var i = 1; i < parts.length; i += 1) text += (values[i - 1] === undefined ? '' : values[i - 1]) + parts[i];
+    /* Before the first value there is nothing to agree with, so a noun there
+       takes the third form rather than guessing. */
+    var text = settle(parts[0], '');
+    for (var i = 1; i < parts.length; i += 1) {
+      var v = values[i - 1] === undefined ? '' : values[i - 1];
+      text += v + settle(parts[i], v);
+    }
     return text;
   }
 

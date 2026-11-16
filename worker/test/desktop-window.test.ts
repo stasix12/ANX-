@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import ts from 'typescript';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { chromium, type Page } from 'playwright-core';
@@ -182,6 +183,71 @@ async function main(): Promise<void> {
     untranslated.length === 0,
     `every Hebrew line in the program's window has a Russian entry — these do not: ${untranslated.join(' | ')}`,
   );
+
+  /*
+   * ─── AND app.js, WHICH IS WHERE MOST OF THE WINDOW'S WORDS LIVE ────────
+   *
+   * This guard read index.html and stopped there, and index.html is the
+   * static frame. Every status, every empty state, every greeting and every
+   * line of the activity log is written by app.js while the program runs —
+   * about eighty sentences, none of which this was looking at. The window
+   * passed its coverage guard with most of its words still in Hebrew, which
+   * is exactly what he was telling me: "עדיין יש כפתורים והרבה דברים
+   * בעברית."
+   *
+   * So app.js is read too, with the TypeScript parser rather than a regex,
+   * because a regex over source code cannot tell a sentence from a selector.
+   * Both kinds of string it holds are counted: the fixed ones, and the ones
+   * built around a value (`לפני ${m} דק׳`), which need a § pattern.
+   */
+  const appSrc = read('desktop/renderer/app.js');
+  const app = ts.createSourceFile('app.js', appSrc, ts.ScriptTarget.Latest, true, ts.ScriptKind.JS);
+  const patBody = js.slice(js.indexOf('var RU_PAT = {'), js.indexOf("var ATTRS"));
+  const patKeys = new Set([...patBody.matchAll(/^\s*'((?:[^'\\]|\\.)*)':/gm)].map((m) => m[1]));
+  is(patKeys.size > 0, `the program has patterns for its live lines — ${patKeys.size}`);
+
+  const appPlain = new Set<string>();
+  const appPat = new Set<string>();
+  const walk = (n: ts.Node): void => {
+    if (ts.isTemplateExpression(n)) {
+      let shape = n.head.text;
+      for (const span of n.templateSpans) shape += '§' + span.literal.text;
+      shape = tidy(shape);
+      if (/[\u0590-\u05FF]/.test(shape)) appPat.add(shape);
+    }
+    if (ts.isStringLiteral(n) || ts.isNoSubstitutionTemplateLiteral(n)) {
+      const text = tidy(n.text);
+      if (/[\u0590-\u05FF]/.test(text)) appPlain.add(text);
+    }
+    ts.forEachChild(n, walk);
+  };
+  walk(app);
+  is(appPlain.size > 40, `the parser read the program's own lines — ${appPlain.size}`);
+
+  /* A language is named in its own language, here as on the website. */
+  const SELF_NAMED = new Set(['עברית']);
+  const appMissing = [...appPlain].filter(
+    (x) => !keys.has(x) && !SELF_NAMED.has(x) && (x.match(/[\u0590-\u05FF]/g) ?? []).length >= 2,
+  );
+  is(
+    appMissing.length === 0,
+    `every line app.js writes has a Russian entry — these do not: ${appMissing.join(' | ')}`,
+  );
+  const appPatMissing = [...appPat].filter((x) => !patKeys.has(x));
+  is(
+    appPatMissing.length === 0,
+    `and every line it builds around a value has a pattern — these do not: ${appPatMissing.join(' | ')}`,
+  );
+
+  /* The § count has to agree, or the value is dropped or a hole is left. */
+  const patEntries = [...patBody.matchAll(/^\s*'((?:[^'\\]|\\.)*)':\s*'((?:[^'\\]|\\.)*)',?$/gm)].map(
+    (m) => [m[1], m[2]] as [string, string],
+  );
+  const slots = (x: string) => (x.match(/§/g) ?? []).length;
+  const lopsided = patEntries.filter(([he, ru]) => slots(he) !== slots(ru)).map(([he]) => he);
+  is(lopsided.length === 0, `every pattern keeps its value slots — ${lopsided.join(' | ')}`);
+  const patLatin = patEntries.filter(([, ru]) => !/[\u0400-\u04FF]/.test(ru)).map(([he]) => he);
+  is(patLatin.length === 0, `every pattern translation is in Cyrillic — ${patLatin.join(' | ')}`);
 
   /* The same three traps the website's dictionary is held to. */
   const entries = [...body.matchAll(/^\s*'((?:[^'\\]|\\.)*)':\s*$|^\s*'((?:[^'\\]|\\.)*)':\s*'((?:[^'\\]|\\.)*)',?$/gm)]

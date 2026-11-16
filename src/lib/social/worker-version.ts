@@ -1065,7 +1065,16 @@
  * moves the installer's stamp even though not one line of engine behaviour
  * changed. Nothing here reaches the PC except a larger lookup table.
  */
-export const WORKER_VERSION = '4.74.0';
+/*
+ * 4.74.0 → 4.75.0 — התרגום עובר גם על מה ש-t() לא יכול להגיע אליו.
+ *
+ * v4.74.0 published 16.11 at 05:06 (asked, not assumed), so 4.75.0 is free.
+ *
+ * src/lib/social/dom-translate.ts is a new bundled file. Nothing in it runs
+ * on the PC — it translates a rendered page — but src/lib/social ships with
+ * the installer, so the stamp moves.
+ */
+export const WORKER_VERSION = '4.75.0';
 
 /**
  * A FINGERPRINT OF EVERYTHING THE INSTALLER CARRIES.
@@ -1816,4 +1825,4 @@ export const WORKER_VERSION = '4.74.0';
  * worker/facebook/join.ts and written by worker/social-worker.ts, both of
  * which run only on his PC. Numbers under WORKER_VERSION above.
  */
-export const WORKER_FINGERPRINT = 'ff6d9e664d049911';
+export const WORKER_FINGERPRINT = '66a5eaaa1009ddf0';

@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
+import { applyDomLanguage } from '@/lib/social/dom-translate';
 import { bootLang, useLang } from '@/lib/social/i18n';
 
 /**
@@ -21,6 +22,18 @@ export function LangBoundary({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     bootLang();
   }, []);
+  /*
+   * AND THE REST OF THE SCREEN, after React has drawn it.
+   *
+   * t() reaches the sentences a codemod could safely wrap. Everything else —
+   * the label maps in lib, the options inside arrays, the eighteen files with
+   * their own `t` — is translated where it is painted, by dom-translate.ts.
+   * It runs after every render through this effect and keeps running through
+   * its own observer, because the app rewrites itself constantly.
+   */
+  useEffect(() => {
+    applyDomLanguage(lang);
+  });
   return (
     <div key={lang} style={{ display: 'contents' }}>
       {children}

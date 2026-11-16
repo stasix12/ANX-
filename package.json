@@ -2,22 +2,25 @@
   "name": "anx3d-store",
   "version": "1.0.0",
   "private": true,
-  "description": "ANX3D — Professional Cleaning Equipment. חנות ציוד ושדרוגים למכונות Sabrina.",
+  "description": "ANX3D \u2014 Professional Cleaning Equipment. \u05d7\u05e0\u05d5\u05ea \u05e6\u05d9\u05d5\u05d3 \u05d5\u05e9\u05d3\u05e8\u05d5\u05d2\u05d9\u05dd \u05dc\u05de\u05db\u05d5\u05e0\u05d5\u05ea Sabrina.",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
+    "test:seo": "node --test scripts/test-seo-quality.mjs",
     "placeholders": "node scripts/generate-placeholders.mjs",
     "export": "EXPORT=1 next build",
     "preview": "EXPORT=1 next build && node scripts/build-preview.mjs"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^1.8.0",
     "@supabase/supabase-js": "^2.112.3",
     "next": "16.3.2",
     "react": "19.2.8",
-    "react-dom": "19.2.8"
+    "react-dom": "19.2.8",
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.3.3",

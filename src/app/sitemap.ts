@@ -1,5 +1,6 @@
 import type { MetadataRoute } from 'next';
 import { fetchPublishedProducts } from '@/lib/products';
+import { fetchPublishedArticles } from '@/lib/seo/articles';
 import { SEED_CATEGORIES, SEED_PRODUCTS } from '@/lib/shop/seed';
 import { site } from '@/lib/site';
 
@@ -8,6 +9,9 @@ export const dynamic = 'force-static';
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const lastModified = new Date();
   const products = await fetchPublishedProducts();
+  // Published SEO articles. Returns [] when Supabase is unconfigured, so the
+  // sitemap still builds on a bare checkout and in the static export.
+  const articles = await fetchPublishedArticles();
 
   return [
     { url: site.url, lastModified, changeFrequency: 'weekly', priority: 1 },
@@ -17,6 +21,15 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       changeFrequency: 'monthly',
       priority: 0.9,
     },
+    { url: `${site.url}/articles`, lastModified, changeFrequency: 'weekly', priority: 0.8 },
+    ...articles.map((article) => ({
+      url: `${site.url}/articles/${article.slug}`,
+      // The real publish/edit time, not the build time — this is the one date
+      // in the sitemap Google can actually act on.
+      lastModified: new Date(article.updated_at),
+      changeFrequency: 'monthly' as const,
+      priority: 0.7,
+    })),
     ...products.map((product) => ({
       url: `${site.url}/products/${product.slug}`,
       lastModified,

@@ -1,0 +1,66 @@
+# Fires the weekly SEO content cycle on the deployed app.
+#
+# Why GitHub Actions and not Vercel Cron: Vercel Cron can only issue GET
+# requests, and a GET route handler makes `output: export` fail to build — which
+# would break this repo's own GitHub Pages deploy (.github/workflows/deploy.yml).
+# So /api/seo/run is POST-only and the schedule lives here instead. A scheduled
+# POST also works on any host, not just Vercel.
+#
+# The cycle writes drafts and queues them for approval. It publishes nothing —
+# that always needs a human in /crm/seo.
+#
+# Setup (once), under Settings → Secrets and variables → Actions:
+#   SEO_APP_ORIGIN   e.g. https://your-app.vercel.app   (variable or secret)
+#   SEO_CRON_SECRET  the same value as the app's CRON_SECRET env var
+name: Weekly SEO content cycle
+
+on:
+  # Sundays at 04:10 UTC — early in the Israeli working week, so the queue is
+  # waiting when somebody sits down on Sunday morning.
+  schedule:
+    - cron: '10 4 * * 0'
+  # Lets the cycle be fired by hand from the Actions tab.
+  workflow_dispatch:
+
+permissions: {}
+
+# One cycle at a time. Two concurrent runs would plan the same subjects, and
+# while the unique index on (topic_key, lang) would reject the duplicates, the
+# wasted API calls are paid for either way.
+concurrency:
+  group: seo-weekly
+  cancel-in-progress: false
+
+jobs:
+  run-cycle:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fire the weekly cycle
+        env:
+          ORIGIN: ${{ secrets.SEO_APP_ORIGIN || vars.SEO_APP_ORIGIN }}
+          CRON_SECRET: ${{ secrets.SEO_CRON_SECRET }}
+        run: |
+          set -u
+          if [ -z "${ORIGIN:-}" ] || [ -z "${CRON_SECRET:-}" ]; then
+            echo "::error::SEO_APP_ORIGIN and SEO_CRON_SECRET must be configured for this repository."
+            exit 1
+          fi
+
+          # Generating four long articles takes minutes; allow for it.
+          code=$(curl -sS -o /tmp/seo-run.json -w '%{http_code}' --max-time 900 \
+            -X POST "$ORIGIN/api/seo/run" \
+            -H "authorization: Bearer $CRON_SECRET" \
+            -H 'content-type: application/json' \
+            -d '{}' || echo 000)
+
+          echo "run http: $code"
+          echo '===== CYCLE REPORT ====='
+          jq '.' /tmp/seo-run.json 2>/dev/null || head -c 800 /tmp/seo-run.json || true
+
+          # A partial run still returns non-2xx when nothing was created, which
+          # is what should turn this job red — a silent empty week is the one
+          # failure mode nobody notices.
+          if [ "$code" -ge 200 ] && [ "$code" -lt 300 ]; then
+            exit 0
+          fi
+          exit 1

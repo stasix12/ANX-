@@ -558,6 +558,22 @@ export default function CrmDashboardPage() {
               </div>
             </Section>
           ) : null}
+
+          {/*
+            Entry point to the SEO system. Deliberately a card here rather than
+            a sixth tab in the bottom bar: that bar is sized for five targets on
+            a phone, and the SEO tool is a desk tool used occasionally, not
+            something a technician reaches for between jobs.
+          */}
+          <Link
+            href="/crm/seo"
+            className="block rounded-card border border-ink-700 surface p-4 transition-colors hover:border-brand-500/45"
+          >
+            <p className="font-bold">קידום אורגני (SEO)</p>
+            <p className="mt-1 text-sm text-mist-500">
+              מאמרים בעברית וברוסית לאזור הדרום, תור אישור וביצועים בגוגל ←
+            </p>
+          </Link>
         </>
       )}
     </CrmShell>

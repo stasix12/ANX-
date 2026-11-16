@@ -8,7 +8,8 @@ import { OrderListProvider } from '@/components/OrderListProvider';
 
 /**
  * The admin panel (/admin), the cleaning-business CRM (/crm) and the
- * sofa-cleaning landing page (/sofa-cleaning) are separate from the
+ * sofa-cleaning landing page (/sofa-cleaning) and the SEO articles
+ * (/articles) are separate from the
  * storefront — the apps have their own login and nav, and the landing page
  * deliberately has no nav at all so ad traffic stays in the funnel.
  * usePathname() already excludes basePath, so this check works the same on
@@ -22,6 +23,7 @@ export function SiteChrome({ children }: { children: React.ReactNode }) {
     inSegment('/admin') ||
     inSegment('/crm') ||
     inSegment('/sofa-cleaning') ||
+    inSegment('/articles') ||
     inSegment('/clean') ||
     inSegment('/pro') ||
     inSegment('/hq');

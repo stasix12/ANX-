@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
 import { CampaignProgressBar } from '@/components/social/CampaignProgressBar';
-import { CampaignCommentSheet } from '@/components/social/CampaignCommentSheet';
+import { CampaignCommentSheet, runLabelOf, useLastRunScope } from '@/components/social/CampaignCommentSheet';
 import { CommentState } from '@/components/social/CommentState';
 import { CampaignReach } from '@/components/social/CampaignReach';
 import { ProgressRing } from '@/components/social/ProgressRing';
@@ -92,6 +92,9 @@ export default function CampaignControlCenter() {
   const [campaign, setCampaign] = useState<Campaign | null>(null);
   const [rows, setRows] = useState<QueueRow[] | null>(null);
   const [commentOpen, setCommentOpen] = useState(false);
+  /* The run the sheet is about, read when it opens. `id` is this screen's own
+     round, so the hook is given it only while the sheet is up. */
+  const commentScope = useLastRunScope(commentOpen ? id : null);
   const [posts, setPosts] = useState<Post[]>([]);
   const [state, setState] = useState<CampaignState<QueueRow> | null>(null);
   /* The global pause. This screen never read it, so the run badge said "רץ"
@@ -767,7 +770,10 @@ export default function CampaignControlCenter() {
                     key={`${campaign.comment_text ?? ''}|${campaign.comment_gap_seconds ?? 30}`}
                     open={commentOpen}
                     onClose={() => setCommentOpen(false)}
-                    publishedCount={published.length}
+                    /* The last run's publications, not every publication this
+                       screen happens to be holding — see useLastRunScope. */
+                    publishedCount={commentScope === undefined ? null : (commentScope?.count ?? 0)}
+                    runLabel={runLabelOf(commentScope)}
                     initialText={campaign.comment_text ?? ''}
                     initialMedia={campaign.comment_media ?? []}
                     initialGapSeconds={campaign.comment_gap_seconds ?? 30}
@@ -776,7 +782,8 @@ export default function CampaignControlCenter() {
                       act(
                         'comment',
                         async () => {
-                          const n = await queueCampaignComment(id, text, media, gapSeconds);
+                          if (!commentScope) return 0;
+                          const n = await queueCampaignComment(commentScope, text, media, gapSeconds);
                           setCommentOpen(false);
                           return n;
                         },

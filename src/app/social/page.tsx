@@ -11,7 +11,7 @@ import { QueueTunerSheet } from '@/components/social/QueueTunerSheet';
 import { SetupChecklist } from '@/components/social/SetupChecklist';
 import { QuickCommentsCard } from '@/components/social/QuickCommentsCard';
 import { CommentTimeline } from '@/components/social/CommentTimeline';
-import { CampaignCommentSheet } from '@/components/social/CampaignCommentSheet';
+import { CampaignCommentSheet, runLabelOf, useLastRunScope } from '@/components/social/CampaignCommentSheet';
 import { SocialShell } from '@/components/social/SocialShell';
 import { AlertBar, Button, ButtonLink, Card, ErrorState, Skeleton, StatStrip, useConfirm, useToast } from '@/components/social/ui';
 import {
@@ -314,6 +314,9 @@ export default function SocialDashboard() {
      not its id, because the sheet is seeded from the round's own stored
      wording and spacing — an id would mean looking it up again. */
   const [commentFor, setCommentFor] = useState<Campaign | null>(null);
+  /* Which run the comment sheet is about — read when it opens, not derived
+     from the dashboard's own counters. See useLastRunScope. */
+  const commentScope = useLastRunScope(commentFor?.id ?? null);
   /* Every featured run's cover, by campaign id. Read on their own, because the
      queue rows carry their post only while something is still scheduled — a
      finished run would lose its picture exactly when the owner looks to see
@@ -2400,18 +2403,16 @@ export default function SocialDashboard() {
         open={commentFor !== null}
         onClose={() => setCommentFor(null)}
         /*
-         * THE NUMBER THE WRITE WILL ACTUALLY TOUCH — the round's LIFETIME
-         * publications, not today's.
+         * THE NUMBER THE WRITE WILL ACTUALLY TOUCH, read off the run itself.
          *
-         * `progress.published` is scoped to today for a repeating round (see
-         * CampaignState.todayOnly), and queueCampaignComment() matches
-         * `.eq('campaign_id', id).eq('status', 'published')` with no date
-         * bound at all. So the sheet promised "28 הפרסומים שכבר יצאו · בערך 5
-         * דקות" over a write that queues a comment on 1,027 of them and runs
-         * for three hours. `everPublished` is the lifetime count, which is the
-         * one this dialog is about.
+         * It was `everPublished` — the round's LIFETIME publications — and
+         * that was honest about a write that really did touch all of them:
+         * "לא נותן להוסיף תגובה לא רק לפוסט שבחרתי אלא ל-224 פרסומים". Both
+         * halves are now the last run alone, out of one read, so the number
+         * and the write cannot drift apart again. See useLastRunScope.
          */
-        publishedCount={commentFor ? (data?.states[commentFor.id]?.everPublished ?? 0) : 0}
+        publishedCount={commentScope === undefined ? null : (commentScope?.count ?? 0)}
+        runLabel={runLabelOf(commentScope)}
         initialText={commentFor?.comment_text ?? ''}
         initialMedia={commentFor?.comment_media ?? []}
         initialGapSeconds={commentFor?.comment_gap_seconds ?? 30}
@@ -2422,7 +2423,8 @@ export default function SocialDashboard() {
           void act(
             'comment',
             async () => {
-              await queueCampaignComment(round.id, text, media, gapSeconds);
+              if (!commentScope) return;
+              await queueCampaignComment(commentScope, text, media, gapSeconds);
               setCommentFor(null);
             },
             'נשלח. התגובות יתווספו אחת-אחת, במרווח שבחרתם.',

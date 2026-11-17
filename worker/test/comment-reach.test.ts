@@ -146,4 +146,79 @@ const dedupe = <T extends { id: string }>(rows: T[]): T[] => {
 };
 is(dedupe([{ id: 'a' }, { id: 'b' }, { id: 'a' }]).map((r) => r.id), ['a', 'b'], 'a row reachable from both ends is offered once, and keeps its place');
 
-console.log(`comment reach + address tests OK — ${checks} assertions`);
+/* ───────────────── THE THIRD RULE: WHICH ROWS GET ASKED AT ALL ──────────
+ *
+ * "שאני רוצה להוסיף תגובה מהירה הוא לא נותן להוסיף תגובה לא רק לפוסט שבחרתי
+ *  אלא ל-224 פרסומים."
+ *
+ * REACH decides what the worker may look at and ADDRESS decides what it finds
+ * there. Both were downstream of this one, which nobody had written down: the
+ * write that marks rows `pending` matched `campaign_id = X and status =
+ * 'published'` with no date bound and no round bound, so one press asked for a
+ * comment under every post the round had published SINCE THE DAY IT WAS
+ * CREATED — 224 of them on his account, the oldest weeks old, each one going
+ * out under his own name into a real group.
+ *
+ * It was not a slip. The sheet's title said "לכל הפרסומים בסבב" and the number
+ * beside it was the round's lifetime count, so the code, the title and the
+ * number all agreed with each other and all three were wrong about what he
+ * meant. The card he pressed it from said "132 קבוצות" — a third quantity
+ * again, distinct groups — and nothing on screen named the set.
+ *
+ * So the rule now has a name and a shape: ONE RUN, resolved before the write,
+ * shown as a number, and handed back to the write so the two cannot drift.
+ */
+const client = readFileSync(path.join(__dirname, '..', '..', 'src', 'lib', 'social', 'client.ts'), 'utf8');
+const queueFn = client.slice(client.indexOf('export async function queueCampaignComment'));
+const queueBody = queueFn.slice(0, queueFn.indexOf('\n}'));
+
+is(/export async function queueCampaignComment\(\s*scope: LastRunScope,/.test(client), true, 'the write takes the RESOLVED run, not a bare campaign id — a caller cannot forget to narrow it');
+is(/\.gte\('scheduled_at', scope\.fromISO\)/.test(queueBody), true, "THE BLAST RADIUS, half one: the run's own day");
+is(/\.lt\('scheduled_at', scope\.toISO\)/.test(queueBody), true, 'and its far edge, exclusive, so midnight belongs to one day only');
+is(
+  /if \(scope\.roundAt\) marked = marked\.eq\('round_at', scope\.roundAt\);/.test(queueBody),
+  true,
+  "half two: the occasion within that day — and ONLY when the database records one, because a row without `round_at` predates the column and its day IS its run",
+);
+is(/\.eq\('status', 'published'\)/.test(queueBody), true, 'still only rows that actually went out');
+is(/\.neq\('comment_status', 'commenting'\)/.test(queueBody), true, "and still never the row the worker is holding — that guard is older than this one and outranks it");
+/* The window is on scheduled_at, NOT published_at. A run that starts at 23:50
+   and finishes after midnight is one run; keyed on when each row happened to
+   go out it would be two, and the second press would miss half of it. */
+is(/published_at/.test(queueBody), false, 'the write does not key the run on when rows published — pacing across midnight would split one run in two');
+
+const scopeFn = client.slice(client.indexOf('export async function lastRunScope'));
+const scopeBody = scopeFn.slice(0, scopeFn.indexOf('\n}\n'));
+is(/\.order\('published_at', \{ ascending: false, nullsFirst: false \}\)/.test(scopeBody), true, 'the run is found from the NEWEST publication — ordering by scheduled_at would pick a row due later today that has not published at all');
+is(/zonedDateISO\(new Date\(row\.scheduled_at\)\)/.test(scopeBody), true, "and its day is the day that row was SCHEDULED for, resolved in the app's zone");
+is(/zonedToUtc\(dayISO, '00:00'\)/.test(scopeBody) && /zonedToUtc\(addDaysISO\(dayISO, 1\), '00:00'\)/.test(scopeBody), true, 'both edges through time.ts, so the two days a year that are not 24 hours long cannot move them');
+is(/count: 'exact', head: true/.test(scopeBody), true, 'the number shown is counted by the database over the same filters, not estimated from a list the screen happens to hold');
+
+/*
+ * AND EVERY SCREEN ASKS THE SAME QUESTION. Three open this sheet, and before
+ * this each computed its own number — everPublished, everPublished again, and
+ * `published.length`. Three answers to one question is how a sheet comes to
+ * promise one set of posts and write to another.
+ */
+for (const screen of [
+  ['src/app/social/page.tsx', 'the dashboard'],
+  ['src/app/social/campaigns/page.tsx', 'the rounds list'],
+  ['src/app/social/campaigns/[id]/page.tsx', "the round's own screen"],
+] as const) {
+  const src = readFileSync(path.join(__dirname, '..', '..', ...screen[0].split('/')), 'utf8');
+  is(/useLastRunScope\(/.test(src), true, `${screen[1]} reads the run through the one hook`);
+  is(/queueCampaignComment\(commentScope,/.test(src), true, `${screen[1]} writes to the run it showed`);
+  is(/if \(!commentScope\) return/.test(src), true, `${screen[1]} cannot submit before the run is known — a bare id would widen the write back to the whole round`);
+  is(
+    /publishedCount=\{commentScope === undefined \? null : \(commentScope\?\.count \?\? 0\)\}/.test(src),
+    true,
+    `${screen[1]} shows the run's own count, and tells "still reading" apart from "nothing published"`,
+  );
+  is(/runLabel=\{runLabelOf\(commentScope\)\}/.test(src), true, `${screen[1]} names the run beside the number, so it can be checked against the card it was pressed from`);
+  /* The PROP, not the file: two of these screens explain in a comment what
+     `everPublished` used to be doing here, and a test a comment can break is
+     a test that gets deleted. */
+  is(/publishedCount=\{[^}]*everPublished/.test(src), false, `${screen[1]} no longer feeds the sheet a lifetime count`);
+}
+
+console.log(`comment reach + address + scope tests OK — ${checks} assertions`);

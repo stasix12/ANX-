@@ -7,7 +7,7 @@ import { CampaignTile } from '@/components/social/CampaignTile';
 import { CampaignTabs } from '@/components/social/CampaignTabs';
 import { CampaignHoursSheet } from '@/components/social/CampaignHoursSheet';
 import { QueueTunerSheet } from '@/components/social/QueueTunerSheet';
-import { CampaignCommentSheet } from '@/components/social/CampaignCommentSheet';
+import { CampaignCommentSheet, runLabelOf, useLastRunScope } from '@/components/social/CampaignCommentSheet';
 import { SocialShell } from '@/components/social/SocialShell';
 import {
   Button,
@@ -143,6 +143,9 @@ export default function CampaignsPage() {
    * one sheet serves every card instead of one mounted per row.
    */
   const [commentFor, setCommentFor] = useState<Campaign | null>(null);
+  /* The run the sheet is about, read when it opens — the same hook the
+     dashboard and the round's own screen use. See useLastRunScope. */
+  const commentScope = useLastRunScope(commentFor?.id ?? null);
   /*
    * WHICH ROUND THE QUEUE TUNER IS ABOUT — null when it is closed, so one
    * sheet serves every card, exactly as the dashboard does it.
@@ -1361,10 +1364,11 @@ export default function CampaignsPage() {
         key={commentFor?.id ?? 'none'}
         open={commentFor !== null}
         onClose={() => setCommentFor(null)}
-        /* The round's LIFETIME publications, which is what
-           queueCampaignComment actually matches — `progress.published` is
-           today's on a repeating round. Same reason as the dashboard's. */
-        publishedCount={commentFor ? stateOf(commentFor).everPublished : 0}
+        /* The LAST RUN's publications, which is what queueCampaignComment
+           now matches. It was `everPublished` — everything the round had put
+           out since the day it was created. Same reason as the dashboard's. */
+        publishedCount={commentScope === undefined ? null : (commentScope?.count ?? 0)}
+        runLabel={runLabelOf(commentScope)}
         initialText={commentFor?.comment_text ?? ''}
         initialMedia={commentFor?.comment_media ?? []}
         initialGapSeconds={commentFor?.comment_gap_seconds ?? 30}
@@ -1375,7 +1379,8 @@ export default function CampaignsPage() {
           void act(
             'comment',
             async () => {
-              await queueCampaignComment(round.id, text, media, gapSeconds);
+              if (!commentScope) return;
+              await queueCampaignComment(commentScope, text, media, gapSeconds);
               setCommentFor(null);
             },
             'נשלח. התגובות יתווספו אחת-אחת, במרווח שבחרתם.',

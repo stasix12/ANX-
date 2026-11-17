@@ -32,14 +32,19 @@
  * full viewport width up to md, `md:max-w-lg` (512px) above it, `px-4` either
  * side of the content.
  *
- * HOW THE PROPS ARE BUILT. Three routes render it — src/app/social/page.tsx:2396,
- * src/app/social/campaigns/[id]/page.tsx:766 and src/app/social/campaigns/
- * page.tsx:1338 — and all three pass the same shape: `publishedCount` from the
- * round's count, `initialText`/`initialMedia`/`initialGapSeconds` from
+ * HOW THE PROPS ARE BUILT. Three routes render it — src/app/social/page.tsx,
+ * src/app/social/campaigns/[id]/page.tsx and src/app/social/campaigns/page.tsx
+ * — and all three now pass the same two values out of ONE read, useLastRunScope:
+ * `publishedCount` from the last run's own count and `runLabel` naming that
+ * run, with `initialText`/`initialMedia`/`initialGapSeconds` from
  * `campaign.comment_text` / `comment_media` / `comment_gap_seconds ?? 30`.
- * The dashboard's own note says publishedCount is the LIFETIME count
- * (`everPublished`), naming 1,027 as the figure a real round reaches, which is
- * why the wide case below uses it.
+ *
+ * IT USED TO BE THE LIFETIME COUNT, and the widest case here is kept at 1,027
+ * because of what that cost: the sheet showed the round's lifetime figure over
+ * a write that really did touch all of them — "לא נותן להוסיף תגובה לא רק
+ * לפוסט שבחרתי אלא ל-224 פרסומים". A single run no longer reaches four digits
+ * on this owner's account, but the paragraph and the button must still survive
+ * one that does, and the longest `howLong` branch lives up there.
  *
  * ─── THE SHAPES CHOSEN, AND WHY ──────────────────────────────────────────
  *
@@ -67,6 +72,9 @@
  */
 import { createElement } from 'react';
 import { renderSnapshot } from './render-html';
+/* The product's own label builder, so the isolate characters and the
+   separator measured here are the ones the sheet really renders. */
+import { runLabelOf } from '@/components/social/CampaignCommentSheet';
 import { CloseIcon } from '@/components/icons';
 import { MediaUploader } from '@/components/social/MediaUploader';
 import { Button, Field, IconButton, Notice, SegmentedControl, inputClass } from '@/components/social/ui';
@@ -110,17 +118,26 @@ const pic = `data:image/svg+xml;utf8,${encodeURIComponent(
   '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120"><rect width="120" height="120" fill="#c4b5fd"/></svg>',
 )}`;
 
+/* The run every non-empty case is about, through the component's own helper. */
+const RUN = runLabelOf({ roundAt: '16:23', fromISO: '2026-11-17T00:00:00.000Z', lastPublishedAt: '2026-11-17T14:41:00.000Z' });
+
 /** A real price-list attachment, the shape this sheet is for. */
 const priceList: MediaItem[] = [{ kind: 'image', url: pic, path: 'social-media/pricelist.png', name: 'מחירון נובמבר.png' }];
 
 /** The sheet's body, transcribed from CampaignCommentSheet.tsx:63-154. */
 function CommentBody({
   publishedCount,
+  runLabel = '',
   text,
   media,
   gapSeconds,
 }: {
   publishedCount: number;
+  /* The run the number is about — "17.11 · 16:23", wrapped in the same
+     isolate characters runLabelOf() produces, because they are what keeps the
+     date in front of the hour inside an RTL sentence and they are part of
+     what gets measured. */
+  runLabel?: string;
   text: string;
   media: MediaItem[];
   gapSeconds: number;
@@ -171,8 +188,9 @@ function CommentBody({
       </div>
 
       <p className="mt-3 text-sm text-mist-300">
-        התגובה תיווסף ל-{publishedCount} הפרסומים שכבר יצאו בסבב הזה, מהחשבון שלכם — {howLong} בסך הכול.
+        התגובה תיווסף ל-{publishedCount} הפרסומים של הריצה האחרונה{runLabel ? ` (${runLabel})` : ''}, מהחשבון שלכם — {howLong} בסך הכול.
       </p>
+      <p className="mt-1.5 text-xs text-mist-500">פרסומים של ריצות קודמות באותו סבב לא ייגעו.</p>
       <p className="mt-1.5 text-xs text-mist-500">
         הן נוספות אחת-אחת ולא כולן יחד, והתוכנה במחשב צריכה לפעול לאורך כל הזמן הזה. אפשר לעקוב בכרטיס הסבב.
       </p>
@@ -199,6 +217,7 @@ const CASES: { id: string; what: string; props: Parameters<typeof CommentBody>[0
     what: '1027 publications at 60s — four digits in the paragraph and the button, "בערך 17.1 שעות"',
     props: {
       publishedCount: 1027,
+      runLabel: RUN,
       text: 'מחירון מלא בתמונה 👇 ניקוי ספות, שטיחים וריפודי רכב בבאר שבע והסביבה — לתיאום: 050-0000000',
       media: priceList,
       gapSeconds: 60,
@@ -209,6 +228,7 @@ const CASES: { id: string; what: string; props: Parameters<typeof CommentBody>[0
     what: 'the same round at 10s — the only state that lights the account-safety paragraph',
     props: {
       publishedCount: 1027,
+      runLabel: RUN,
       text: 'מחירון מלא בתמונה 👇 ניקוי ספות, שטיחים וריפודי רכב בבאר שבע והסביבה — לתיאום: 050-0000000',
       media: priceList,
       gapSeconds: 10,
@@ -217,12 +237,12 @@ const CASES: { id: string; what: string; props: Parameters<typeof CommentBody>[0
   {
     id: 'twentyone-30s',
     what: '21 publications at the shipped 30s default — the first Russian plural form, "בערך 11 דקות"',
-    props: { publishedCount: 21, text: 'מחירון בתמונה 👇', media: [], gapSeconds: 30 },
+    props: { publishedCount: 21, runLabel: RUN, text: 'מחירון בתמונה 👇', media: [], gapSeconds: 30 },
   },
   {
     id: 'single-5s',
     what: 'one publication at the 5s floor — the "פחות מדקה" branch, and the disabled button',
-    props: { publishedCount: 1, text: '', media: [], gapSeconds: 5 },
+    props: { publishedCount: 1, runLabel: RUN, text: '', media: [], gapSeconds: 5 },
   },
   {
     id: 'nothing-published',
@@ -235,7 +255,7 @@ const body = CASES.map(
   (c) => `
   <p data-no-translate style="color:#9aa;font:12px sans-serif;margin:18px 0 6px" data-case="${c.id}">${c.what}</p>
   ${renderSnapshot(
-    createElement(SheetShell, { title: 'הוסף תגובה לכל הפרסומים בסבב', children: createElement(CommentBody, c.props) }),
+    createElement(SheetShell, { title: 'הוסף תגובה לפרסומים של הריצה האחרונה', children: createElement(CommentBody, c.props) }),
   )}`,
 ).join('');
 

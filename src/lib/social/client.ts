@@ -2354,7 +2354,119 @@ export async function reopenCampaign(id: string): Promise<void> {
 }
 
 /**
- * Ask for a comment on every post this round has already published.
+ * ─── WHICH PUBLICATIONS A COMMENT IS ABOUT ───────────────────────────────
+ *
+ * "שאני רוצה להוסיף תגובה מהירה הוא לא נותן להוסיף תגובה לא רק לפוסט שבחרתי
+ *  אלא ל-224 פרסומים."
+ *
+ * He is right, and it was not a bug — it was the design, and the design was
+ * wrong. This write matched `campaign_id = X and status = 'published'` with no
+ * date bound and no round bound, so pressing it put a comment under every post
+ * the round had published SINCE THE DAY IT WAS CREATED. On his account that is
+ * 224 posts, the oldest of them weeks old, each comment going out under his own
+ * name into a real group with no way to take it back.
+ *
+ * The card he pressed it from says "132 קבוצות", which is a third number again
+ * — distinct groups, not publications — so nothing on screen ever named the
+ * set the button would touch.
+ *
+ * SO THE SCOPE IS RESOLVED FIRST, SHOWN, AND THEN HANDED TO THE WRITE. The
+ * screen reads this, prints its `count`, and passes the same object back; the
+ * write touches exactly the rows the number described. Resolving it inside the
+ * write instead would have been shorter and would have let a run that started
+ * while the sheet was open silently move the target.
+ *
+ * WHAT A RUN IS. The round's own 'HH:MM' (social_queue.round_at, written by
+ * plan.ts when the row was created) together with the local day that row was
+ * SCHEDULED for. Scheduled and not published, because a run that starts at
+ * 23:50 and finishes after midnight is one run, and the day it went out in is
+ * an accident of pacing.
+ *
+ * ROWS WITH NO ROUND ARE THE WHOLE DAY. That is every row created before v30
+ * and every row on a database that has not run social-latest.sql — and it is
+ * right, because a campaign with one occasion a day has only ever had one run
+ * a day. progressByRound() folds the same '' key into round one for the same
+ * reason.
+ */
+export interface LastRunScope {
+  campaignId: string;
+  /** The run's own 'HH:MM', or '' when the rows predate `round_at`. */
+  roundAt: string;
+  /** The run's local day, as UTC instants — matched against `scheduled_at`. */
+  fromISO: string;
+  toISO: string;
+  /** Published rows in the run when this was read. The number the sheet shows. */
+  count: number;
+  /** The run's newest publication, for the sentence above the number. */
+  lastPublishedAt: string | null;
+}
+
+/**
+ * The most recent run of a round, and how many posts it put out.
+ *
+ * `null` when the round has never published: there is nothing to comment on,
+ * which is a different answer from "a run of zero" and the sheet says so.
+ */
+export async function lastRunScope(campaignId: string): Promise<LastRunScope | null> {
+  /*
+   * NEWEST BY `published_at`, which is the only column that says what actually
+   * went out last. Ordering by scheduled_at would pick a row that is due later
+   * today and has not published at all.
+   */
+  const newest = await db()
+    .from('social_queue')
+    .select('id, round_at, scheduled_at, published_at')
+    .eq('campaign_id', campaignId)
+    .eq('status', 'published')
+    .order('published_at', { ascending: false, nullsFirst: false })
+    .limit(1)
+    .maybeSingle();
+  /*
+   * A DATABASE WITHOUT `round_at` STILL ANSWERS. Postgres refuses the whole
+   * select for one unknown column, and the owner would meet a dead sheet
+   * rather than a comment scoped to the day — which is the correct answer on
+   * exactly those rows. So the column is dropped and the day stands alone.
+   */
+  let row = newest.data as { round_at?: string | null; scheduled_at: string; published_at: string | null } | null;
+  if (newest.error) {
+    if (!/round_at|column/i.test(newest.error.message)) throw friendlyError(newest.error);
+    const again = await db()
+      .from('social_queue')
+      .select('id, scheduled_at, published_at')
+      .eq('campaign_id', campaignId)
+      .eq('status', 'published')
+      .order('published_at', { ascending: false, nullsFirst: false })
+      .limit(1)
+      .maybeSingle();
+    if (again.error) throw friendlyError(again.error);
+    row = again.data as typeof row;
+  }
+  if (!row) return null;
+
+  /* The run's own day, resolved in the app's zone and only then turned into
+     instants — the same two-step startOfZonedWeek uses, so the two days a year
+     that are not 24 hours long cannot move the boundary. */
+  const dayISO = zonedDateISO(new Date(row.scheduled_at));
+  const fromISO = zonedToUtc(dayISO, '00:00').toISOString();
+  const toISO = zonedToUtc(addDaysISO(dayISO, 1), '00:00').toISOString();
+  const roundAt = typeof row.round_at === 'string' ? row.round_at : '';
+
+  let q = db()
+    .from('social_queue')
+    .select('id', { count: 'exact', head: true })
+    .eq('campaign_id', campaignId)
+    .eq('status', 'published')
+    .gte('scheduled_at', fromISO)
+    .lt('scheduled_at', toISO);
+  if (roundAt) q = q.eq('round_at', roundAt);
+  const counted = await q;
+  if (counted.error) throw friendlyError(counted.error);
+
+  return { campaignId, roundAt, fromISO, toISO, count: counted.count ?? 0, lastPublishedAt: row.published_at ?? null };
+}
+
+/**
+ * Ask for a comment on the posts of ONE RUN of this round.
  *
  * THE OWNER DECIDES WHEN, which is the whole point: a price list is worth
  * adding once the post has had a few hours to be seen, and the first version
@@ -2375,11 +2487,12 @@ export async function reopenCampaign(id: string): Promise<void> {
  * means "say this too", not "skip the ones that worked".
  */
 export async function queueCampaignComment(
-  campaignId: string,
+  scope: LastRunScope,
   text: string,
   media: MediaItem[],
   gapSeconds: number,
 ): Promise<number> {
+  const campaignId = scope.campaignId;
   const saved = await db()
     .from('social_campaigns')
     /* Clamped here as well as in the input, because this is the last place
@@ -2402,7 +2515,7 @@ export async function queueCampaignComment(
     }
     throw new Error(saved.error.message);
   }
-  const marked = await db()
+  let marked = db()
     .from('social_queue')
     /* The old reason is cleared with the state it explained. A row that says
        "ממתין" under last week's "הפוסט נמחק" is a screen contradicting
@@ -2410,6 +2523,15 @@ export async function queueCampaignComment(
     .update({ comment_status: 'pending', comment_at: null, comment_note: '' })
     .eq('campaign_id', campaignId)
     .eq('status', 'published')
+    /*
+     * THE RUN, AND ONLY THE RUN — see LastRunScope above for what he met
+     * without these three lines. The window is on `scheduled_at` because that
+     * is what makes a run one run across midnight; `round_at` narrows it to
+     * the occasion when the database records one, and is left off when it does
+     * not, where the day IS the run.
+     */
+    .gte('scheduled_at', scope.fromISO)
+    .lt('scheduled_at', scope.toISO)
     /*
      * EXCEPT THE ONE THE WORKER IS HOLDING RIGHT NOW.
      *
@@ -2424,15 +2546,16 @@ export async function queueCampaignComment(
      * One post out of the round misses this particular re-queue. It gets the
      * comment it was already being given.
      */
-    .neq('comment_status', 'commenting')
-    .select('id');
-  if (marked.error) {
-    if (/column|comment_status|comment_note/i.test(marked.error.message)) {
+    .neq('comment_status', 'commenting');
+  if (scope.roundAt) marked = marked.eq('round_at', scope.roundAt);
+  const wrote = await marked.select('id');
+  if (wrote.error) {
+    if (/column|comment_status|comment_note|round_at/i.test(wrote.error.message)) {
       throw new Error('צריך להריץ את social-latest.sql ב-Supabase לפני שאפשר להוסיף תגובות. אפשר להריץ אותו שוב גם אם כבר הרצתם.');
     }
-    throw new Error(marked.error.message);
+    throw new Error(wrote.error.message);
   }
-  return marked.data?.length ?? 0;
+  return wrote.data?.length ?? 0;
 }
 
 /**

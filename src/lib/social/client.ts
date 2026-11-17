@@ -2413,6 +2413,15 @@ export interface LastRunScope {
   ids: string[];
   /** How many posts the run holds. `ids.length`, named for the screens. */
   count: number;
+  /**
+   * The run was longer than this reader is willing to walk, so `ids` is a
+   * FLOOR and not the whole of it.
+   *
+   * Disclosed rather than assumed away, like todayIsWhole and the rollup's own
+   * flag: a number that is really a ceiling, printed as a fact, is the shape
+   * of bug this whole function exists to end.
+   */
+  truncated: boolean;
   /** The run's newest publication, for the sentence above the number. */
   lastPublishedAt: string | null;
 }
@@ -2434,6 +2443,22 @@ export interface LastRunScope {
  */
 const ROUND_COLUMN_MISSING = /round_at|column|does not exist/i;
 
+/*
+ * ONE PAGE OF THE RUN, at the server's own ceiling and not above it.
+ *
+ * "1000 AND NOT 5000 — ABOVE THE SERVER'S OWN CEILING THE GUARD IS DEAD":
+ * PostgREST's db-max-rows is 1000 on Supabase, so a limit of 5000 returns
+ * 1000 and a `length >= limit` test can never fire. The first version of this
+ * asked for 5000 and derived the sheet's number from what came back, which
+ * would have printed a truncated count as a fact and commented on a run's
+ * first thousand posts while reporting all of them.
+ *
+ * So the run is PAGED at exactly the ceiling, and the ceiling below is the
+ * only thing that can cut it short — disclosed, never assumed away.
+ */
+const RUN_PAGE = 1000;
+const RUN_MAX_PAGES = 20;
+
 /**
  * The most recent run of a round: which posts it put out, and which ones.
  *
@@ -2449,56 +2474,84 @@ export async function lastRunScope(campaignId: string): Promise<LastRunScope | n
   const newestOf = (withRound: boolean) =>
     db()
       .from('social_queue')
-      .select(withRound ? 'id, round_at, scheduled_at, published_at' : 'id, scheduled_at, published_at')
+      .select(withRound ? 'id, round_at, published_at' : 'id, published_at')
       .eq('campaign_id', campaignId)
       .eq('status', 'published')
       .order('published_at', { ascending: false, nullsFirst: false })
       .limit(1)
       .maybeSingle();
 
-  type Row = { id: string; round_at?: string | null; scheduled_at: string; published_at: string | null };
+  type Row = { id: string; round_at?: string | null; published_at: string | null };
   let newest = await newestOf(true);
   if (newest.error && ROUND_COLUMN_MISSING.test(newest.error.message)) newest = await newestOf(false);
   if (newest.error) throw friendlyError(newest.error);
   const row = newest.data as unknown as Row | null;
-  if (!row) return null;
+  if (!row?.published_at) return null;
 
-  /* The run's own day, resolved in the app's zone and only then turned into
-     instants — the same two-step startOfZonedWeek uses, so the two days a year
-     that are not 24 hours long cannot move the boundary.
-
-     THE DAY IT WAS SCHEDULED FOR, not the day it published: a run that starts
-     at 23:50 and finishes after midnight is one run, and which side of
-     midnight each row landed on is an accident of pacing. */
-  const dayISO = zonedDateISO(new Date(row.scheduled_at));
+  /*
+   * ─── THE DAY IS `published_at`'s, AND THAT IS THE SECOND ANSWER ─────────
+   *
+   * The first version keyed the run on the local day of `scheduled_at`, on
+   * the reasoning that a run starting at 23:50 and finishing after midnight
+   * is one run and which side of midnight each row landed on is an accident
+   * of pacing. The reasoning is fine and the column is not: `scheduled_at` is
+   * REWRITTEN after planning. The worker stamps `scheduled_at: decision.until`
+   * on every deferral, and rules.ts parks a row at the start of the next day
+   * when a daily cap is reached — so a row of this run that was deferred has
+   * moved OUT of its own run's window, and a row deferred INTO today from
+   * yesterday's run has moved in. campaign.ts says the same thing about
+   * guessing a round from the clock: "a deferred row has moved".
+   *
+   * `published_at` is written once, when the post actually goes out, and
+   * never again. It is also the unit the card the owner presses already uses
+   * — QuickCommentsCard keeps a round only when its LAST PUBLICATION is
+   * today — so the sheet and the card now measure the same thing, which is
+   * the whole of what he reported.
+   *
+   * WHAT IT COSTS, said plainly: a run that straddles midnight is read as the
+   * part that published on the newest row's day. That is rarer than a
+   * deferral, and it errs by commenting on fewer posts rather than more.
+   */
+  const dayISO = zonedDateISO(new Date(row.published_at));
   const fromISO = zonedToUtc(dayISO, '00:00').toISOString();
   const toISO = zonedToUtc(addDaysISO(dayISO, 1), '00:00').toISOString();
   const roundAt = typeof row.round_at === 'string' ? row.round_at : '';
 
   /* Every published row of that day, so the run can be picked out of them in
      JS rather than by a filter the database might refuse. One campaign, one
-     day — this is the size of a round, not of the table. */
-  const dayOf = (withRound: boolean) =>
+     day — this is the size of a round, not of the table. Ordered by id so the
+     pages below cannot overlap or skip. */
+  const pageOf = (withRound: boolean, at: number) =>
     db()
       .from('social_queue')
       .select(withRound ? 'id, round_at' : 'id')
       .eq('campaign_id', campaignId)
       .eq('status', 'published')
-      .gte('scheduled_at', fromISO)
-      .lt('scheduled_at', toISO)
-      .limit(5000);
-  let day = await dayOf(true);
-  if (day.error && ROUND_COLUMN_MISSING.test(day.error.message)) day = await dayOf(false);
-  if (day.error) throw friendlyError(day.error);
+      .gte('published_at', fromISO)
+      .lt('published_at', toISO)
+      .order('id', { ascending: true })
+      .range(at, at + RUN_PAGE - 1);
 
-  /* `as unknown as` because the select string is chosen at runtime and the
-     client's type parser cannot follow it — the same reason the two reads are
-     written as functions rather than inline. */
-  const ids = ((day.data ?? []) as unknown as { id: string; round_at?: string | null }[])
-    .filter((r) => (typeof r.round_at === 'string' ? r.round_at : '') === roundAt)
-    .map((r) => r.id);
+  let withRound = true;
+  const ids: string[] = [];
+  let truncated = false;
+  for (let page = 0; ; page += 1) {
+    if (page >= RUN_MAX_PAGES) {
+      truncated = true;
+      break;
+    }
+    let got = await pageOf(withRound, page * RUN_PAGE);
+    if (got.error && withRound && ROUND_COLUMN_MISSING.test(got.error.message)) {
+      withRound = false;
+      got = await pageOf(false, page * RUN_PAGE);
+    }
+    if (got.error) throw friendlyError(got.error);
+    const rows = (got.data ?? []) as unknown as { id: string; round_at?: string | null }[];
+    for (const r of rows) if ((typeof r.round_at === 'string' ? r.round_at : '') === roundAt) ids.push(r.id);
+    if (rows.length < RUN_PAGE) break;
+  }
 
-  return { campaignId, roundAt, fromISO, toISO, ids, count: ids.length, lastPublishedAt: row.published_at ?? null };
+  return { campaignId, roundAt, fromISO, toISO, ids, count: ids.length, truncated, lastPublishedAt: row.published_at };
 }
 
 /**

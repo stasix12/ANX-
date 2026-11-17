@@ -2068,8 +2068,14 @@ export const WORKER_VERSION = '4.83.0';
  *   lastRunScope 0   queueCampaignComment 0   ROUND_COLUMN_MISSING 0
  *   planQueue 4)
  *
+ * (ושוב אחרי שהסקירה היריבית מצאה שני פגמים: הריצה זוהתה לפי היום של
+ * scheduled_at, עמודה שהעובד משכתב בכל דחייה — ועברה ל-published_at, שנכתבת
+ * פעם אחת; והקריאה ביקשה 5000 שורות מעל תקרת 1000 של PostgREST, מה שהיה
+ * מדפיס תקרה כעובדה — ועברה לדפדוף. lastRunScope 0, queueCampaignComment 0,
+ * RUN_PAGE 0, planQueue 4.)
+ *
  * אפס. לכן טביעת האצבע מודבקת והמספר נשאר — וזה בדיוק מה שהשומר אומר לעשות
  * כשהתשובה היא לא. העלאה היתה מודיעה לכל עותק מותקן שהוא מיושן ומבקשת
  * התקנה מחדש שלא משנה בייט אחד על המכונה.
  */
-export const WORKER_FINGERPRINT = '6d46637f54bae669';
+export const WORKER_FINGERPRINT = 'f4d4103b6351e4ca';

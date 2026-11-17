@@ -145,7 +145,7 @@ export default function CampaignsPage() {
   const [commentFor, setCommentFor] = useState<Campaign | null>(null);
   /* The run the sheet is about, read when it opens — the same hook the
      dashboard and the round's own screen use. See useLastRunScope. */
-  const commentScope = useLastRunScope(commentFor?.id ?? null);
+  const { scope: commentScope, failed: commentFailed } = useLastRunScope(commentFor?.id ?? null);
   /*
    * WHICH ROUND THE QUEUE TUNER IS ABOUT — null when it is closed, so one
    * sheet serves every card, exactly as the dashboard does it.
@@ -1368,6 +1368,8 @@ export default function CampaignsPage() {
            now matches. It was `everPublished` — everything the round had put
            out since the day it was created. Same reason as the dashboard's. */
         publishedCount={commentScope === undefined ? null : (commentScope?.count ?? 0)}
+        atLeast={!!commentScope?.truncated}
+        failed={commentFailed}
         runLabel={runLabelOf(commentScope)}
         initialText={commentFor?.comment_text ?? ''}
         initialMedia={commentFor?.comment_media ?? []}

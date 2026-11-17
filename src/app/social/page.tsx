@@ -316,7 +316,7 @@ export default function SocialDashboard() {
   const [commentFor, setCommentFor] = useState<Campaign | null>(null);
   /* Which run the comment sheet is about — read when it opens, not derived
      from the dashboard's own counters. See useLastRunScope. */
-  const commentScope = useLastRunScope(commentFor?.id ?? null);
+  const { scope: commentScope, failed: commentFailed } = useLastRunScope(commentFor?.id ?? null);
   /* Every featured run's cover, by campaign id. Read on their own, because the
      queue rows carry their post only while something is still scheduled — a
      finished run would lose its picture exactly when the owner looks to see
@@ -2412,6 +2412,8 @@ export default function SocialDashboard() {
          * and the write cannot drift apart again. See useLastRunScope.
          */
         publishedCount={commentScope === undefined ? null : (commentScope?.count ?? 0)}
+        atLeast={!!commentScope?.truncated}
+        failed={commentFailed}
         runLabel={runLabelOf(commentScope)}
         initialText={commentFor?.comment_text ?? ''}
         initialMedia={commentFor?.comment_media ?? []}

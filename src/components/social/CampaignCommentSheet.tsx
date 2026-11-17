@@ -57,30 +57,45 @@ const QUICK_GAPS = ['10', '20', '30', '60'];
  * number described, and a run that starts behind the open sheet must not move
  * the target under the person deciding.
  */
-export function useLastRunScope(campaignId: string | null): LastRunScope | null | undefined {
-  const [scope, setScope] = useState<LastRunScope | null | undefined>(undefined);
+export interface RunScopeState {
+  /** undefined while reading, null when the round has never published. */
+  scope: LastRunScope | null | undefined;
+  /**
+   * THE READ ITSELF FAILED — which is not "this round has never published".
+   *
+   * Both used to land on `null`, and the sheet then told the owner "בסבב הזה
+   * עוד לא יצא אף פרסום" over a round that had published all morning, on any
+   * refusal: an RLS rule, an offline phone, a column a migration has not
+   * added. A product that reports a failure as an emptiness is the same
+   * mistake as a product that reports a ceiling as a count.
+   */
+  failed: boolean;
+}
+
+export function useLastRunScope(campaignId: string | null): RunScopeState {
+  const [state, setState] = useState<RunScopeState>({ scope: undefined, failed: false });
   useEffect(() => {
     if (!campaignId) {
-      setScope(undefined);
+      setState({ scope: undefined, failed: false });
       return;
     }
     let alive = true;
-    setScope(undefined);
+    setState({ scope: undefined, failed: false });
     lastRunScope(campaignId)
       .then((s) => {
-        if (alive) setScope(s);
+        if (alive) setState({ scope: s, failed: false });
       })
-      /* A failed read is "we could not tell", and the sheet's empty case says
-         so in words. Throwing here would take the whole screen down over a
-         sheet nobody has typed into yet. */
+      /* Said in the sheet, not thrown: this runs behind a sheet nobody has
+         typed into yet, and taking the screen down over it would be worse
+         than the sheet saying it could not tell. */
       .catch(() => {
-        if (alive) setScope(null);
+        if (alive) setState({ scope: null, failed: true });
       });
     return () => {
       alive = false;
     };
   }, [campaignId]);
-  return scope;
+  return state;
 }
 
 export function runLabelOf(scope: Pick<LastRunScope, 'roundAt' | 'fromISO' | 'lastPublishedAt'> | null | undefined): string {
@@ -95,6 +110,8 @@ export function CampaignCommentSheet({
   onClose,
   publishedCount,
   runLabel = '',
+  atLeast = false,
+  failed = false,
   initialText,
   initialMedia,
   initialGapSeconds,
@@ -123,6 +140,10 @@ export function CampaignCommentSheet({
    * checkable against the card he pressed.
    */
   runLabel?: string;
+  /** The count is a FLOOR — the run was longer than the reader would walk. */
+  atLeast?: boolean;
+  /** The read failed, which the sheet must not draw as "nothing published". */
+  failed?: boolean;
   initialText: string;
   initialMedia: MediaItem[];
   initialGapSeconds: number;
@@ -151,7 +172,10 @@ export function CampaignCommentSheet({
 
   return (
     <Sheet open={open} onClose={onClose} title={t('הוסף תגובה לפרסומים של הריצה האחרונה')}>
-      {publishedCount === null ? (
+      {failed ? (
+        /* See RunScopeState.failed. A refusal is not an emptiness. */
+        <Notice tone="warn">{t('לא הצלחנו לבדוק על אילו פרסומים התגובה תיווסף. סגרו ונסו שוב.')}</Notice>
+      ) : publishedCount === null ? (
         /* Still reading which run this is. See the prop's note for why this is
            not drawn as the empty case. */
         <p className="text-sm text-mist-500">{t('בודק על אילו פרסומים התגובה תיווסף…')}</p>
@@ -222,7 +246,7 @@ export function CampaignCommentSheet({
               and a number with no run beside it cannot be checked against the
               card it was pressed from. */}
           <p className="mt-3 text-sm text-mist-300">
-            התגובה תיווסף ל-{count} הפרסומים של הריצה האחרונה{runLabel ? ` (${runLabel})` : ''}, מהחשבון שלכם — {howLong} בסך הכול.
+            התגובה תיווסף ל-{atLeast ? 'לפחות ' : ''}{count} הפרסומים של הריצה האחרונה{runLabel ? ` (${runLabel})` : ''}, מהחשבון שלכם — {howLong} בסך הכול.
           </p>
           <p className="mt-1.5 text-xs text-mist-500">
             {t('פרסומים של ריצות קודמות באותו סבב לא ייגעו.')}

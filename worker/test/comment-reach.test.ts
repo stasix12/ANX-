@@ -203,9 +203,41 @@ is(
 const scopeFn = client.slice(client.indexOf('export async function lastRunScope'));
 const scopeBody = scopeFn.slice(0, scopeFn.indexOf('\n}\n'));
 is(/\.order\('published_at', \{ ascending: false, nullsFirst: false \}\)/.test(scopeBody), true, 'the run is found from the NEWEST publication — ordering by scheduled_at would pick a row due later today that has not published at all');
-is(/zonedDateISO\(new Date\(row\.scheduled_at\)\)/.test(scopeBody), true, "and its day is the day that row was SCHEDULED for, resolved in the app's zone");
+/*
+ * THE DAY COMES FROM `published_at`, AND THE FIRST VERSION HAD IT WRONG.
+ *
+ * It keyed the run on the local day of `scheduled_at`, so that a run starting
+ * at 23:50 and ending after midnight stayed one run. The reasoning was fine
+ * and the column is not: the worker rewrites `scheduled_at` on every deferral
+ * and rules.ts parks a row at the next day when a daily cap is hit, so a
+ * deferred row of this run had moved OUT of its own run's window and a row
+ * deferred in from yesterday had moved IN. campaign.ts says the same of
+ * guessing a round from the clock — "a deferred row has moved".
+ *
+ * `published_at` is written once and never again, and it is the unit the card
+ * he presses already uses.
+ */
+is(/zonedDateISO\(new Date\(row\.published_at\)\)/.test(scopeBody), true, "the run's day is the day it PUBLISHED, read off a column nothing rewrites");
+/* The USES, not the prose: the note above says at length why the column was
+   abandoned, and a test a comment can break is a test that gets deleted. */
+is(
+  /row\.scheduled_at|\.(gte|gt|lt|lte|eq|order)\(\s*'scheduled_at'/.test(scopeBody),
+  false,
+  'scheduled_at is still used to identify a run — four writers move it after planning, so a deferred row leaves its own run',
+);
 is(/zonedToUtc\(dayISO, '00:00'\)/.test(scopeBody) && /zonedToUtc\(addDaysISO\(dayISO, 1\), '00:00'\)/.test(scopeBody), true, 'both edges through time.ts, so the two days a year that are not 24 hours long cannot move them');
 is(/count: ids\.length/.test(scopeBody), true, 'the number the sheet shows IS the length of the list the write will touch — one source, so they cannot disagree');
+/*
+ * AND IT IS PAGED AT THE SERVER'S CEILING, NOT ABOVE IT. The first version
+ * asked for 5000 rows; PostgREST's db-max-rows is 1000 on Supabase, so it
+ * would have been handed 1000, counted them, and printed a ceiling as a fact
+ * while commenting on a run's first thousand posts only. The same trap this
+ * file's CAMPAIGN_ROLLUP_LIMIT note describes in full.
+ */
+is(/const RUN_PAGE = 1000;/.test(client), true, 'the run is read a page at a time, at the server ceiling and not above it');
+is(/\.range\(at, at \+ RUN_PAGE - 1\)/.test(scopeBody), true, 'by range, so a run longer than one page is still read whole');
+is(/if \(rows\.length < RUN_PAGE\) break;/.test(scopeBody), true, 'and it stops on the first short page rather than guessing the end');
+is(/truncated = true;/.test(scopeBody), true, 'a run past even the page ceiling marks itself truncated rather than reporting a floor as a total');
 /*
  * AND IT SURVIVES A DATABASE THAT HAS NOT RUN social-latest.sql. Both reads
  * name round_at and both are allowed to fail back to a select without it,
@@ -214,7 +246,11 @@ is(/count: ids\.length/.test(scopeBody), true, 'the number the sheet shows IS th
  * performs under the '' key.
  */
 is((scopeBody.match(/ROUND_COLUMN_MISSING\.test\(/g) ?? []).length >= 2, true, 'both reads fall back when the column is absent');
-is(/\.filter\(\(r\) => \(typeof r\.round_at === 'string' \? r\.round_at : ''\) === roundAt\)/.test(scopeBody), true, 'the run is picked out of the day in JS, where a missing column is undefined rather than an error');
+is(
+  /if \(\(typeof r\.round_at === 'string' \? r\.round_at : ''\) === roundAt\) ids\.push\(r\.id\);/.test(scopeBody),
+  true,
+  'the run is picked out of the day in JS, where a missing column is undefined rather than an error',
+);
 
 /*
  * AND EVERY SCREEN ASKS THE SAME QUESTION. Three open this sheet, and before
@@ -228,7 +264,7 @@ for (const screen of [
   ['src/app/social/campaigns/[id]/page.tsx', "the round's own screen"],
 ] as const) {
   const src = readFileSync(path.join(__dirname, '..', '..', ...screen[0].split('/')), 'utf8');
-  is(/useLastRunScope\(/.test(src), true, `${screen[1]} reads the run through the one hook`);
+  is(/const \{ scope: commentScope, failed: commentFailed \} = useLastRunScope\(/.test(src), true, `${screen[1]} reads the run through the one hook`);
   is(/queueCampaignComment\(commentScope,/.test(src), true, `${screen[1]} writes to the run it showed`);
   is(/if \(!commentScope\) return/.test(src), true, `${screen[1]} cannot submit before the run is known — a bare id would widen the write back to the whole round`);
   is(
@@ -236,6 +272,11 @@ for (const screen of [
     true,
     `${screen[1]} shows the run's own count, and tells "still reading" apart from "nothing published"`,
   );
+  /* A REFUSAL IS NOT AN EMPTINESS. Both used to land on null, and the sheet
+     then said "בסבב הזה עוד לא יצא אף פרסום" over a round that had published
+     all morning, on any RLS refusal or offline phone. */
+  is(/failed=\{commentFailed\}/.test(src), true, `${screen[1]} tells the sheet when the read FAILED, rather than drawing it as "nothing published"`);
+  is(/atLeast=\{!!commentScope\?\.truncated\}/.test(src), true, `${screen[1]} passes the truncation flag, so a floor is never printed as a total`);
   is(/runLabel=\{runLabelOf\(commentScope\)\}/.test(src), true, `${screen[1]} names the run beside the number, so it can be checked against the card it was pressed from`);
   /* The PROP, not the file: two of these screens explain in a comment what
      `everPublished` used to be doing here, and a test a comment can break is

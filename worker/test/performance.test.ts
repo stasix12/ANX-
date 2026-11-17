@@ -662,10 +662,10 @@ const code = (rel: string) =>
     .filter((x) => /^[a-z_]+(, ?[a-z_]+)*$/i.test(x) && /\bround_at\b/.test(x));
   eq(
     roundStrings,
-    ['id, round_at, scheduled_at, published_at', 'id, round_at'],
+    ['id, round_at, published_at', 'id, round_at'],
     'client.ts names round_at in a string that is not one of lastRunScope\u2019s two tolerant selects. PostgREST refuses the whole read when the column is absent — it blanked every screen of an un-migrated database once, at 05:45, on the owner\u2019s phone.',
   );
-  for (const twin of ['id, scheduled_at, published_at', 'id']) {
+  for (const twin of ['id, published_at', 'id']) {
     is(
       clientCode.includes(`: '${twin}'`),
       `the tolerant select has no twin without round_at — '${twin}' is the one it must fall back to, and without it the fallback reads the column it is escaping`,

@@ -94,7 +94,7 @@ export default function CampaignControlCenter() {
   const [commentOpen, setCommentOpen] = useState(false);
   /* The run the sheet is about, read when it opens. `id` is this screen's own
      round, so the hook is given it only while the sheet is up. */
-  const commentScope = useLastRunScope(commentOpen ? id : null);
+  const { scope: commentScope, failed: commentFailed } = useLastRunScope(commentOpen ? id : null);
   const [posts, setPosts] = useState<Post[]>([]);
   const [state, setState] = useState<CampaignState<QueueRow> | null>(null);
   /* The global pause. This screen never read it, so the run badge said "רץ"
@@ -773,6 +773,8 @@ export default function CampaignControlCenter() {
                     /* The last run's publications, not every publication this
                        screen happens to be holding — see useLastRunScope. */
                     publishedCount={commentScope === undefined ? null : (commentScope?.count ?? 0)}
+                    atLeast={!!commentScope?.truncated}
+                    failed={commentFailed}
                     runLabel={runLabelOf(commentScope)}
                     initialText={campaign.comment_text ?? ''}
                     initialMedia={campaign.comment_media ?? []}

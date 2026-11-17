@@ -128,11 +128,20 @@ const priceList: MediaItem[] = [{ kind: 'image', url: pic, path: 'social-media/p
 function CommentBody({
   publishedCount,
   runLabel = '',
+  atLeast = false,
+  failed = false,
   text,
   media,
   gapSeconds,
 }: {
   publishedCount: number;
+  /* The count is a floor, not a total — the run was longer than the reader
+     would walk. One Hebrew word in front of a four-digit number, which is the
+     kind of thing that wraps a line in Russian. */
+  atLeast?: boolean;
+  /* The read failed. A refusal is not an emptiness, and it has its own
+     Notice — the widest single sentence in the sheet after the safety one. */
+  failed?: boolean;
   /* The run the number is about — "17.11 · 16:23", wrapped in the same
      isolate characters runLabelOf() produces, because they are what keeps the
      date in front of the hour inside an RTL sentence and they are part of
@@ -142,6 +151,9 @@ function CommentBody({
   media: MediaItem[];
   gapSeconds: number;
 }) {
+  if (failed) {
+    return <Notice tone="warn">לא הצלחנו לבדוק על אילו פרסומים התגובה תיווסף. סגרו ונסו שוב.</Notice>;
+  }
   if (publishedCount === 0) {
     return (
       <Notice tone="warn">
@@ -188,7 +200,7 @@ function CommentBody({
       </div>
 
       <p className="mt-3 text-sm text-mist-300">
-        התגובה תיווסף ל-{publishedCount} הפרסומים של הריצה האחרונה{runLabel ? ` (${runLabel})` : ''}, מהחשבון שלכם — {howLong} בסך הכול.
+        התגובה תיווסף ל-{atLeast ? 'לפחות ' : ''}{publishedCount} הפרסומים של הריצה האחרונה{runLabel ? ` (${runLabel})` : ''}, מהחשבון שלכם — {howLong} בסך הכול.
       </p>
       <p className="mt-1.5 text-xs text-mist-500">פרסומים של ריצות קודמות באותו סבב לא ייגעו.</p>
       <p className="mt-1.5 text-xs text-mist-500">
@@ -218,6 +230,9 @@ const CASES: { id: string; what: string; props: Parameters<typeof CommentBody>[0
     props: {
       publishedCount: 1027,
       runLabel: RUN,
+      /* The floor word in front of four digits, which is the widest the
+         paragraph gets in either language. */
+      atLeast: true,
       text: 'מחירון מלא בתמונה 👇 ניקוי ספות, שטיחים וריפודי רכב בבאר שבע והסביבה — לתיאום: 050-0000000',
       media: priceList,
       gapSeconds: 60,
@@ -248,6 +263,11 @@ const CASES: { id: string; what: string; props: Parameters<typeof CommentBody>[0
     id: 'nothing-published',
     what: 'nothing has gone out — the other whole branch, one Notice and no form',
     props: { publishedCount: 0, text: '', media: [], gapSeconds: 30 },
+  },
+  {
+    id: 'read-failed',
+    what: 'the scope read failed — a refusal, which is not an emptiness and has its own sentence',
+    props: { publishedCount: 0, failed: true, text: '', media: [], gapSeconds: 30 },
   },
 ];
 

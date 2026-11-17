@@ -247,10 +247,19 @@ is(/truncated = true;/.test(scopeBody), true, 'a run past even the page ceiling 
  */
 is((scopeBody.match(/ROUND_COLUMN_MISSING\.test\(/g) ?? []).length >= 2, true, 'both reads fall back when the column is absent');
 is(
-  /if \(\(typeof r\.round_at === 'string' \? r\.round_at : ''\) === roundAt\) ids\.push\(r\.id\);/.test(scopeBody),
+  /const own = typeof r\.round_at === 'string' \? r\.round_at : '';/.test(scopeBody),
   true,
   'the run is picked out of the day in JS, where a missing column is undefined rather than an error',
 );
+/*
+ * AND AN UNLABELLED ROW IS NOT A RUN OF ITS OWN. plan.ts writes `round_at`;
+ * the other path that inserts queue rows — appending groups to a round that
+ * is already running — does not, and neither did anything before v30.
+ * Matched against a real 'HH:MM' those rows landed in NO run: press after an
+ * appended group published and the scope was the appended handful, press
+ * after a planned one and the appended rows of the same round were dropped.
+ */
+is(/if \(!roundAt \|\| !own \|\| own === roundAt\) ids\.push\(r\.id\);/.test(scopeBody), true, 'a row with no occasion is claimed by the day\u2019s run, and an unlabelled newest row takes the whole day');
 
 /*
  * AND EVERY SCREEN ASKS THE SAME QUESTION. Three open this sheet, and before

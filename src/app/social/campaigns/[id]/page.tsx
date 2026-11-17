@@ -654,7 +654,7 @@ export default function CampaignControlCenter() {
           <Card
             id="comments"
             title="תגובה על הפרסומים של הסבב"
-            subtitle="מוסיפה תגובה מהחשבון שלכם לכל הפרסומים שכבר יצאו כאן — מתי שתחליטו, גם אחרי יום."
+            subtitle="מוסיפה תגובה מהחשבון שלכם לפרסומים של הריצה האחרונה — מתי שתחליטו, גם אחרי יום."
           >
             {(() => {
               /* No permalink test: a group post never has one, and requiring

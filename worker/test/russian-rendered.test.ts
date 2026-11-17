@@ -267,6 +267,10 @@ const NO_TRANSLATE_SITES = [
   'src/components/social/BrowserStatusCard.tsx:2',
   'src/components/social/CampaignCard.tsx:1',
   'src/components/social/CampaignTile.tsx:1',
+  /* The little window the rail opens — "להוסיף חלון קטן לראות את התגובה".
+     Two sites, both the owner's own words: the group's name and the
+     comment text the round holds. Neither is ours to translate. */
+  'src/components/social/CommentPreviewSheet.tsx:2',
   'src/components/social/CommentQueueCard.tsx:2',
   'src/components/social/CommentTimeline.tsx:3',
   'src/components/social/ContentCard.tsx:1',

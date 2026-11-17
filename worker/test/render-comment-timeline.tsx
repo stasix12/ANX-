@@ -24,6 +24,7 @@
 import { createElement } from 'react';
 import { renderSnapshot } from './render-html';
 import { CommentTimeline } from '@/components/social/CommentTimeline';
+import { CommentPreviewBody } from '@/components/social/CommentPreviewSheet';
 import type { QueueRow } from '@/lib/social/client';
 
 const row = (o: Partial<QueueRow> & { id: string }): QueueRow =>
@@ -290,11 +291,69 @@ const stalledUpcoming: QueueRow[] = [
 const stalledToday = { done: 0, failed: 11, unverified: 1 };
 const stalledTotals = { pending: 879, done: 0, failed: 11, unverified: 1 };
 
+/*
+ * ─── AND THE LITTLE WINDOW THE RAIL OPENS ────────────────────────────────
+ *
+ * "להוסיף חלון קטן לראות את התגובה." Measured as the body alone, because
+ * <Sheet> portals to document.body and draws nothing under
+ * renderToStaticMarkup — the same wall render-campaign-comment-sheet.tsx
+ * met. Exported rather than transcribed, so this measures the window itself.
+ *
+ * THE WORST CASE IT HAS: a Russian group name with nowhere to break, a price
+ * list long enough to wrap several times with a phone number in it, a picture
+ * attached, and the worker's own failure sentence under both — which is the
+ * only state that draws every block at once.
+ */
+const previewCampaign = {
+  id: 'r1',
+  name: 'סבב עם תגובה',
+  service: '',
+  city: '',
+  language: 'he',
+  status: 'active',
+  notes: '',
+  comment_text:
+    'מחירון מלא בתמונה 👇 ניקוי ספות, שטיחים וריפודי רכב בבאר שבע והסביבה. עבודה עם מכונת קיטור מקצועית, הגעה עד הבית, אחריות מלאה — לתיאום: 050-0000000',
+  comment_media: [
+    {
+      kind: 'image',
+      url: `data:image/svg+xml;utf8,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 240"><rect width="400" height="240" fill="#c4b5fd"/></svg>')}`,
+      path: 'social-media/pricelist.png',
+      name: 'מחירון.png',
+    },
+  ],
+} as never as import('@/lib/social/types').Campaign;
+
+const previewRow = row({
+  id: 'prev',
+  campaign_id: 'r1',
+  comment_status: 'failed',
+  comment_note: 'לא מצאנו את הפוסט בקבוצה. ייתכן שמנהל הקבוצה מחק אותו, או שהקבוצה סגורה לתגובות.',
+  permalink: 'https://facebook.com/groups/4/posts/7',
+  target: {
+    id: '9',
+    name: 'БеэрШеваОбъявленияКуплюПродамОтдамБесплатноБарахолкаЮгИзраиля',
+    channel: 'facebook_group',
+    image_url: null,
+    url: 'https://facebook.com/groups/9',
+  } as never,
+});
+
 const body = renderSnapshot(
   createElement(
     'div',
     null,
     createElement('div', { className: 'probe' }, createElement(CommentTimeline, { rows, waiting, done, attention: [], totals, today, upcoming, campaigns, now: NOW })),
+    createElement(
+      'div',
+      { className: 'probe-preview', style: { maxWidth: '512px', margin: '16px auto 0' } },
+      createElement(CommentPreviewBody, {
+        row: previewRow,
+        campaign: previewCampaign,
+        when: '17.11.2026, 18:20',
+        state: 'צריך לבדוק',
+      }),
+    ),
     createElement(
       'div',
       { className: 'probe-stalled' },

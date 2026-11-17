@@ -1,14 +1,19 @@
 'use client';
 
+import { Fragment, useState } from 'react';
 import Link from 'next/link';
 import { t, keep } from '@/lib/social/i18n';
 import type { CommentTotals, QueueRow } from '@/lib/social/client';
 import type { Campaign } from '@/lib/social/types';
 import { COMMENT_TONE, commentLabel, commentNeedsHuman } from '@/lib/social/comments';
-import { addDaysISO, agree, formatDateHe, formatTimeHe, startOfZonedDay, zonedDateISO, zonedToUtc } from '@/lib/social/time';
+import { addDaysISO, agree, formatDateHe, formatDateTimeHe, formatTimeHe, startOfZonedDay, zonedDateISO, zonedToUtc } from '@/lib/social/time';
 import { MessageIcon, ShareIcon } from '@/components/icons';
 import { TargetAvatar } from './TargetAvatar';
 import { CommentShot } from './CommentShot';
+import { CommentPreviewSheet } from './CommentPreviewSheet';
+/* LiveFlow's own picture box and people mark, so the two lists cannot drift
+   apart — see the note over the list below. */
+import { GroupPic, PeopleMark } from './LiveFlow';
 import { Card, EmptyState, ProgressBar, TONE_FILL, TONE_TEXT, TONE_TINT, type Tone } from './ui';
 
 /**
@@ -144,6 +149,15 @@ export function CommentTimeline({
      labels and the end of the look-ahead all have to agree, and three calls
      to `new Date()` inside one function can straddle midnight. */
   const now = nowProp ?? new Date();
+  /*
+   * WHICH COMMENT THE LITTLE WINDOW IS SHOWING — "להוסיף חלון קטן לראות את
+   * התגובה".
+   *
+   * The whole item and not just an id: the window prints the hour and the
+   * sentence the ROW is showing, and re-deriving either of them from an id
+   * would be a second opinion about the same comment, two taps apart.
+   */
+  const [preview, setPreview] = useState<{ row: QueueRow; kind: Kind; said: string; at: string | null } | null>(null);
   /*
    * ONE ROW PER PUBLICATION, however many reads it arrived in.
    *
@@ -501,13 +515,29 @@ export function CommentTimeline({
         button: the half-row at the bottom edge is the affordance, and a row
         clipped mid-height says "there is more below" better than a hint can.
       */}
-      <div
+      {/*
+        THE SAME LIST THE PUBLICATIONS USE — not a copy of it.
+        "איפה שהתגובות לעשות עיצוב זהה כמו בפוסטים."
+
+        `anxf-queue` and `anxf-row` are LiveFlow's own classes, and the picture
+        box and the people mark are its own components, exported rather than
+        re-drawn: two lists that merely looked alike would drift the first time
+        one of them was touched. The scroll box comes with them — the same
+        21rem, the same half-row cut at the bottom edge that says there is more
+        below — which is what he asked to keep when this card was first built
+        ("את העיצוב והגלילה תשאיר ככה").
+
+        WHAT WENT. The rail: a dot per row and a line joining them. He was
+        asked directly and chose to drop it, because the publications rows
+        carry no such thing and "זהה" meant זהה. The order is still the order,
+        and the hour on every row still says when.
+      */}
+      <ul
+        className="anxf-queue mt-3"
         tabIndex={0}
         role="group"
         aria-label={t('סדר התגובות — רשימה נגללת')}
-        className="mt-3 max-h-[21rem] overflow-y-auto rounded-xl focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-300"
       >
-        <ol className="relative space-y-0.5">
           {items.map((item, i) => {
             const row = item.row;
             const status = row.comment_status ?? '';
@@ -518,14 +548,6 @@ export function CommentTimeline({
               item.kind === 'ahead' ? 'neutral' : COMMENT_TONE[status as keyof typeof COMMENT_TONE] ?? 'neutral';
             const isPast = item.kind === 'past';
             const at = stampOf(item);
-            /* The POST's address. Facebook gives a group post one handle and
-               the comment lives under it, so this is as close as the database
-               can point — and it is the right place to land: the comment is on
-               that page.
-               NOT for an 'ahead' row: that post does not exist yet, so the link
-               would open the group and show the owner everything except the
-               thing the button named. */
-            const href = item.kind === 'ahead' ? '' : row.permalink || row.target?.url || '';
             const day = at ? zonedDateISO(new Date(at)) : '';
             const prev = i > 0 ? stampOf(items[i - 1]) : null;
             const showDay = Boolean(day) && day !== dayISO && (i === 0 || (prev ? zonedDateISO(new Date(prev)) : '') !== day);
@@ -534,136 +556,191 @@ export function CommentTimeline({
                rail, or the first one queued would be numbered after every
                comment that ever succeeded. */
             const place = i - past.length + 1;
+            /*
+              THE PUBLICATION ROW'S OWN FOUR STATES, which is what makes the
+              card chrome identical: `data-row` is the attribute globals.css
+              tints a failed row pink and rings a live one with.
+            */
+            const flow = commentNeedsHuman(status)
+              ? 'failed'
+              : status === 'commenting'
+                ? 'live'
+                : isPast
+                  ? 'done'
+                  : 'next';
+            /*
+              A QUEUED ROW SAYS WHEN, NOT "ממתין". That the row is waiting is
+              already told by its place in the line and by the "#3" beside it,
+              so the word spent the line saying nothing; the wait is what was
+              asked for. 'commenting' keeps its own word — it is happening now,
+              and a countdown over it would be wrong by the time it is read.
+            */
+            const said =
+              item.kind === 'ahead'
+                ? 'תגובה אחרי הפרסום'
+                : item.kind === 'queued' && status === 'pending'
+                  /* place is 1-based, so the NEXT one out is place 1 and must
+                     be zero paces away — at `paceSeconds * place` the head of
+                     the queue claimed a two-minute wait it does not have. */
+                  ? !projecting || pace.seconds === null
+                    ? stalled && publishingNow
+                      ? 'ממתין לחלון פנוי בין הפרסומים'
+                      : 'ממתין בתור'
+                    : inAbout(pace.seconds * (place - 1))
+                  : commentLabel(status);
             return (
-              <li key={row.id}>
+              <Fragment key={row.id}>
                 {/* `at &&` as well as showDay: showDay already implies it, but
                     only through a Boolean(day) the compiler cannot follow back
                     to this variable, and a cast here would be the one place the
-                    day heading could render "Invalid Date". */}
+                    day heading could render "Invalid Date".
+
+                    ITS OWN ROW, WITHOUT THE CARD. A heading inside a queue row
+                    would be drawn as one — border, background and all — and
+                    read as a publication that happened at midnight. */}
                 {showDay && at && (
-                  <p className="mb-1 mt-3 text-[11px] font-extrabold uppercase tracking-wide text-mist-500">{formatDateHe(at)}</p>
+                  <li className="anxf-sep">
+                    <p className="px-1 text-[11px] font-extrabold uppercase tracking-wide text-mist-500">{formatDateHe(at)}</p>
+                  </li>
                 )}
-                <div className="flex items-stretch gap-3">
-                  <div className="flex w-3 shrink-0 flex-col items-center pt-3.5">
-                    <span
-                      className={`h-2.5 w-2.5 shrink-0 rounded-full ${
-                        isPast ? `bg-ink-850 ring-2 ${RING_DONE[tone]}` : TONE_FILL[tone]
-                      } ${status === 'commenting' ? 'ring-4 ring-brand-300/20' : ''}`}
-                    />
-                    {i < items.length - 1 && <span aria-hidden className="w-px grow bg-ink-700" />}
-                  </div>
-                  <div
-                    className={`flex min-w-0 grow items-center gap-2.5 rounded-xl px-2 py-2 ${
-                      status === 'commenting' ? TONE_TINT[tone] : ''
-                    }`}
+                <li data-row={flow}>
+                  {/*
+                    A BUTTON, NOT A LINK. The publications row opens the
+                    history; this one opens the comment itself — "להוסיף חלון
+                    קטן לראות את התגובה" — and the address of the post is
+                    inside that window, where the words it is about are.
+                  */}
+                  <button
+                    type="button"
+                    className="anxf-row"
+                    onClick={() => setPreview({ ...item, said, at })}
+                    /*
+                      NO aria-label. The publications row has none either: its
+                      accessible name is what it says — the group, its state
+                      and its hour — and that is exactly what a screen reader
+                      should hear here too. A label would also be the one line
+                      on this card mixing a Russian group name into a Hebrew
+                      sentence, which is the thing russian-rendered.test.ts
+                      refuses, and the fix for that would be to drop the state
+                      from it — the half worth hearing.
+                    */
+                    /*
+                      THE ROW'S SUBJECT, AND THE ADDRESS THE WINDOW OPENS.
+                      permalink when there is one, the group when there is
+                      not, and ABSENT when there is neither — an attribute
+                      holding "" would be a row claiming an address it has
+                      not got. Here rather than only inside the window
+                      because <Sheet> portals to document.body and renders
+                      nothing at all under renderToStaticMarkup, so this is
+                      the one place the fixture can read it.
+                    */
+                    {...(row.permalink || row.target?.url ? { 'data-post': row.permalink || row.target?.url } : {})}
                   >
-                    {/*
-                      ONE COLUMN, THREE MEANINGS, and the styling says which: a
-                      finished comment shows the hour it happened, dimmed; a
-                      queued one shows its place in line, in the accent; one
-                      still coming shows the hour its publication is due, also
-                      in the accent, because it is ahead of us. Same width
-                      either way so the names beside them stay in a straight
-                      edge.
-                    */}
-                    <span className="w-12 shrink-0 text-sm font-extrabold tabular-nums">
+                    {/* The group's picture, and the mark for a group with no
+                        picture stored — LiveFlow's own, not a second pair. */}
+                    <GroupPic src={row.target?.image_url} />
+                    <PeopleMark />
+                    <span className="anxf-row-words">
+                      <span className="anxf-row-name" dir="auto" data-no-translate>
+                        {row.target?.name ? row.target.name : t('קבוצה')}
+                      </span>
+                      {/* THE REASON, WHOLE. "לא הצליח" on its own is what makes
+                          a person press the same button again — a post the
+                          admin deleted, a group that closed comments and a
+                          security screen are three different things to do
+                          next. The row shows the state; the window under it
+                          holds the worker's own sentence and its screenshot. */}
+                      <span className={flow === 'failed' ? 'anxf-row-why' : flow === 'done' ? 'anxf-row-skip' : 'anxf-row-note'}>
+                        {said}
+                      </span>
+                    </span>
+                    <span className="anxf-row-at">
+                      {/*
+                        AS SHORT AS THE PUBLICATIONS ROW'S, AND FOR ITS REASON.
+                        This column is `flex: none` and never wraps, so every
+                        word in it is taken off the group's name — and in
+                        Russian "18:50 · после публикации" squeezed the name
+                        box to 24px and, at 320px, to nothing at all. The
+                        words belong on the line below, where they already
+                        are: the row says "תגובה אחרי הפרסום" under the name
+                        and has no business saying it twice.
+
+                        So: the hour, and "· הגיב" only on a comment that
+                        really went out — exactly the shape of "05:31 · בוצע"
+                        beside a publication. A queued row has no hour to
+                        show and gives its place in line instead.
+
+                        TWO NODES, NOT ONE STRING, for the reason "· בוצע" is
+                        its own dictionary key: the DOM translator matches
+                        whole text nodes, and an hour baked into the same
+                        template is a line it can never answer.
+                      */}
                       {item.kind === 'queued' ? (
-                        <span dir="ltr" className="inline-block text-brand-400">{`#${place}`}</span>
+                        <span dir="ltr" className="inline-block">{`#${place}`}</span>
+                      ) : at ? (
+                        <>
+                          {formatTimeHe(at)}
+                          {flow === 'done' ? ' · הגיב' : ''}
+                        </>
                       ) : (
-                        <span className={isPast ? 'text-mist-500' : 'text-brand-400'}>{at ? formatTimeHe(at) : '—'}</span>
+                        ''
                       )}
                     </span>
-                    <TargetAvatar name={row.target?.name ?? '?'} imageUrl={row.target?.image_url} channel={row.target?.channel} size={30} />
-                    <div className="min-w-0 grow">
-                      {/* dir="auto": these group names are Russian and English
-                          inside an RTL card, and forcing either direction puts
-                          the punctuation on the wrong end. */}
-                      <p dir="auto" className="truncate text-sm font-bold text-mist-100">
-                        {row.target?.name ? <span data-no-translate>{row.target.name}</span> : t('קבוצה')}
-                      </p>
-                      {/*
-                        A QUEUED ROW SAYS WHEN, NOT "ממתין". That the row is
-                        waiting is already told by its place in the rail and by
-                        the "#3" beside it, so the word spent the line saying
-                        nothing; the wait is what was asked for. 'commenting'
-                        keeps its own word — it is happening now, and a
-                        countdown over it would be wrong by the time it is
-                        read.
-                      */}
-                      <p className={`text-[11px] font-bold ${item.kind === 'ahead' ? 'text-mist-300' : TONE_TEXT[tone]}`}>
-                        {item.kind === 'ahead'
-                          ? 'תגובה אחרי הפרסום'
-                          : item.kind === 'queued' && status === 'pending'
-                            /* place is 1-based, so the NEXT one out is
-                               place 1 and must be zero paces away — at
-                               `paceSeconds * place` the head of the queue
-                               claimed a two-minute wait it does not have. */
-                            ? !projecting || pace.seconds === null
-                              ? stalled && publishingNow
-                                ? 'ממתין לחלון פנוי בין הפרסומים'
-                                : 'ממתין בתור'
-                              : inAbout(pace.seconds * (place - 1))
-                            : commentLabel(status)}
-                      </p>
-                      {/*
-                        THE REASON, WHOLE. "לא הצליח" on its own is what makes a
-                        person press the same button again — a post the admin
-                        deleted, a group that closed comments and a security
-                        screen are three different things to do next.
-                      */}
-                      {row.comment_note && (
-                        <p dir="auto" className="mt-0.5 line-clamp-2 text-[11px] leading-snug text-mist-500">{row.comment_note}</p>
+                    <span className="anxf-row-mark" aria-hidden>
+                      {flow === 'done' ? (
+                        <svg className="anxf-mark-done" viewBox="0 0 24 24" fill="currentColor">
+                          <circle cx="12" cy="12" r="11" />
+                          <path d="m6.6 12.4 3.6 3.6 7.2-8" fill="none" stroke="#fff" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
+                        </svg>
+                      ) : flow === 'failed' ? (
+                        <svg className="anxf-mark-failed" viewBox="0 0 24 24" fill="currentColor">
+                          <circle cx="12" cy="12" r="11" />
+                          <path d="M8.6 8.6 15.4 15.4M15.4 8.6 8.6 15.4" fill="none" stroke="#fff" strokeWidth="2.4" strokeLinecap="round" />
+                        </svg>
+                      ) : flow === 'live' ? (
+                        <svg className="anxf-mark-live anx-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round">
+                          <circle cx="12" cy="12" r="9" opacity=".25" />
+                          <path d="M21 12a9 9 0 0 0-9-9" />
+                        </svg>
+                      ) : (
+                        <svg className="anxf-mark-next" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+                          <circle cx="12" cy="12" r="8.6" />
+                          <path d="M12 7.4V12l3 1.8" />
+                        </svg>
                       )}
-                    </div>
-                    {/* The quick link that was asked for, on every row that has
-                        an address — including the ones still queued, because
-                        "where is this about to go" is the same question. */}
-                    {href && (
-                      <Link
-                        href={href}
-                        target="_blank"
-                        rel="noreferrer"
-                        aria-label={`פתח את הפוסט ב${row.target?.name ? keep(row.target.name) : 'קבוצה'} ואת התגובה שעליו`}
-                        /*
-                         * SMALLER, AND STILL A 48px TARGET.
-                         *
-                         * 32px of button where there were 44 — a bit over a
-                         * quarter off — on a white ground with a thin lavender
-                         * edge, so it reads as the quiet secondary action it is.
-                         * The group's name on the same row is 13px; a control
-                         * beside it has no business being bigger than the thing
-                         * it is about, which is why the label is 11.5 and the
-                         * mark 12.
-                         *
-                         * This is where it stops. Below about 30px a chip starts
-                         * to read as a label rather than as something to press,
-                         * and the one job this has is to be pressed.
-                         *
-                         * THE TAP AREA DOES NOT SHRINK WITH IT. The `before`
-                         * layer reaches 6px past the visible edge top and
-                         * bottom, which puts the hit box at 48 — over this
-                         * module's 40px floor, and measured as such by
-                         * comment-timeline.test.ts, which now reads the layer
-                         * rather than the painted box. Small to look at and
-                         * small to hit is the trade this refuses to make.
-                         */
-                        className="relative inline-flex h-8 shrink-0 items-center gap-1 rounded-[10px] border border-brand-300/50 bg-ink-900 px-2.5 text-[11.5px] font-bold text-brand-400 transition-colors before:absolute before:inset-x-0 before:-inset-y-2 before:content-[''] hover:bg-brand-300/10"
-                      >
-                        <ShareIcon aria-hidden className="h-3 w-3" />
-                        לתגובה
-                      </Link>
-                    )}
-                  </div>
-                </div>
-              </li>
+                    </span>
+                    <svg aria-hidden className="anxf-row-go" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="m14 6-6 6 6 6" />
+                    </svg>
+                  </button>
+                </li>
+              </Fragment>
             );
           })}
-        </ol>
-      </div>
+      </ul>
 
       <p className="mt-2 text-[11px] leading-snug text-mist-500">
         {t('התגובות יוצאות אחת-אחת, במרווח שנבחר לכל סבב, ורק כשיש חלון פנוי בין שני פרסומים — ולכן אין להן שעה מראש. לפרסום שעוד לא יצא מוצגת השעה שבה הוא מתוזמן.')}
       </p>
+
+      {/*
+        THE LITTLE WINDOW. Keyed by the row, so opening a second comment
+        re-seeds it rather than showing the first one's screenshot under the
+        second one's name — the same `key` the comment sheet carries for the
+        same reason.
+
+        The sentence and the hour are the ROW's, carried in rather than
+        re-derived: two taps apart, one comment, one answer.
+      */}
+      <CommentPreviewSheet
+        key={preview?.row.id ?? 'none'}
+        open={preview !== null}
+        onClose={() => setPreview(null)}
+        row={preview?.row ?? null}
+        campaign={campaigns.find((c) => c.id === preview?.row.campaign_id) ?? null}
+        when={preview?.at ? formatDateTimeHe(preview.at) : ''}
+        state={preview?.said ?? ''}
+      />
     </Card>
   );
 }

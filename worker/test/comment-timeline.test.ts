@@ -63,7 +63,10 @@ async function main(): Promise<void> {
 
       const seen = await page.evaluate(() => {
         const card = document.querySelector('.probe > section') as HTMLElement | null;
-        const items = [...(card?.querySelectorAll('ol > li') ?? [])] as HTMLElement[];
+        /* `li[data-row]` and not every li: the list now carries the
+           publications' own row chrome, and its date lines ride in the same
+           <ul> as chrome-less separators. */
+        const items = [...(card?.querySelectorAll('ul.anxf-queue > li[data-row]') ?? [])] as HTMLElement[];
         
         return {
           found: Boolean(card),
@@ -72,7 +75,10 @@ async function main(): Promise<void> {
           /* The rail lives in a box that scrolls; the card itself must not
              grow to the height of the queue. */
           box: (() => {
-            const el = card?.querySelector('ol')?.parentElement as HTMLElement | null;
+            /* The list IS the scroll box now — `.anxf-queue` brings the
+               21rem and the overflow with it, which is the whole point of
+               drawing the same list as the publications. */
+            const el = card?.querySelector('ul.anxf-queue') as HTMLElement | null;
             return el
               ? {
                   scrolls: el.scrollHeight > el.clientHeight + 1,
@@ -91,10 +97,16 @@ async function main(): Promise<void> {
           /* Rows for a publication that has not gone out yet. The rail has no
              section headings, so they are counted by the only thing that
              marks them. */
-          aheadRows: [...(card?.querySelectorAll('ol > li p') ?? [])].filter((p) => (p.textContent ?? '').trim() === 'תגובה אחרי הפרסום').length,
+          aheadRows: [...(card?.querySelectorAll('ul.anxf-queue > li span') ?? [])].filter((p) => (p.textContent ?? '').trim() === 'תגובה אחרי הפרסום').length,
           cardHeight: card ? Math.round(card.getBoundingClientRect().height) : 0,
-          /* Every "לתגובה" link, and where it points. */
-          links: [...(card?.querySelectorAll('a') ?? [])].map((a) => (a as HTMLAnchorElement).getAttribute('href') ?? ''),
+          /*
+           * WHERE EACH ROW POINTS. It was an <a> per row; the row is now the
+           * publications' row, which carries one chevron and opens the
+           * comment's own window — "להוסיף חלון קטן לראות את התגובה" — and
+           * the address lives in there. The row still names it, so the
+           * guarantee below is the one it always was.
+           */
+          links: items.map((li) => li.querySelector('button')?.getAttribute('data-post') ?? '').filter(Boolean),
           /* The queue positions, in the order they are drawn. */
           places: items
             .map((li) => (li.querySelector('span[dir="ltr"]')?.textContent ?? '').trim())
@@ -137,10 +149,40 @@ async function main(): Promise<void> {
           bar: Boolean(card?.querySelector('[role="img"]')),
           /* Every group name drawn, so the 24-hour filter can be checked by
              what it left OUT rather than only by a count. */
-          names: [...(card?.querySelectorAll('ol > li p[dir="auto"]') ?? [])].map((p) => (p.textContent ?? '').trim()),
+          names: [...(card?.querySelectorAll('ul.anxf-queue > li [dir="auto"]') ?? [])].map((p) => (p.textContent ?? '').trim()),
           text: card?.textContent ?? '',
         };
       });
+      /*
+       * ─── THE LITTLE WINDOW, MEASURED ─────────────────────────────────
+       *
+       * "להוסיף חלון קטן לראות את התגובה." It is the body of a <Sheet>, which
+       * cannot be server-rendered at all, so the fixture draws the exported
+       * body on its own — the real one, not a transcription of it. What it has
+       * to survive is a Russian group name with nowhere to break, a price list
+       * long enough to wrap, a picture and a failure sentence, all at once.
+       */
+      const preview = await page.evaluate(() => {
+        const box = document.querySelector('.probe-preview') as HTMLElement | null;
+        return {
+          found: Boolean(box),
+          /* The comment's own words have to be there — a window that shows
+             everything about a comment except the comment is the bug. */
+          text: box?.textContent ?? '',
+          hasPicture: Boolean(box?.querySelector('img')),
+          /* Nothing may spill sideways out of the window. */
+          wide: [...(box?.querySelectorAll('*') ?? [])]
+            .filter((e) => e.getBoundingClientRect().width > (box?.getBoundingClientRect().width ?? 0) + 1)
+            .map((e) => (e.textContent ?? '').slice(0, 24)),
+          /* Every control in it still has to be a thumb's worth. */
+          small: [...(box?.querySelectorAll('a,button') ?? [])]
+            .map((e) => ({ h: Math.round(e.getBoundingClientRect().height), t: (e.textContent ?? '').slice(0, 12) }))
+            .filter((c) => c.h > 0 && c.h < 40),
+          /* The address is the POST's, and it is the one the row named. */
+          href: (box?.querySelector('a') as HTMLAnchorElement | null)?.getAttribute('href') ?? '',
+        };
+      });
+
       const stalled = await page.evaluate(() => {
         const card = document.querySelector('.probe-stalled > section') as HTMLElement | null;
         return { found: Boolean(card), text: card?.innerText ?? '' };
@@ -336,7 +378,7 @@ async function main(): Promise<void> {
        * when there is not, and NO link at all when there is neither — an href
        * of "" is a control that looks alive and goes nowhere.
        */
-      assert.ok(!seen.links.includes(''), `${width}px: a "לתגובה" link with an empty address`);
+      assert.ok(!seen.links.includes(''), `${width}px: a row claiming an address it has not got`);
       /* d's permalink, not a's: the finished list folds at two and a is third,
          so asserting a's address was asserting something not on screen. */
       assert.ok(
@@ -354,6 +396,25 @@ async function main(): Promise<void> {
        * deep and folded at three, so a bar built from the drawn rows would
        * report "3 מתוך 6" to an owner holding 271 comments.
        */
+      /* ── the little window ─────────────────────────────────────────── */
+      assert.ok(preview.found, `${width}px: the comment window did not render`);
+      assert.ok(
+        preview.text.includes('לתיאום: 050-0000000'),
+        `${width}px: the window does not show the comment's own words — that is the one thing it exists for`,
+      );
+      assert.ok(preview.hasPicture, `${width}px: the comment's attached picture is not drawn`);
+      assert.ok(
+        preview.text.includes('לא מצאנו את הפוסט בקבוצה'),
+        `${width}px: the worker's own sentence about a failure is missing from the window`,
+      );
+      assert.deepEqual(preview.wide, [], `${width}px: something spills out of the comment window — ${JSON.stringify(preview.wide)}`);
+      assert.deepEqual(preview.small, [], `${width}px: a control in the comment window is under 40px — ${JSON.stringify(preview.small)}`);
+      assert.equal(
+        preview.href,
+        'https://facebook.com/groups/4/posts/7',
+        `${width}px: the window must open the POST, not the group — got "${preview.href}"`,
+      );
+
       assert.ok(seen.bar, `${width}px: the progress bar is missing`);
       /*
        * RE-POINTED, NOT DELETED. It used to read "18 מתוך 271 הגיבו · 126

@@ -3011,6 +3011,43 @@ body:has(.social-theme) .site-backdrop {
   gap: 6px;
 }
 
+/*
+ * THE SAME ROW, PRESSED INSTEAD OF FOLLOWED.
+ *
+ * "איפה שהתגובות לעשות עיצוב זהה כמו בפוסטים" — the comments list draws
+ * `.anxf-row` too, but its row opens a window rather than a page, so it is a
+ * <button>. A button brings its own background, border, font and centred text
+ * with it, and without these lines the identical row is a grey pill with the
+ * group's name in the middle of it.
+ *
+ * `width: 100%` because a button is not a block: inside the grid cell it
+ * would shrink to its content and the chevron would sit under the name
+ * instead of at the row's far edge.
+ */
+button.anxf-row {
+  width: 100%;
+  background: none;
+  border: 0;
+  padding: 5px 9px;
+  font: inherit;
+  color: inherit;
+  text-align: inherit;
+  cursor: pointer;
+}
+/*
+ * A DAY HEADING IS NOT A PUBLICATION. The comments list spans more than one
+ * day, and its date lines ride in the same <ul> — without this they are drawn
+ * as queue rows, card chrome and all, and read as something that happened at
+ * midnight.
+ */
+.anxf-queue li.anxf-sep {
+  background: none;
+  border: 0;
+  box-shadow: none;
+  margin-top: 6px;
+}
+.anxf-queue li.anxf-sep:first-child { margin-top: 0; }
+
 .anxf-row-go {
   width: 17px;
   height: 17px;

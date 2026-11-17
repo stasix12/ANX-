@@ -2547,7 +2547,28 @@ export async function lastRunScope(campaignId: string): Promise<LastRunScope | n
     }
     if (got.error) throw friendlyError(got.error);
     const rows = (got.data ?? []) as unknown as { id: string; round_at?: string | null }[];
-    for (const r of rows) if ((typeof r.round_at === 'string' ? r.round_at : '') === roundAt) ids.push(r.id);
+    /*
+     * A ROW WITH NO OCCASION BELONGS TO THE DAY, NOT TO A RUN OF ITS OWN.
+     *
+     * `round_at` is written by plan.ts and by nothing else. The other path
+     * that inserts into social_queue — appending groups to a round that is
+     * already running — leaves it null, as does every row created before v30.
+     * Matching those against a real 'HH:MM' put them in neither run: press the
+     * button after an appended group published and the scope was the handful
+     * of appended rows; press it after a planned one and the appended rows of
+     * the same round were left out.
+     *
+     * So an unlabelled row is claimed by the day's run, which is where it
+     * published — it went out alongside it, in the same stretch of minutes —
+     * and an unlabelled NEWEST row takes the whole day, because there is
+     * nothing to tell the day's runs apart by. It errs toward including a post
+     * that went out beside the ones he watched, rather than dropping one of
+     * them, and it is the same fold progressByRound() performs under ''.
+     */
+    for (const r of rows) {
+      const own = typeof r.round_at === 'string' ? r.round_at : '';
+      if (!roundAt || !own || own === roundAt) ids.push(r.id);
+    }
     if (rows.length < RUN_PAGE) break;
   }
 

@@ -190,13 +190,21 @@ function FacebookMark({ className }: { className?: string }) {
  * when the group has no picture stored. `loading="lazy"` for the same reason
  * TargetAvatar carries it: these are unresized crops of a Facebook cover.
  */
-function GroupPic({ src, className = '' }: { src?: string | null; className?: string }) {
+/*
+ * EXPORTED, because the comments list draws the same row now.
+ *
+ * "איפה שהתגובות לעשות עיצוב זהה כמו בפוסטים" — and identical means the same
+ * picture box with the same fallback, not a second one that looks like it.
+ * Two copies of this is how the two lists would drift the first time one of
+ * them was touched.
+ */
+export function GroupPic({ src, className = '' }: { src?: string | null; className?: string }) {
   if (!src) return <FacebookMark className={className} />;
   // eslint-disable-next-line @next/next/no-img-element
   return <img className={`anxf-pic ${className}`} src={src} alt="" loading="lazy" decoding="async" data-pic="group" />;
 }
 
-function PeopleMark() {
+export function PeopleMark() {
   return (
     <svg aria-hidden className="anxf-ppl" viewBox="0 0 24 24" fill="currentColor">
       <circle cx="9" cy="8" r="3.4" />

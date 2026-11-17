@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { keep, t } from '@/lib/social/i18n';
 import { CampaignCard, campaignOrdinals } from '@/components/social/CampaignCard';
 import { CampaignTile } from '@/components/social/CampaignTile';
+import { CampaignTabs } from '@/components/social/CampaignTabs';
 import { CampaignHoursSheet } from '@/components/social/CampaignHoursSheet';
 import { QueueTunerSheet } from '@/components/social/QueueTunerSheet';
 import { CampaignCommentSheet } from '@/components/social/CampaignCommentSheet';
@@ -16,7 +17,6 @@ import {
   ErrorState,
   SegmentedControl,
   SkeletonList,
-  StatStrip,
   useConfirm,
   useToast,
 } from '@/components/social/ui';
@@ -52,7 +52,7 @@ import { counted, startOfZonedDay } from '@/lib/social/time';
 import { scheduleReadout, type AccountSpacing } from '@/lib/social/schedule-readout';
 import type { Campaign, ControlSettings, PaceId } from '@/lib/social/types';
 import { friendlyMessage } from '@/lib/social/errors';
-import { LayersIcon, MegaphoneIcon, SearchIcon, SendIcon, UsersIcon } from '@/components/icons';
+import { MegaphoneIcon, SearchIcon } from '@/components/icons';
 
 /*
  * FOUR BUCKETS, AND THE REFERENCE DRAWS THREE.
@@ -949,47 +949,26 @@ export default function CampaignsPage() {
        */
       working={Boolean(busy) || Object.values(scheduleBusy).some(Boolean)}
       title={t('קמפיינים')}
-      lede="כל קמפיין שהפעלתם — מה יצא, מה עוד יוצא, ומה אפשר לעצור"
       /*
-       * "+ קמפיין חדש" GOES TO THE POST EDITOR, and the detour it replaces is
-       * worth writing down.
+       * NO SECOND TITLE ON THE PAGE, AND NO LEDE EITHER — `hideTitle` drops
+       * the whole block, so a `lede` left behind would be a sentence nobody
+       * can read and nobody would notice had gone wrong.
        *
-       * The comment that originally stood here said: no "new run" action,
-       * because a run is created by publishing a post. A brief asked for the
-       * button and I wired it to this page's own editing sheet — name,
-       * service, city, language and notes. That call did create a campaign
-       * row, so it was not broken; it was the wrong thing entirely.
-       * The owner pressed it expecting to write a post, attach pictures, pick
-       * groups and set a time, and got a five-field form that produces an
-       * empty shell: "למה לא נותן לי לרשום פוסט להוסיף תמונות לתזמן כמו שהיה
-       * לפני". A campaign with no post in it is not a campaign, it is a name.
-       *
-       * So the button goes where that work actually happens. /social/posts/new
-       * is the editor with the text, the media, the group picker and the
-       * scheduler in it, and ensureRunForPost() opens the campaign by itself
-       * the moment the post is scheduled — which is why this screen never had
-       * a create button to begin with.
-       *
-       * AND THE SHEET IT USED TO OPEN IS GONE — "את זה תמחק לא רלוונטי."
-       * "ערוך" now opens the post: its text and its pictures, which is what
-       * actually goes out. One consequence worth writing down: a campaign's
-       * name was only ever editable there, so it is now fixed at whatever the
-       * post was called when the run opened (ensureRunForPost names it).
+       * The reference's first row under the top bar is the tabs; the screen's
+       * name is already in the bar above them, in the same words. `hideTitle`
+       * is the prop the dashboard already uses for exactly this, so the h1
+       * stays in the heading tree as sr-only rather than disappearing from it.
        */
-      /* The reference's primary: taller than the product's default button and
-         at the card radius rather than the button one, because on this screen
-         it sits beside a 26px title rather than inside a row of controls.
-         `!rounded-2xl` — BUTTON_BASE carries rounded-xl and both are one-class
-         radius utilities in the same layer. Same href, same destination. */
-      headerAction={
-        <ButtonLink href="/social/posts/new" size="lg" className="h-14 !rounded-2xl !px-5 text-[15px]">
-          {t('+ קמפיין חדש')}
-        </ButtonLink>
-      }
+      hideTitle
       paused={control?.paused ?? null}
       onControlChanged={load}
     >
-      <div className="space-y-4">
+      {/* ── THE SIDE MARGIN THE REFERENCE DRAWS ──────────────────────────
+          The shell gives every screen 16px of padding; the reference leaves
+          about 8, and those eight pixels are what the compact card's row of
+          five controls needs on a 390px phone. Taken back here rather than in
+          SocialShell, which is nine other screens. */}
+      <div className="-mx-2 space-y-4">
         {/* A failed read used to leave a red banner above a skeleton that
             shimmered for ever, with no way out but a browser reload — on a
             phone, for an owner who is not technical. */}
@@ -1007,54 +986,35 @@ export default function CampaignsPage() {
             computed, and they are still omitted rather than zeroed until the
             list is known. */}
         {/*
-          ── THE SUMMARY STRIP ────────────────────────────────────────────
-          "פס נתונים קומפקטי: סך הקמפיינים, קמפיינים פעילים, פרסומים שבוצעו
-           היום, פרסומים שממתינים בתור."
+          ── THE ROW OF TABS ─────────────────────────────────────────────
+          "לשחזר את מבנה הכותרת, הטאבים, המונים, שורת החיפוש…"
 
-          StatStrip and not a new strip of my own: it is already measured in a
-          browser by stat-strip.test.ts — four columns of equal width that
-          touch, three one-pixel dividers inset from the edges, one outer
-          border — and a hand-drawn band beside it would be a second opinion
-          about the same shape.
+          The reference draws two rows here and they are different things:
+          four NAMES with a hairline between them and a blue underline under
+          the one you are on, and under it the filter with its counts. This
+          is the first of them.
 
-          Every figure is counted, never a placeholder: three of them are
-          summed from the states this screen already read, and the fourth is
-          the day's own query. A failed read prints '—', not a zero.
+          IT REPLACES THE SUMMARY STRIP THAT STOOD HERE, and keeps its four
+          destinations: the same hrefs, so nothing on this screen became
+          unreachable. What it does not keep is the four printed figures —
+          the reference prints none in this row — so each one is said in the
+          link's accessible name instead, and the two that matter most are
+          printed in full by the filter immediately below (סה״כ and פעילים).
+          The strip itself is untouched and still draws the dashboard.
+
+          Every figure is counted, never a placeholder: three are summed from
+          the states this screen already read, and the fourth is the day's own
+          query. Until the list is in, the name is the word alone — a count
+          that is not known yet is left out rather than read aloud as a dash.
         */}
-        <StatStrip
+        <CampaignTabs
+          label={t('מדדי הקמפיינים')}
+          activeKey="campaigns"
           items={[
-            {
-              key: 'campaigns',
-              icon: <MegaphoneIcon className="h-4 w-4" />,
-              value: campaigns ? counts.all : '—',
-              label: 'קמפיינים',
-              tone: 'neutral',
-              href: '/social/campaigns',
-            },
-            {
-              key: 'live',
-              icon: <UsersIcon className="h-4 w-4" />,
-              value: campaigns ? counts.live : '—',
-              label: 'פעילים',
-              tone: 'good',
-              href: '/social/campaigns',
-            },
-            {
-              key: 'today',
-              icon: <SendIcon className="h-4 w-4" />,
-              value: publishedToday ?? '—',
-              label: 'פורסמו היום',
-              tone: 'brand',
-              href: '/social/history',
-            },
-            {
-              key: 'queued',
-              icon: <LayersIcon className="h-4 w-4" />,
-              value: campaigns ? counts.queued : '—',
-              label: 'בתור',
-              tone: 'neutral',
-              href: '/social/history',
-            },
+            { key: 'campaigns', label: t('קמפיינים'), href: '/social/campaigns', value: campaigns ? counts.all : undefined, onSelect: () => setFilter('all') },
+            { key: 'live', label: t('פעילים'), href: '/social/campaigns', value: campaigns ? counts.live : undefined, onSelect: () => setFilter('live') },
+            { key: 'today', label: t('פורסמו היום'), href: '/social/history', value: publishedToday ?? undefined },
+            { key: 'queued', label: t('בתור'), href: '/social/history', value: campaigns ? counts.queued : undefined },
           ]}
         />
 
@@ -1065,15 +1025,74 @@ export default function CampaignsPage() {
           value={filter}
           onChange={setFilter}
           options={[
-            { value: 'all', label: 'הכל', count: campaigns ? counts.all : undefined },
+            /* "סה״כ 26" — the reference's own word for the unfiltered list. */
+            { value: 'all', label: t('סה״כ'), count: campaigns ? counts.all : undefined },
             { value: 'live', label: 'פעילים', count: campaigns ? counts.live : undefined },
             { value: 'paused', label: 'מושהים', count: campaigns ? counts.paused : undefined },
             { value: 'done', label: 'הסתיימו', count: campaigns ? counts.done : undefined },
           ]}
         />
 
-        <div className="flex items-center gap-2">
-          <label className="flex h-11 min-w-0 flex-1 items-center gap-2 rounded-2xl border border-ink-700 bg-ink-850 px-3">
+        {/* ── THE ACTIONS ROW ──────────────────────────────────────────
+            Right to left, in the reference's order: the primary action, the
+            search, and the two views. The button moved here out of the
+            shell's header slot, which the reference leaves to the screen's
+            name alone. */}
+        <div className="anxt-actions flex items-center gap-1">
+          {/*
+            "+ קמפיין חדש" GOES TO THE POST EDITOR, and the detour it replaces
+            is worth writing down.
+
+            The comment that originally stood here said: no "new run" action,
+            because a run is created by publishing a post. A brief asked for
+            the button and I wired it to this page's own editing sheet — name,
+            service, city, language and notes. That call did create a campaign
+            row, so it was not broken; it was the wrong thing entirely. The
+            owner pressed it expecting to write a post, attach pictures, pick
+            groups and set a time, and got a five-field form that produces an
+            empty shell: "למה לא נותן לי לרשום פוסט להוסיף תמונות לתזמן כמו
+            שהיה לפני". A campaign with no post in it is not a campaign, it is
+            a name.
+
+            So the button goes where that work actually happens.
+            /social/posts/new is the editor with the text, the media, the group
+            picker and the scheduler in it, and ensureRunForPost() opens the
+            campaign by itself the moment the post is scheduled — which is why
+            this screen never had a create button to begin with.
+
+            AND THE SHEET IT USED TO OPEN IS GONE — "את זה תמחק לא רלוונטי."
+            "ערוך" now opens the post: its text and its pictures, which is what
+            actually goes out. One consequence worth writing down: a campaign's
+            name was only ever editable there, so it is now fixed at whatever
+            the post was called when the run opened (ensureRunForPost names it).
+
+            IT IS THE ROW'S HEIGHT NOW, not the title's. It used to stand beside
+            a 26px heading and was given h-14 for it; here it is one of four
+            controls on a line and matches the search field at h-11. The card
+            radius stays, which is what the reference draws. Same href, same
+            destination.
+          */}
+          {/* THE PLUS IS PART OF THE LABEL, not an icon beside it, and that is
+              the measurement rather than a preference: in the reference the
+              glyph sits at the button's RIGHT edge (x1289–1324 inside a button
+              spanning 1005–1364, with the two Hebrew words to its left), which
+              is where bidi puts a neutral '+' written at the head of a
+              right-to-left string. Keeping it in the string also keeps the
+              dictionary key the product already had — and that matters more
+              than it looks: a bare 'קמפיין חדש' key makes the DOM translator
+              rewrite a CUSTOMER'S OWN campaign called "קמפיין חדש" into
+              "Новая кампания" on the campaign screen, which is exactly the
+              class of bug data-no-translate exists to stop. */}
+          <ButtonLink href="/social/posts/new" className="h-11 shrink-0 !rounded-2xl !px-3 text-[13.5px]">
+            {t('+ קמפיין חדש')}
+          </ButtonLink>
+          {/* A PILL, NOT A ROUNDED BOX — the reference's field is a capsule
+              with semicircular ends, while the button beside it keeps its
+              card radius. */}
+          <label className="flex h-11 min-w-0 flex-1 items-center gap-2 rounded-full border border-ink-700 bg-ink-850 px-3.5">
+            {/* THE GLASS FIRST, which in a right-to-left row is the field's
+                RIGHT end — measured off the reference, where the magnifier
+                sits at x891–930 inside a field that ends at 953. */}
             <SearchIcon className="h-4 w-4 shrink-0 text-mist-500" aria-hidden />
             <input
               aria-label={t('חיפוש קמפיין')}
@@ -1093,7 +1112,7 @@ export default function CampaignsPage() {
               onClick={() => setView(v)}
               aria-pressed={view === v}
               aria-label={v === 'grid' ? 'תצוגת כרטיסים' : 'תצוגת רשימה'}
-              className={`grid h-11 w-11 shrink-0 place-items-center rounded-2xl border transition-colors ${
+              className={`grid h-10 w-10 shrink-0 place-items-center rounded-2xl border transition-colors ${
                 view === v ? 'border-transparent bg-brand-500 text-on-brand' : 'border-ink-700 bg-ink-850 text-mist-300'
               }`}
             >
@@ -1137,18 +1156,21 @@ export default function CampaignsPage() {
         )}
 
         {/*
-          ── THE COMPACT GRID ─────────────────────────────────────────────
-          "שתי כרטיסיות בכל שורה · ארבעה קמפיינים מוצגים במקביל · התאמה מלאה
-           למסכים קטנים."
+          ── THE COMPACT VIEW ─────────────────────────────────────────────
+          "יש לצמצם את גובה הכרטיס ולשחזר את הפריסה האופקית שבתמונה."
 
-          TWO COLUMNS FROM THE NARROWEST PHONE, not from `lg`. The list below
-          keeps the old breakpoint, because a card carrying a seven-day chip
-          row and a time field cannot halve its width on a 360px screen
-          without clipping something the suite measures; a tile can, and that
-          is the whole reason there are two views.
+          ONE CARD TO A ROW, which is what the reference draws and what the
+          landscape card needs: its picture, its words and its five controls
+          all read across, and halving the width on a phone would put the
+          action row on three lines — the thing this brief exists to undo.
+          Four campaigns still stand in one screen, because the card is about
+          as tall as half the portrait tile it replaces.
+
+          TWO TO A ROW ONLY FROM `xl`, where a single column would stretch a
+          card to 1,152px and leave its picture stranded at one end.
         */}
         {view === 'grid' && campaigns && visible.length > 0 && (
-          <div className="grid grid-cols-2 gap-2.5 [&>*]:min-w-0">
+          <div className="grid grid-cols-1 gap-2.5 xl:grid-cols-2 [&>*]:min-w-0">
             {visible.map((c) => {
               const state = stateOf(c);
               const mine = posts.filter((p) => p.campaign_id === c.id);

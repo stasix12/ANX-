@@ -73,14 +73,27 @@ const src = (p: string) => readFileSync(new URL(`../../${p}`, import.meta.url), 
   const page = src('src/app/social/campaigns/page.tsx');
   is(/<CampaignTile/.test(page), 'the grid draws the compact tile');
   is(/<CampaignCard/.test(page), 'and the list still draws the card this screen already had — nothing was deleted');
-  is(/grid grid-cols-2 gap-2\.5/.test(page), 'two to a row from the narrowest phone, not from a breakpoint');
+  /* ONE CARD TO A ROW, which is the redesign's own instruction — "לצמצם את
+     גובה הכרטיס ולשחזר את הפריסה האופקית שבתמונה" — and the reverse of what
+     this line pinned while the tile was a portrait two-up. The landscape card
+     reads across: picture, words, five controls. Two columns come back at
+     `xl`, where one would stretch a card to 1,152px. */
+  is(/grid grid-cols-1 gap-2\.5 xl:grid-cols-2/.test(page), 'one card to a row on a phone, two only from xl');
   /* The same handlers, not a second way to pause a campaign. */
   is(
     (page.match(/act\(`pause-\$\{c\.id\}`/g) ?? []).length === 2 && (page.match(/act\(`resume-\$\{c\.id\}`/g) ?? []).length === 2,
     'the tile and the card start the SAME pause and resume writes — one mechanism, drawn twice',
   );
   is(/countPublishedSince\(startOfZonedDay/.test(page), "the summary strip's day count is a real query, not a sum of lifetime totals");
-  is(/<StatStrip/.test(page), 'and the strip is the measured component, not a new band beside it');
+  /* THE STRIP BECAME THE ROW OF TABS. The reference draws four names with a
+     hairline between them and a blue underline under the one you are on — no
+     figures — and the counts live in the filter row below it. StatStrip is
+     still the dashboard's, untouched and still measured by
+     stat-strip.test.ts; this screen draws its own row, which is why the two
+     could diverge at all. The four destinations are unchanged. */
+  is(/<CampaignTabs/.test(page), 'the summary row is the campaigns screen\u2019s own tabs');
+  is(!/<StatStrip/.test(page), 'and the shared strip is no longer on this screen, so restyling it here cannot redraw the dashboard');
+  is(/activeKey="campaigns"/.test(page), 'with the screen you are on marked');
 }
 
 /* ══════════ 2b. THE SHEET: ONE HOUR, AND IT SAVES BEFORE IT SAYS SO ════ */
@@ -215,7 +228,12 @@ async function main(): Promise<void> {
         }
         let clipped = 0;
         for (const e of Array.prototype.slice.call(
-          document.querySelectorAll('.anxt-fig span, .anxt-fig b, .anxt-of, .anxt-pctchip, .anxt-pill, .anxt-no'),
+          /* THE DAY LIST AND THE HOUR ARE IN THIS SWEEP because they are
+             the two the card nearly lost: the chip is the only part of the
+             foot that may shrink, and with the five controls on one line it
+             shrank to nothing — 111 assertions stayed green over a chip
+             rendered as a bare "א". A cut label is a missing label. */
+          document.querySelectorAll('.anxt-fig span, .anxt-fig b, .anxt-of, .anxt-pctchip, .anxt-pill, .anxt-no, .anxt-days, .anxt-hour'),
         )) {
           if (e.scrollWidth > e.clientWidth + 1) clipped += 1;
         }
@@ -267,16 +285,33 @@ async function main(): Promise<void> {
       eq(crashes, [], `${w}: the grid threw`);
 
       if (width < 1280) {
-        eq(seen.rows, [2, 2], `${w}: two tiles to a row, four in view — got rows of ${seen.rows.join('/')}`);
+        /* FOUR ROWS OF ONE. The landscape card is about half the height of
+           the portrait tile it replaces, so four campaigns still stand in one
+           screen — which was the point of the two-up grid — while each one
+           reads across instead of being squeezed into half a phone. */
+        eq(seen.rows, [1, 1, 1, 1], `${w}: one card to a row, four in view — got rows of ${seen.rows.join('/')}`);
         /*
-         * 460, RAISED FROM 420 WHEN "ימים ושעות" BECAME A BUTTON — a 40px tap
-         * target where a text line used to be, plus its gap. The number is
-         * here to stop the tile drifting back into the card it replaced, and
-         * that card is 915 with its panel: a tile at 442 is still less than
-         * half of it. Raised deliberately and with the reason, rather than
-         * deleted the moment it caught something.
+         * DOWN FROM 460, BECAUSE THE HEIGHT IS THE POINT OF THIS PASS: "יש
+         * לצמצם את גובה הכרטיס … אין להחזיר את הפריסה הגבוהה והישנה."
+         *
+         * TWO NUMBERS, FOR THE TWO LAYOUTS THE CARD REALLY HAS, and the line
+         * between them is 520 rather than 390. On a phone the day-and-hour
+         * chip takes a line of its own, which costs 44 — the alternative was
+         * measured and it is worse: with the five controls on one line the
+         * chip is left 126px where six separate days need about 170, and what
+         * it printed instead of a week was "א׳,ב…". "אין חיתוך טקסט או
+         * כפתורים" outranks 44 pixels. Above 520 — around the width the
+         * reference image was drawn at — the five share one line and the card
+         * measures about 250 with the way-back button on it.
+         *
+         * Measured on this fixture set: 335 at 390, where the tallest card is
+         * the paused one, carrying the chip's second line AND the way-back
+         * button. Both ceilings leave room for a longer name and neither
+         * leaves room for the portrait tile to creep back; the card it may
+         * not become is 915 with its panel.
          */
-        is(seen.tallest <= 460, `${w}: the tallest tile is ${seen.tallest}px — a compact tile that tall is the card it replaced`);
+        const ceiling = width <= 520 ? 345 : 300;
+        is(seen.tallest <= ceiling, `${w}: the tallest card is ${seen.tallest}px, over ${ceiling} — the brief asked for the height to come DOWN`);
       }
 
       /* 170/250 = 68%, 105/250 = 42%, 250/250 = 100%, 65/250 = 26% — the

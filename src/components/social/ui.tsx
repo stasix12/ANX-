@@ -606,7 +606,11 @@ export function SegmentedControl<T extends string>({
               onClick={() => onChange(o.value)}
               className={`inline-flex min-h-11 basis-0 grow items-center justify-center gap-1.5 whitespace-nowrap rounded-xl text-[13px] transition-colors ${
                 active
-                  ? 'grad-primary bg-brand-500 font-extrabold text-on-brand'
+                  /* FLAT, NOT A GRADIENT — the campaigns screen's reference
+                     draws this chip as one solid blue, and `variant="tabs"` is
+                     on that screen and nowhere else (grep: one call site), so
+                     dropping the sheen here redraws nothing else. */
+                  ? 'bg-brand-500 font-extrabold text-on-brand'
                   /* mist-300, not mist-200: there is no --color-mist-200 in
                      any theme in this product, so Tailwind resolved it to the
                      storefront's #e3e7e8 and the two unselected filters

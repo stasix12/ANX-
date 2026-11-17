@@ -89,6 +89,13 @@ const PAIRS: Pair[] = [
   { fg: 'warning-400', bg: 'ink-850', what: 'warning text on a card' },
   { fg: 'on-state', bg: 'success-500', what: 'label on a success surface' },
   { fg: 'on-state', bg: 'error-500', what: 'label on a danger button' },
+  // The campaign card's status pill is a SOLID fill since the redesign — the
+  // reference draws a green pill with white words, not a tinted label — so
+  // the ink on it is now a text pair and has to be measured like one. Scoped
+  // to social-theme because `.anxt-*` renders nowhere else; under the base
+  // @theme, warning-400 is #fbbf24 and this pairing would be 1.7.
+  { fg: 'on-state', bg: 'success-400', what: 'label on the live status pill', only: 'social-theme' },
+  { fg: 'on-state', bg: 'warning-400', what: 'label on the held status pill', only: 'social-theme' },
 
   // The elevated surface — a sheet is where an error gets explained, so every
   // text step has to survive one step up from the card, not just on it.
@@ -125,7 +132,8 @@ assert.deepEqual(failures, [], `palette pairs below WCAG AA:\n  ${failures.join(
 
 // A typo in a token name would silently skip its pair rather than fail, so the
 // count is asserted too: 11 universal pairs across 4 themes, plus 7 that only
-// social-theme declares an elevated surface for.
-assert.equal(checked, 11 * 4 + 7, `expected 51 measured pairs, got ${checked}`);
+// social-theme declares an elevated surface for and the 2 status-pill fills
+// the campaign card draws solid, which are social-theme's alone as well.
+assert.equal(checked, 11 * 4 + 9, `expected 53 measured pairs, got ${checked}`);
 
 console.log(`contrast guard OK — ${THEMES.length} themes, ${checked} pairs, 0 below AA`);

@@ -3418,21 +3418,27 @@ body:has(.social-theme) .site-backdrop {
   .anxc-bar, .anxc-track-sw, .anxc-knob { transition: none; }
 }
 
-/* ═══════════ THE COMPACT CAMPAIGN TILE — "תצוגת Grid קומפקטית" ═══════════
+/* ═══════════ THE COMPACT CAMPAIGN CARD — "פריסה אופקית, גובה מצומצם" ═══════
  *
  * Its own namespace (anxt-*), for the same reason the cycle card has one:
  * this screen's other card is measured in a browser against exact class
- * names, and a tile borrowing them would break a green suite to save a
+ * names, and a card borrowing them would break a green suite to save a
  * declaration. Every colour is a .social-theme token — a hex here is a
  * colour a theme change leaves behind.
+ *
+ * THE SHAPE IS THE REFERENCE'S: one card to a row, the picture down the left
+ * about a third of the width, the words and the meter and the three figures
+ * stacked at the right, and ONE action row across the foot. The portrait
+ * two-up tile this block used to draw is gone — "אין להחזיר את הפריסה
+ * הגבוהה והישנה."
  */
 .anxt-tile {
   position: relative;
   display: flex;
   flex-direction: column;
-  gap: 7px;
+  gap: 8px;
   min-width: 0;
-  padding: 10px;
+  padding: 9px;
   border-radius: var(--radius-card);
   border: 1px solid var(--color-ink-700);
   background: var(--color-ink-850);
@@ -3445,22 +3451,39 @@ body:has(.social-theme) .site-backdrop {
    colour that CHANGES belongs. */
 .anxt-tile { border-width: 1.5px; }
 
+/* ── the body, and the picture beside it ──
+   `align-items: stretch` is what makes the cover as tall as the words beside
+   it, which is how the reference draws it; a fixed height here would leave a
+   gap under the picture on a card with a long name. */
+.anxt-top { display: flex; align-items: stretch; gap: 10px; min-width: 0; }
+.anxt-body { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 7px; }
+
+/* THE ⋯ KEEPS THE CORNER AND THE WORDS KEEP THEIR OWN WIDTH. The first
+   version put the button out of the flow and the campaign number ran under
+   it — "קמפיין #24" came out as "יין #24" in the render. It is a flex item
+   again, first in the row, which in a right-to-left card is the right-hand
+   side; the status pill moved out of this row so that it can still reach the
+   body's edge, as the reference draws it. */
 .anxt-head { display: flex; align-items: flex-start; gap: 8px; min-width: 0; }
-/* The ⋯ above the cover, one column — see the note in CampaignTile.tsx. */
-.anxt-side { flex: none; display: flex; flex-direction: column; align-items: center; gap: 5px; }
-.anxt-words { display: flex; flex-direction: column; gap: 3px; min-width: 0; flex: 1 1 auto; }
+.anxt-words { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; min-width: 0; flex: 1 1 auto; order: 2; }
+.anxt-more { order: 1; }
 .anxt-name {
-  font-size: clamp(12.5px, 3.6vw, 14.5px);
+  /* THE CEILING IS 18 AND NOT 16 because of what the reference actually is:
+     a 699px-wide window photographed on a 2× screen, where the name is about
+     22px. A phone never reaches the ceiling — 4vw is 15.6 at 390 — so this
+     moves nothing on the device the brief cares about and stops the card
+     looking under-set on a tablet, where the image was drawn. */
+  font-size: clamp(14px, 4vw, 18px);
   font-weight: 800;
   color: var(--color-mist-100);
-  line-height: 1.25;
+  line-height: 1.2;
   overflow-wrap: anywhere;
 }
 .anxt-no {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  font-size: clamp(10px, 2.9vw, 11.5px);
+  font-size: clamp(11px, 3vw, 12px);
   font-weight: 700;
   color: var(--color-mist-500);
 }
@@ -3471,38 +3494,54 @@ body:has(.social-theme) .site-backdrop {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  padding: 2px 8px;
+  padding: 3px 9px;
   border-radius: 999px;
-  font-size: clamp(10px, 2.9vw, 11.5px);
+  font-size: clamp(11px, 3vw, 12px);
   font-weight: 800;
   background: color-mix(in srgb, var(--color-brand-500) 12%, transparent);
   color: var(--color-brand-400);
 }
-.anxt-pill svg { flex: none; width: 12px; height: 12px; }
+.anxt-pill svg { flex: none; width: 13px; height: 13px; }
+/* SOLID, NOT A WASH — the reference draws "פעיל" as a filled green pill with
+   white words, the same weight as the percentage chip beside it, and a tinted
+   one reads as a label where this reads as a state. The ink is
+   --color-on-state rather than --color-on-brand: on-brand is dark in themes
+   whose primary is a pale fill, and a status pill is never pale. Measured
+   now rather than asserted — contrast.test.ts carries both of these fills as
+   text pairs, scoped to social-theme: 5.7 on the green and 5.4 on the amber. */
 .anxt-pill[data-tone="live"] {
-  background: color-mix(in srgb, var(--color-success-400) 16%, transparent);
-  color: var(--color-success-400);
+  background: var(--color-success-400);
+  color: var(--color-on-state);
 }
 .anxt-pill[data-tone="held"] {
-  background: color-mix(in srgb, var(--color-warning-400) 18%, transparent);
-  color: var(--color-warning-400);
+  background: var(--color-warning-400);
+  color: var(--color-on-state);
 }
 
+/* THE COVER. A third of the card, down its whole height, with a floor of
+   112px so a short card keeps a picture worth looking at and a ceiling so a
+   wide screen does not turn it into a banner. The ceiling is 180: the
+   reference gives the picture 348 of the card's 1342 pixels — 26% — and at
+   the width it was drawn at (699 CSS, 2× screen) a 150px cap pulled that
+   down to 22%. On a phone the percentage rules and the cap never fires. */
 .anxt-pic {
   flex: none;
+  align-self: stretch;
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   place-items: center;
-  width: 54px;
-  height: 54px;
+  width: 27%;
+  max-width: 180px;
+  min-width: 84px;
+  min-height: 112px;
   overflow: hidden;
-  border-radius: 12px;
+  border-radius: 14px;
   border: 1px solid var(--color-ink-700);
   background: var(--color-ink-800);
   color: var(--color-mist-500);
 }
 .anxt-pic img, .anxt-pic video { width: 100%; height: 100%; object-fit: cover; }
-.anxt-pic svg { width: 22px; height: 22px; }
+.anxt-pic svg { width: 26px; height: 26px; }
 
 .anxt-more {
   flex: none;
@@ -3511,7 +3550,7 @@ body:has(.social-theme) .site-backdrop {
   place-items: center;
   width: 40px;
   height: 40px;
-  border-radius: 11px;
+  border-radius: 12px;
   border: 1px solid var(--color-ink-700);
   background: var(--color-ink-800);
   color: var(--color-mist-300);
@@ -3522,9 +3561,9 @@ body:has(.social-theme) .site-backdrop {
 .anxt-meter { display: flex; align-items: center; gap: 7px; min-width: 0; }
 .anxt-pctchip {
   flex: none;
-  padding: 1px 7px;
+  padding: 2px 8px;
   border-radius: 999px;
-  font-size: clamp(10px, 2.9vw, 11.5px);
+  font-size: clamp(11px, 3vw, 12px);
   font-weight: 800;
   background: var(--color-brand-500);
   color: var(--color-on-brand);
@@ -3537,7 +3576,7 @@ body:has(.social-theme) .site-backdrop {
 .anxt-track {
   flex: 1 1 auto;
   min-width: 0;
-  height: 7px;
+  height: 8px;
   border-radius: 999px;
   background: var(--color-ink-800);
   overflow: hidden;
@@ -3545,58 +3584,98 @@ body:has(.social-theme) .site-backdrop {
 .anxt-bar { display: block; height: 100%; border-radius: 999px; background: var(--color-brand-500); }
 .anxt-bar[data-tone="live"] { background: var(--color-success-400); }
 .anxt-bar[data-tone="held"] { background: var(--color-warning-400); }
-.anxt-of { flex: none; font-size: clamp(10.5px, 3vw, 12px); font-weight: 800; color: var(--color-mist-300); }
+.anxt-of { flex: none; font-size: clamp(11px, 3.1vw, 12.5px); font-weight: 800; color: var(--color-mist-300); }
 
-/* ── the three figures ── */
+/* ── the three figures, in one bordered box with hairlines between them ──
+   פורסמו · בתור · קבוצות, right to left, each under its own icon — measured
+   off the reference: the people glyph is its left-hand column (x433–732) and
+   the speech bubble its right-hand one (x1030–1328). */
 .anxt-figs {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 4px;
-  padding: 6px 0;
-  border-block: 1px solid var(--color-ink-700);
+  padding: 7px 2px;
+  border-radius: 14px;
+  border: 1px solid var(--color-ink-700);
+  background: color-mix(in srgb, var(--color-ink-800) 45%, transparent);
 }
-.anxt-fig { display: flex; flex-direction: column; align-items: center; min-width: 0; }
-.anxt-fig b { font-size: clamp(13px, 3.8vw, 15px); font-weight: 800; color: var(--color-mist-100); }
-.anxt-fig span { font-size: clamp(9.5px, 2.7vw, 11px); font-weight: 700; color: var(--color-mist-500); }
+.anxt-fig {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  min-width: 0;
+}
+/* The hairline belongs to the item that follows, so the row's outer edges
+   stay clean whatever the count. */
+.anxt-fig + .anxt-fig { position: relative; }
+/* INSET, as the reference draws them: the rule covers about half the box's
+   height and floats between the columns rather than cutting the card. */
+.anxt-fig + .anxt-fig::after {
+  content: '';
+  position: absolute;
+  inset-block: 12%;
+  inset-inline-end: 0;
+  width: 1px;
+  background: var(--color-ink-700);
+}
+.anxt-fig svg { width: 15px; height: 15px; color: var(--color-mist-300); }
+.anxt-fig b { font-size: clamp(14px, 4vw, 18px); font-weight: 800; color: var(--color-mist-100); line-height: 1.15; }
+.anxt-fig span { font-size: clamp(11px, 2.8vw, 11px); font-weight: 700; color: var(--color-mist-500); }
 
-/* ── when it publishes ── */
+/* ── the foot: edit · days and hour · speed · on/off · statistics ──
+   ONE ROW, which is where the height went. `nowrap` on purpose: with
+   `flex-wrap: wrap` a control that does not fit moves to a line of its own
+   instead of shrinking, and the five became three rows at 390. Nowrap plus a
+   day chip that may shrink keeps the row the reference draws. The one
+   exception is measured and deliberate — see the 520px rule at the end of
+   this block, where the chip alone takes a second line rather than print two
+   letters of a six-letter week. */
+.anxt-foot { display: flex; align-items: center; gap: 3px; flex-wrap: nowrap; }
+
+/* when it publishes */
 .anxt-when {
   display: flex;
   align-items: center;
-  gap: 5px;
-  flex-wrap: wrap;
-  font-size: clamp(10px, 2.9vw, 11.5px);
-  font-weight: 700;
-  color: var(--color-mist-300);
+  gap: 3px;
+  min-width: 0;
+  font-size: clamp(11px, 3vw, 12px);
+  font-weight: 800;
+  color: var(--color-mist-100);
 }
 .anxt-when svg { flex: none; width: 13px; height: 13px; color: var(--color-brand-400); }
+.anxt-days { min-width: 0; flex: 0 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.anxt-hour { flex: none; white-space: nowrap; font-variant-numeric: tabular-nums; }
+/* The divider the reference draws between the days and the hour. A border on
+   an empty span rather than a "|" character, so it sits where the two groups
+   meet whatever the words beside it measure. */
+.anxt-sep {
+  flex: none;
+  width: 1px;
+  height: 15px;
+  margin: 0 2px;
+  background: var(--color-ink-700);
+}
 /* The same line, as a button — "ימים ושעות". Blue wash and a blue hairline,
    which is what the brief asks for and what every soft control on this
    screen already wears. */
 .anxt-whenbtn {
-  width: 100%;
+  flex: 1 1 auto;
+  min-width: 0;
   min-height: 40px;
-  padding: 5px 8px;
+  padding: 5px 7px;
   border-radius: 12px;
   border: 1px solid color-mix(in srgb, var(--color-brand-500) 30%, transparent);
   background: color-mix(in srgb, var(--color-brand-500) 8%, transparent);
   text-align: start;
 }
 .anxt-whenbtn:disabled { opacity: 0.6; }
-/* NO CHEVRON. It wrapped to a line of its own at 390px — the row is about
-   155px wide inside a tile — and it is not in the brief either, which asks
-   for "עיצוב כחול בהיר עם מסגרת כחולה" and gets exactly that. The tint and
-   the hairline are what say it can be pressed. */
-.anxt-sep { color: var(--color-mist-500); }
 
-/* ── the foot ── */
-.anxt-foot { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .anxt-switch {
   flex: none;
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   place-items: center;
-  width: 52px;
+  width: 44px;
   height: 40px;
   background: none;
   border: 0;
@@ -3617,18 +3696,29 @@ body:has(.social-theme) .site-backdrop {
   margin: 3px;
   border-radius: 999px;
   background: var(--color-ink-900);
-  transform: translateX(0);
+  /* ON PARKS AT THE RIGHT END OF THE TRACK, which is what the reference
+     draws: a blue track with the white knob against its right edge.
+     WRITTEN OUT BECAUSE translateX CANNOT MIRROR ITSELF. The knob rests at
+     the track's inline START — the right in Hebrew, the left in Russian — so
+     the same offset moves it in opposite directions. Hebrew: OFF slides 19px
+     to the left, ON sits still. Russian: OFF sits still, ON slides 19px to
+     the right. Both end with the knob on the right while it is running, and
+     with it inside its own track: the single rule this replaces pushed the
+     Russian knob 16px past the track, onto the speed control beside it. */
+  transform: translateX(-19px);
   transition: transform 140ms ease;
 }
-.anxt-switch[data-on="yes"] .anxt-swknob { transform: translateX(-19px); }
+.anxt-switch[data-on="yes"] .anxt-swknob { transform: translateX(0); }
+html[dir='ltr'] .anxt-swknob { transform: translateX(0); }
+html[dir='ltr'] .anxt-switch[data-on="yes"] .anxt-swknob { transform: translateX(19px); }
 .anxt-switch:disabled { opacity: 0.55; }
 
 .anxt-pace {
-  flex: 1 1 auto;
+  flex: 0 1 auto;
   min-width: 0;
   display: flex;
   align-items: center;
-  gap: 5px;
+  gap: 3px;
   /* 42 AND NOT 40, MEASURED RATHER THAN CHOSEN. The <select> inside is
      height:100% of the CONTENT box, so a 40px pill with a 1px border gives it
      38 — two pixels under the thumb floor this product holds every control
@@ -3636,13 +3726,15 @@ body:has(.social-theme) .site-backdrop {
      centres its items, so the two extra pixels are invisible beside the 40px
      icon buttons. */
   height: 42px;
-  padding: 0 9px;
+  min-width: 88px;
+  padding: 0 6px;
   border-radius: 12px;
   border: 1px solid var(--color-ink-700);
   background: var(--color-ink-800);
   color: var(--color-brand-400);
 }
 .anxt-pace svg { flex: none; width: 15px; height: 15px; }
+.anxt-pace .anxt-chev { width: 13px; height: 13px; color: var(--color-mist-300); }
 .anxt-pace select {
   min-width: 0;
   width: 100%;
@@ -3652,6 +3744,10 @@ body:has(.social-theme) .site-backdrop {
   font-size: clamp(11px, 3.1vw, 12.5px);
   font-weight: 800;
   color: var(--color-mist-100);
+  /* The chevron beside it is the reference's; the browser's own arrow would
+     make two. */
+  appearance: none;
+  -webkit-appearance: none;
 }
 
 .anxt-icon {
@@ -3684,6 +3780,48 @@ body:has(.social-theme) .site-backdrop {
 }
 .anxt-back svg { flex: none; width: 16px; height: 16px; }
 .anxt-back:disabled { opacity: 0.55; }
+
+/* ── THE SCREEN'S ACTION ROW, ON THE NARROWEST PHONE ─────────────────────
+ *
+ * "+ קמפיין חדש", the search and the two views measure 330 together and a
+ * 320px phone has 304 inside its margins, so the search field was left with
+ * 35px and its placeholder came out as "פוש קמפיין". Under 360 the field
+ * takes a line of its own, under the three controls. At 360 and above the row
+ * is the single line the reference draws.
+ */
+@media (max-width: 359px) {
+  .anxt-actions { flex-wrap: wrap; }
+  .anxt-actions > label { order: 9; flex: 1 0 100%; }
+}
+
+/* ── AND ON A PHONE, WHERE THE ROW RUNS OUT OF PIXELS ────────────────────
+ *
+ * MEASURED, not guessed. The four other controls and their gaps take 224 of
+ * the card's inner width, so the day-and-hour chip gets what is left: 132px
+ * at 390 and 102px at 360. "כל יום | 08:00" needs 119 and only just fits at
+ * 390; the strings this screen actually shows do not. Six separate days
+ * ("א׳,ב׳,ג׳,ד׳,ה׳,ש׳") need about 170, and a campaign whose schedule was
+ * never turned on prints "לא נבחרו ימים" with "בכל שעה" beside it — more
+ * than the chip has even at 430. At 360 the day letters came out 10px wide,
+ * which is not a cut label, it is a missing one.
+ *
+ * So up to 520 the chip takes a line of its own, under the four controls,
+ * and nothing is hidden or cut: "במכשירים צרים מותר לבצע התאמות מינימליות
+ * כדי למנוע … חיתוך כפתורים, בלי להסתיר פעולות." Above that — around the
+ * width the reference itself was drawn at, a 699px viewport on a 2× screen —
+ * the row is the single line the image shows.
+ *
+ * THE SAME RULE SERVES RUSSIAN, which is half as long again: "Каждый день"
+ * needs 78px where "כל יום" needs 37. It replaces an `html[dir='ltr']` pair
+ * that gave Russian its own row at EVERY width, including the two-column grid
+ * on a desktop where the row has 300px to spare. One width-scoped rule is
+ * measured for both languages, and russian-layout checks the same spans it
+ * always did.
+ */
+@media (max-width: 520px) {
+  .anxt-foot { flex-wrap: wrap; }
+  .anxt-whenbtn { order: 9; flex: 1 0 100%; }
+}
 
 /* ─── לוג ההצטרפות, בתוך כרטיס הקבוצה הפעילה ──────────────────────────────
  *

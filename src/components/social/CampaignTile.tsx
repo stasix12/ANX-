@@ -10,32 +10,47 @@ import type { CampaignState } from '@/lib/social/campaign';
 import type { Campaign } from '@/lib/social/types';
 
 /**
- * ─── THE COMPACT CAMPAIGN TILE ────────────────────────────────────────────
+ * ─── THE COMPACT CAMPAIGN CARD ────────────────────────────────────────────
  *
- * "להחליף את הכרטיסיות הגדולות הקיימות בתצוגת Grid קומפקטית · שתי כרטיסיות
- *  בכל שורה · ארבעה קמפיינים מוצגים במקביל."
+ * "לצמצם את גובה הכרטיס ולשחזר את הפריסה האופקית שבתמונה: תמונת הקמפיין בצד
+ *  שמאל. שם הקמפיין, מספרו והסטטוס בצד ימין … שורת פעולות תחתונה אחת."
  *
- * WHY THIS IS A NEW COMPONENT AND NOT A REWRITE OF CampaignCard.
+ * THE SHAPE IS THE REFERENCE'S, and it is a LANDSCAPE card, one to a row —
+ * not the two-up portrait tile this file drew before. What changed and why
+ * each one is the image rather than an opinion:
  *
- * His own §7 asks for both: "תצוגה קומפקטית: לניהול מהיר של מספר קמפיינים"
- * and "תצוגה מורחבת: לעריכה מלאה", and the reference image carries a
- * list/grid toggle in its corner. So the grid draws THIS, the list draws the
- * card that already exists, and §9's "אין למחוק פונקציות קיימות" is kept by
- * construction rather than by promise: CampaignCard is untouched, and the
- * twenty-one test files that pin it — including the one that measures it in
- * a browser at four widths — go on measuring exactly what they measured.
+ *   THE PICTURE MOVED TO THE LEFT AND GREW. It was a 54px thumbnail stacked
+ *   under the ⋯ in the head's side column; the reference gives it its own
+ *   column down the whole card, about a third of the width, and that is the
+ *   only element in the card that carries the campaign's own face.
  *
- * AND IT RESOLVES A CONTRADICTION IN THE BRIEF. The reference puts
- * "חזרה לפעילות" at the BOTTOM of the card; campaign-card.test.ts requires
- * the turn-on button to sit ABOVE the scheduling panel, and its failure
- * message records why — "it was reported as unfindable there", by him. Both
- * are right about their own card: on a tall card with a scheduling panel the
- * button must come first or it is lost below the fold, and on a tile with no
- * panel the bottom is where the eye already is. The contradiction was between
- * two different cards, and this is the second one.
+ *   THE THREE FIGURES KEEP THEIR ORDER — פורסמו · בתור · קבוצות, right to
+ *   left — and gain the icons the reference draws over them: a speech bubble
+ *   with a clock, a paper plane, two people, inside one bordered box with a
+ *   hairline between each pair. Measured off the image rather than read off
+ *   it: the people glyph sits at x433-732 and the bubble at x1030-1328 of a
+ *   card that starts at x30, so the bubble is the right-hand column. Same
+ *   three numbers, same source — `state.progress` and the page's target
+ *   count.
  *
- * EVERY NUMBER IS THE ACCOUNT'S. "אין להשתמש בנתוני דמה במערכת הפעילה" —
- * the reference's 1,420 and 250/250 and #24 are its own; what this draws is
+ *   ONE ACTION ROW instead of three. The reference draws, right to left:
+ *   edit · days-and-hour · speed · on/off · statistics. Every one of them is
+ *   a control this tile already had; what changed is that they sit on one
+ *   line, which is where the height went.
+ *
+ *   THE HOUR LOST ITS WORD. "משעה 08:00" became a clock and "08:00", which
+ *   is how the reference draws it and the only way five controls fit a phone
+ *   row. The days keep their letters, comma-joined without spaces — "א,ב,ג"
+ *   — for the same reason and in the reference's own spelling.
+ *
+ * NO HANDLER, href OR CONDITION BELOW IS NEW. onPause, onResume, onPaceChange,
+ * onMenu, onHours, editHref and statsHref are the props this tile already had
+ * and the page already wired; the ⋯, the switch, the speed select, the days
+ * button, the pencil and the chart all call exactly what they called before.
+ * "100% שימור פונקציונליות."
+ *
+ * EVERY NUMBER IS THE ACCOUNT'S. "אין להשתמש בנתוני דמה במערכת הפעילה" — the
+ * reference's 45 and 0/45 and #24 are its own; what this draws is
  * `state.progress` and the campaign's real ordinal. Nothing here computes a
  * publishing instant, counts a queue, or decides a schedule: it is handed
  * what the page already read and prints it.
@@ -81,13 +96,24 @@ function statusOf(state: CampaignState, globalPaused: boolean): { label: string;
   return { label: 'פעיל', tone: 'live' };
 }
 
+/*
+ * JOINED WITHOUT A SPACE — "א׳,ב׳,ג׳" rather than "א׳, ב׳, ג׳" — which is the
+ * reference's own spelling and also the only one that fits: the day chip
+ * shares one row with four other controls now.
+ *
+ * THE GERESH STAYS, and that is not a style choice. Each letter is a
+ * dictionary key of its own ('א׳' → 'Вс'), so a Russian screen gets
+ * "Вс,Пн,Вт" by translating the letters as they are joined. Dropping the mark
+ * made the keys miss and the chip came out "א-ו" in a Russian card — caught by
+ * russian-rendered, which reads what is painted rather than what is written.
+ */
 const DAY_LETTER = ['א׳', 'ב׳', 'ג׳', 'ד׳', 'ה׳', 'ו׳', 'ש׳'];
 
 /**
- * "א׳-ש׳" / "כל יום" / "א׳, ג׳, ה׳" — the reference's own three shapes.
+ * "א׳-ש׳" / "כל יום" / "א׳,ג׳,ה׳" — the reference’s own three shapes.
  *
  * Read off the schedule the page handed in, never off a clock: this line is
- * a setting, not a forecast, and the card above it is the one that forecasts.
+ * a setting, not a forecast, and the card beside it is the one that forecasts.
  */
 function daysText(schedule: CampaignSchedule): string {
   if (!schedule.enabled) return 'כל יום';
@@ -97,27 +123,24 @@ function daysText(schedule: CampaignSchedule): string {
   /* A run of consecutive days reads as a range, which is what the reference
      draws for א׳-ש׳ and א׳-ו׳; anything else is listed. */
   const consecutive = days.every((d, i) => i === 0 || d === days[i - 1] + 1);
-  if (consecutive && days.length > 2) return `${DAY_LETTER[days[0]]}-${DAY_LETTER[days[days.length - 1]]}`;
-  return days.map((d) => DAY_LETTER[d]).join(', ');
+  /* t() PER LETTER, so any set of days reads in the chosen language. A whole
+     combination could never be a dictionary key — there are 127 of them — and
+     the letters are keys already. */
+  if (consecutive && days.length > 2) return `${t(DAY_LETTER[days[0]])}-${t(DAY_LETTER[days[days.length - 1]])}`;
+  return days.map((d) => t(DAY_LETTER[d])).join(',');
 }
 
 /**
- * "משעה 08:00" — AND DELIBERATELY NOT THE REFERENCE'S RANGE.
+ * THE HOUR, AND DELIBERATELY NOT A RANGE.
  *
- * The reference draws "20:00 – 08:00", "10:00 – 18:00", "07:30 – 20:30". This
- * product has no closing hour to draw: he had it removed — "יש להסיר לחלוטין
- * את אפשרות שעת הסיום מממשק הכרטיס... להשאיר רק: שעת התחלת הפרסום, הפרש בין
- * פרסום לפרסום, ימי הפרסום שנבחרו" — and readSchedule() stopped reading the
- * schedule_end column (campaign-schedule.ts:48). A chosen day is open from
- * this hour until midnight.
- *
- * So printing a range would mean either re-introducing a setting he ordered
- * removed, or printing a second hour nothing in the engine reads. This is the
- * one place the tile does not match the reference, and it is listed as such.
+ * The reference draws a clock and "11:00". This product has no closing hour
+ * to draw: he had it removed — "יש להסיר לחלוטין את אפשרות שעת הסיום מממשק
+ * הכרטיס" — and readSchedule() stopped reading the schedule_end column
+ * (campaign-schedule.ts:48). A chosen day is open from this hour to midnight.
  */
 function hoursText(schedule: CampaignSchedule): string {
   if (!schedule.enabled) return 'בכל שעה';
-  return `משעה ${schedule.start || '08:00'}`;
+  return schedule.start || '08:00';
 }
 
 export function CampaignTile({
@@ -146,32 +169,58 @@ export function CampaignTile({
   };
   /* CLAMPED, because a truncated read can put published above the total it
      was counted against and a bar wider than its track is the one way this
-     tile could look broken. The same rule the cycle card follows. */
+     card could look broken. The same rule the cycle card follows. */
   const pct = total > 0 ? Math.max(0, Math.min(100, Math.round((published / total) * 100))) : 0;
   const running = status.tone === 'live';
   const profile = paceProfile(pace ?? null);
   /*
    * THE CARD'S OWN COLOUR, and the SAME one the full card uses — the
-   * reference gives every card a border of its own hue (green, blue, orange,
-   * purple) and campaignIdentity() is where this product already decides
-   * that, by the campaign's number. Borrowing it rather than inventing a
-   * second palette is what keeps the grid and the list recognisably the same
-   * four campaigns.
+   * reference draws a ring of its own hue around the card and
+   * campaignIdentity() is where this product already decides that, by the
+   * campaign's number. Borrowing it rather than inventing a second palette is
+   * what keeps the compact view and the list recognisably the same campaigns.
    */
   const identity = campaignIdentity(ordinal);
 
   return (
     <div className="anxt-tile" data-tone={status.tone} style={{ borderColor: identity.line }}>
-      {/* ── the head: picture, name, number, status, and the ⋯ ── */}
-      <div className="anxt-head">
-        <span className="anxt-words">
-          <span className="anxt-name" dir="auto" data-no-translate>{campaign.name}</span>
-          <span className="anxt-no">
-            <svg aria-hidden viewBox="0 0 24 24" fill="currentColor" style={{ color: identity.ink }}>
-              <path d="M6 3h12l4 6-10 12L2 9z" />
-            </svg>
-            קמפיין #{ordinal}
-          </span>
+      {/* ── the body and the picture beside it ───────────────────────────
+          IN THIS ORDER BECAUSE THE PAGE IS RTL: the first child is the one
+          on the RIGHT, which is where the reference puts the words, and the
+          picture that follows lands on the left. */}
+      <div className="anxt-top">
+        <div className="anxt-body">
+          {/* ── the name, the number, the status — and the ⋯ beside them ── */}
+          <div className="anxt-head">
+            {/* THE ⋯ IS IN THE CARD'S TOP CORNER — measured off the reference:
+                its dots sit at x1259-1301 of a card whose inner edge is 1352,
+                hard against the start corner, with the name ending to its
+                left. FIRST in the row, because in a right-to-left card the
+                first child is the right-hand one. */}
+            {onMenu && (
+              <button type="button" className="anxt-more" onClick={onMenu} aria-haspopup="menu" aria-label={`עוד פעולות לקמפיין "${keep(campaign.name)}"`}>
+                <svg aria-hidden viewBox="0 0 24 24" fill="currentColor">
+                  <circle cx="5" cy="12" r="1.9" />
+                  <circle cx="12" cy="12" r="1.9" />
+                  <circle cx="19" cy="12" r="1.9" />
+                </svg>
+              </button>
+            )}
+            <span className="anxt-words">
+              <span className="anxt-name" dir="auto" data-no-translate>{campaign.name}</span>
+              <span className="anxt-no">
+                <svg aria-hidden viewBox="0 0 24 24" fill="currentColor" style={{ color: identity.ink }}>
+                  <path d="M6 3h12l4 6-10 12L2 9z" />
+                </svg>
+                קמפיין #{ordinal}
+              </span>
+            </span>
+          </div>
+
+          {/* THE STATUS IS ITS OWN LINE, not a third line inside the words:
+              the reference right-aligns it to the body's edge — past where the
+              name and the number stop, which is where the ⋯ reserves its
+              corner — and that is only possible outside that row. */}
           <span className="anxt-pill" data-tone={status.tone}>
             <svg aria-hidden viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               {running ? <path d="M9 7.5v9l7-4.5z" fill="currentColor" stroke="none" /> : <path d="M9.5 7.5v9M14.5 7.5v9" />}
@@ -179,127 +228,143 @@ export function CampaignTile({
             </svg>
             {status.label}
           </span>
-        </span>
-        {/*
-          ── THE ⋯ ABOVE THE COVER, IN ONE COLUMN ────────────────────────
-          Which is how the reference draws it, and it is also the only way
-          the head fits: on a 360px phone two tiles to a row leaves about
-          150px inside each one, and a ⋯ and a cover side by side in the
-          same flex row took 110 of it — "קמפיין #24" needed 46px and had
-          33, measured, at every one of the four tiles. Stacking them gives
-          the name and the number the width they need.
-        */}
-        <span className="anxt-side">
-          {onMenu && (
-            <button type="button" className="anxt-more" onClick={onMenu} aria-haspopup="menu" aria-label={`עוד פעולות לקמפיין "${keep(campaign.name)}"`}>
-              <svg aria-hidden viewBox="0 0 24 24" fill="currentColor">
-                <circle cx="5" cy="12" r="1.9" />
-                <circle cx="12" cy="12" r="1.9" />
-                <circle cx="19" cy="12" r="1.9" />
+
+          {/* ── the meter ──
+              THE REFERENCE'S OWN ORDER: the fraction at the start of the line
+              (the right, in Hebrew), the track across the middle, the
+              percentage chip at the end.
+
+              dir="ltr" OR IT READS BACKWARDS. "170 / 250" in a right-to-left
+              paragraph renders as "250 / 170" — the published count and the
+              ceiling swap places, and the card reports a round that has
+              published more than it planned. Caught in a screenshot. */}
+          <div className="anxt-meter">
+            <span className="anxt-of" dir="ltr">{published} / {total}</span>
+            <span className="anxt-track">
+              <span className="anxt-bar" data-tone={status.tone} style={{ width: `${pct}%` }} />
+            </span>
+            <span className="anxt-pctchip" data-tone={status.tone}>{pct}%</span>
+          </div>
+
+          {/* ── the three figures, and every one of them is a stored count ──
+              פורסמו · בתור · קבוצות, right to left, which is the reference's
+              order and the order this file already drew: measured off the
+              image, the people glyph is its left-hand column (x433–732) and
+              the speech bubble its right-hand one (x1030–1328). The icons
+              above them are what this pass added; the sequence was not
+              touched. (The brief's own sentence lists them the other way —
+              "שורת נתונים: קבוצות, בתור, פורסמו" — and the image wins:
+              "התמונה היא מקור האמת הוויזואלי".) */}
+          <div className="anxt-figs">
+            <span className="anxt-fig">
+              {/* A SPEECH BUBBLE WITH A CLOCK IN IT, which is the glyph the
+                  reference draws over "פורסמו": a post that has gone out, and
+                  the hour it went. */}
+              <svg aria-hidden viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M13 3.6a7.9 7.9 0 1 1-6.3 12.7l-3 .9 1.1-2.9A7.9 7.9 0 0 1 13 3.6z" />
+                <path d="M13 7.9v3.6l2.4 1.4" />
               </svg>
-            </button>
-          )}
-          <span className="anxt-pic" aria-hidden>
+              <b>{published}</b>
+              <span>{t('פורסמו')}</span>
+            </span>
+            <span className="anxt-fig">
+              <svg aria-hidden viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 4 3 11l7 2.6L12.6 21z" />
+                <path d="m10 13.6 4.4-4.4" />
+              </svg>
+              <b>{scheduled}</b>
+              <span>{t('בתור')}</span>
+            </span>
+            <span className="anxt-fig">
+              <svg aria-hidden viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="9" cy="8" r="3.2" />
+                <path d="M3.5 19c0-3 2.5-4.6 5.5-4.6s5.5 1.6 5.5 4.6" />
+                <path d="M16 5.4a3 3 0 0 1 0 5.2M17.6 14.8c2 .6 3.4 2 3.4 4.2" />
+              </svg>
+              <b>{groups}</b>
+              <span>{t('קבוצות')}</span>
+            </span>
+          </div>
+        </div>
+
+        {/* THE COVER, down the left of the card. Decorative: the campaign is
+            already named in words beside it, so a screen reader gains nothing
+            from a second mention and the picture carries no alt text. */}
+        <span className="anxt-pic" aria-hidden>
           {media?.kind === 'video' ? (
             <video src={media.url} muted playsInline preload="metadata" />
           ) : media ? (
+            // eslint-disable-next-line @next/next/no-img-element
             <img src={media.url} alt="" loading="lazy" />
           ) : (
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
-                <rect x="3" y="4" width="18" height="16" rx="3" />
-                <path d="m6 16 3.5-4 3 3L16 11l2 2.5" />
-              </svg>
-            )}
-          </span>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
+              <rect x="3" y="4" width="18" height="16" rx="3" />
+              <path d="m6 16 3.5-4 3 3L16 11l2 2.5" />
+            </svg>
+          )}
         </span>
       </div>
 
-      {/* ── the meter ── */}
-      {/* THE REFERENCE'S OWN ORDER, which the first version mirrored: the
-          fraction sits at the start of the line (the right, in Hebrew) and
-          the percentage chip at the end. Caught by looking at the render
-          beside the image rather than by any assertion. */}
-      <div className="anxt-meter">
-        <span className="anxt-of" dir="ltr">{published} / {total}</span>
-        <span className="anxt-track">
-          <span className="anxt-bar" data-tone={status.tone} style={{ width: `${pct}%` }} />
-        </span>
-        <span className="anxt-pctchip" data-tone={status.tone}>{pct}%</span>
-        {/* dir="ltr" OR IT READS BACKWARDS. "170 / 250" in a right-to-left
-            paragraph renders as "250 / 170" — the published count and the
-            ceiling swap places, and the tile reports a round that has
-            published more than it planned. Caught in the screenshot. */}
-      </div>
-
-      {/* ── the three figures, and every one of them is a stored count ── */}
-      <div className="anxt-figs">
-        <span className="anxt-fig">
-          <b>{published}</b>
-          <span>{t('פורסמו')}</span>
-        </span>
-        <span className="anxt-fig">
-          <b>{scheduled}</b>
-          <span>{t('בתור')}</span>
-        </span>
-        <span className="anxt-fig">
-          <b>{groups}</b>
-          <span>{t('קבוצות')}</span>
-        </span>
-      </div>
-
-      {/*
-        ── WHEN IT PUBLISHES, AND THE WAY TO CHANGE IT ───────────────────
-        "בכל כרטיס קמפיין יש להוסיף כפתור חדש בשם 'ימים ושעות'."
-
-        The line that PRINTED the schedule becomes the button that opens it,
-        rather than a second control beside it: the owner's finger is already
-        going to the days and the hour when he wants to change the days and
-        the hour, and a tile this size has no room for a label that only
-        reads. Without a handler it stays exactly the line it was.
-      */}
-      {onHours ? (
-        <button type="button" className="anxt-when anxt-whenbtn" onClick={onHours} disabled={busy} aria-label={`ימים ושעות לקמפיין "${keep(campaign.name)}"`}>
-          <svg aria-hidden viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
-            <rect x="3" y="5" width="18" height="16" rx="3" />
-            <path d="M3 10h18M8 3v4M16 3v4" />
-          </svg>
-          <span>{daysText(schedule)}</span>
-          <span className="anxt-sep" aria-hidden>|</span>
-          <span dir="ltr">{hoursText(schedule)}</span>
-        </button>
-      ) : (
-        <p className="anxt-when">
-          <svg aria-hidden viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
-            <rect x="3" y="5" width="18" height="16" rx="3" />
-            <path d="M3 10h18M8 3v4M16 3v4" />
-          </svg>
-          <span>{daysText(schedule)}</span>
-          <span className="anxt-sep" aria-hidden>|</span>
-          <span dir="ltr">{hoursText(schedule)}</span>
-        </p>
-      )}
-
-      {/* ── the foot: on/off, the speed, and the two buttons ── */}
+      {/* ── ONE ACTION ROW: edit · days and hour · speed · on/off · stats ──
+          Right to left, in the reference's order. Every control here is the
+          one this tile already carried. */}
       <div className="anxt-foot">
-        <button
-          type="button"
-          role="switch"
-          aria-checked={running}
-          aria-label={`פרסום בקמפיין "${keep(campaign.name)}"`}
-          disabled={busy || (running ? !onPause : !onResume)}
-          onClick={() => (running ? onPause?.() : onResume?.())}
-          className="anxt-switch"
-          data-on={running ? 'yes' : 'no'}
-        >
-          <span aria-hidden className="anxt-swtrack">
-            <span aria-hidden className="anxt-swknob" />
-          </span>
-        </button>
+        <Link className="anxt-icon" href={editHref} aria-label={`עריכת הקמפיין "${keep(campaign.name)}"`}>
+          <svg aria-hidden viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M4 20h4l10-10-4-4L4 16z" />
+            <path d="m13.5 6.5 4 4" />
+          </svg>
+        </Link>
+
+        {/*
+          ── WHEN IT PUBLISHES, AND THE WAY TO CHANGE IT ───────────────────
+          "בכל כרטיס קמפיין יש להוסיף כפתור חדש בשם 'ימים ושעות'."
+
+          The line that PRINTS the schedule IS the button that opens it,
+          rather than a second control beside it: the owner's finger is
+          already going to the days and the hour when he wants to change the
+          days and the hour. Without a handler it stays the line it was.
+        */}
+        {onHours ? (
+          <button type="button" className="anxt-when anxt-whenbtn" onClick={onHours} disabled={busy} aria-label={`ימים ושעות לקמפיין "${keep(campaign.name)}"`}>
+            <svg aria-hidden viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+              <rect x="3" y="5" width="18" height="16" rx="3" />
+              <path d="M3 10h18M8 3v4M16 3v4" />
+            </svg>
+            {/* `title` BECAUSE THIS ONE CAN STILL CLIP. Up to 520 the chip
+                has a line to itself and nothing is cut; above it the row is
+                the reference's single line, and a custom week of six separate
+                days can still end in an ellipsis there. The hour never
+                shrinks, so what a cut costs is the days, and the title hands
+                them back on hover and on a long press. */}
+            <span className="anxt-days" title={daysText(schedule)}>{daysText(schedule)}</span>
+            <span className="anxt-sep" aria-hidden />
+            <svg aria-hidden viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+              <circle cx="12" cy="12" r="8.6" />
+              <path d="M12 7.6V12l3 1.8" />
+            </svg>
+            <span className="anxt-hour" dir="ltr">{hoursText(schedule)}</span>
+          </button>
+        ) : (
+          <p className="anxt-when">
+            <svg aria-hidden viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+              <rect x="3" y="5" width="18" height="16" rx="3" />
+              <path d="M3 10h18M8 3v4M16 3v4" />
+            </svg>
+            <span className="anxt-days" title={daysText(schedule)}>{daysText(schedule)}</span>
+            <span className="anxt-sep" aria-hidden />
+            <svg aria-hidden viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+              <circle cx="12" cy="12" r="8.6" />
+              <path d="M12 7.6V12l3 1.8" />
+            </svg>
+            <span className="anxt-hour" dir="ltr">{hoursText(schedule)}</span>
+          </p>
+        )}
 
         {/* THE SPEED IS THE ACCOUNT'S, not this campaign's — one engine, one
             pace, exactly as rules.ts defines it. The reference draws a fourth
-            mode ("בטוח"); the product has three, and inventing a fourth here
-            would be a control that promises a setting nothing reads. */}
+            mode; the product has three, and inventing a fourth here would be
+            a control that promises a setting nothing reads. */}
         {/* A <label> wrapping it is an accessible name to a browser and not to
             layout.test.ts's static walk, which reads the control's own
             attributes — so the name is on the control, where both can see it. */}
@@ -319,14 +384,29 @@ export function CampaignTile({
               <option key={p.id} value={p.id}>{p.label}</option>
             ))}
           </select>
+          {/* THE CHEVRON THE REFERENCE DRAWS, and the reason it can be here
+              now: the control has a whole row to itself rather than a third
+              of a 155px tile, which is why the two-up version left it out. */}
+          <svg aria-hidden className="anxt-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="m6 9.5 6 6 6-6" />
+          </svg>
         </label>
 
-        <Link className="anxt-icon" href={editHref} aria-label={`עריכת הקמפיין "${keep(campaign.name)}"`}>
-          <svg aria-hidden viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M4 20h4l10-10-4-4L4 16z" />
-            <path d="m13.5 6.5 4 4" />
-          </svg>
-        </Link>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={running}
+          aria-label={`פרסום בקמפיין "${keep(campaign.name)}"`}
+          disabled={busy || (running ? !onPause : !onResume)}
+          onClick={() => (running ? onPause?.() : onResume?.())}
+          className="anxt-switch"
+          data-on={running ? 'yes' : 'no'}
+        >
+          <span aria-hidden className="anxt-swtrack">
+            <span aria-hidden className="anxt-swknob" />
+          </span>
+        </button>
+
         <Link className="anxt-icon" href={statsHref} aria-label={`סטטיסטיקה לקמפיין "${keep(campaign.name)}"`}>
           <svg aria-hidden viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
             <path d="M5 19V11M12 19V5M19 19v-6" />
@@ -335,10 +415,11 @@ export function CampaignTile({
       </div>
 
       {/*
-        ── AND THE WAY BACK, at the bottom, exactly as the reference draws it.
-           Only for a campaign that is actually held: a running campaign has
-           nothing to come back from, and drawing the button anyway is how a
-           screen comes to offer an action that does nothing.
+        ── AND THE WAY BACK, for a campaign that is actually held.
+           The reference's card is running and so draws no such button; this
+           one appears only where there is something to come back from, which
+           is the answer to "למה במסך קמפיינים אין כפתור להדלקת קמפיינים" and
+           leaves a running card exactly as the reference draws it.
       */}
       {!running && onResume && (
         <button type="button" className="anxt-back" onClick={() => onResume()} disabled={busy}>

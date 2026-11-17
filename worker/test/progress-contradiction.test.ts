@@ -1788,21 +1788,34 @@ async function main(): Promise<void> {
        guard that is about where it leads. The two halves below are what the
        owner's complaint was about: a ButtonLink (not a Button with an
        onClick), and /social/posts/new (not this page's rename sheet). */
-    /* THE headerAction SLOT ALONE, because this page has a second
-       ButtonLink to the same place — the empty state's "כתבו את הפוסט
-       הראשון" — and a pin over the whole file passed with the header's own
-       destination changed. Verified by changing it: the slice fails, the
-       file-wide search did not. */
+    /* THE BUTTON'S OWN SLOT ALONE, because this page has a second ButtonLink
+       to the same place — the empty state's "כתבו את הפוסט הראשון" — and a
+       pin over the whole file passed with the header's own destination
+       changed. Verified by changing it: the slice fails, the file-wide search
+       did not. */
+    /* IT MOVED OUT OF THE SHELL'S HEADER AND INTO THE ACTIONS ROW, which is
+       where the redesign's reference draws it: the top bar carries the
+       screen's name alone, and the primary action sits beside the search with
+       the two view buttons. This pin is about WHERE IT LEADS, so it follows
+       the button rather than the slot it used to sit in — same ButtonLink,
+       same /social/posts/new, same words. */
     /* The slice is computed, so its own ends are checked first: reorder the
-       two props and indexOf would hand slice() a backwards range, which
-       returns '' and fails both pins below with a message about the
-       destination rather than about prop order. */
-    const headerAt = camp.indexOf('headerAction=');
-    const pausedAt = camp.indexOf('paused={');
-    expect('guards', 'source-drift', 'the headerAction slice has both of its ends, in order', headerAt >= 0 && pausedAt > headerAt, true, NONE);
+       row and indexOf would hand slice() a backwards range, which returns ''
+       and fails both pins below with a message about the destination rather
+       than about layout. */
+    /* IT STARTS AT THE ELEMENT, NOT AT THE COMMENT ABOVE IT. An earlier
+       version of this pin opened the slice at the row's banner comment, and
+       the prose under that banner says "+ קמפיין חדש" while explaining where
+       the button leads — so the label pin was satisfied by a sentence about
+       the button and would have stayed green with the button's own words
+       deleted. Starting at the tag, and pinning the label with the call that
+       prints it, leaves only code inside the slice. */
+    const headerAt = camp.indexOf('<ButtonLink href="/social/posts/new"');
+    const pausedAt = camp.indexOf('{!campaigns && !error && (');
+    expect('guards', 'source-drift', 'the actions-row slice has both of its ends, in order', headerAt >= 0 && pausedAt > headerAt, true, NONE);
     const headerAction = camp.slice(headerAt, pausedAt);
     pin('new-campaign button goes to the post editor', headerAction, '<ButtonLink href="/social/posts/new"');
-    pin('new-campaign button is still the one labelled that', headerAction, '+ קמפיין חדש');
+    pin('new-campaign button is still the one labelled that', headerAction, "{t('+ קמפיין חדש')}");
     expect(
       'guards',
       'source-drift',

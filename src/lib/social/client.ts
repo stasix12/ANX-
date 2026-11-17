@@ -2392,17 +2392,50 @@ export interface LastRunScope {
   campaignId: string;
   /** The run's own 'HH:MM', or '' when the rows predate `round_at`. */
   roundAt: string;
-  /** The run's local day, as UTC instants — matched against `scheduled_at`. */
+  /** The run's local day, as UTC instants — only for the label on the sheet. */
   fromISO: string;
   toISO: string;
-  /** Published rows in the run when this was read. The number the sheet shows. */
+  /**
+   * THE ROWS THEMSELVES, and this is what the write is given.
+   *
+   * It was a `scheduled_at` window plus `.eq('round_at', …)` on the update,
+   * and worker/test/performance.test.ts was right to refuse it: PostgREST
+   * refuses a whole statement that names a column the database does not have,
+   * so on any database that has not run social-latest.sql the comment button
+   * would have died with an error about relations. The read below can fall
+   * back; an update cannot be made to.
+   *
+   * Ids have no such problem, and they buy something better as well — the
+   * rows counted and the rows written are now literally the same rows, so the
+   * number on the sheet cannot describe a different set from the one the
+   * press touches.
+   */
+  ids: string[];
+  /** How many posts the run holds. `ids.length`, named for the screens. */
   count: number;
   /** The run's newest publication, for the sentence above the number. */
   lastPublishedAt: string | null;
 }
 
+/*
+ * `round_at` IS READ, NEVER NAMED IN A STATEMENT THE DATABASE MUST ACCEPT.
+ *
+ * The column arrives with supabase/social-latest.sql, and PostgREST refuses
+ * the WHOLE request when a named column is absent — which blanked every
+ * screen of an un-migrated database once, at 05:45, on the owner's phone.
+ * performance.test.ts holds the line that came out of that.
+ *
+ * So the two reads below ask for it and are ALLOWED TO FAIL: on the one error
+ * that means "no such column" they are run again without it, and every row
+ * then has no round, which folds the whole day into one run. That is the
+ * right answer on exactly those rows — they predate the column, from a time
+ * when a campaign had one occasion a day — and it is the same fold
+ * progressByRound() performs under the '' key.
+ */
+const ROUND_COLUMN_MISSING = /round_at|column|does not exist/i;
+
 /**
- * The most recent run of a round, and how many posts it put out.
+ * The most recent run of a round: which posts it put out, and which ones.
  *
  * `null` when the round has never published: there is nothing to comment on,
  * which is a different answer from "a run of zero" and the sheet says so.
@@ -2413,56 +2446,59 @@ export async function lastRunScope(campaignId: string): Promise<LastRunScope | n
    * went out last. Ordering by scheduled_at would pick a row that is due later
    * today and has not published at all.
    */
-  const newest = await db()
-    .from('social_queue')
-    .select('id, round_at, scheduled_at, published_at')
-    .eq('campaign_id', campaignId)
-    .eq('status', 'published')
-    .order('published_at', { ascending: false, nullsFirst: false })
-    .limit(1)
-    .maybeSingle();
-  /*
-   * A DATABASE WITHOUT `round_at` STILL ANSWERS. Postgres refuses the whole
-   * select for one unknown column, and the owner would meet a dead sheet
-   * rather than a comment scoped to the day — which is the correct answer on
-   * exactly those rows. So the column is dropped and the day stands alone.
-   */
-  let row = newest.data as { round_at?: string | null; scheduled_at: string; published_at: string | null } | null;
-  if (newest.error) {
-    if (!/round_at|column/i.test(newest.error.message)) throw friendlyError(newest.error);
-    const again = await db()
+  const newestOf = (withRound: boolean) =>
+    db()
       .from('social_queue')
-      .select('id, scheduled_at, published_at')
+      .select(withRound ? 'id, round_at, scheduled_at, published_at' : 'id, scheduled_at, published_at')
       .eq('campaign_id', campaignId)
       .eq('status', 'published')
       .order('published_at', { ascending: false, nullsFirst: false })
       .limit(1)
       .maybeSingle();
-    if (again.error) throw friendlyError(again.error);
-    row = again.data as typeof row;
-  }
+
+  type Row = { id: string; round_at?: string | null; scheduled_at: string; published_at: string | null };
+  let newest = await newestOf(true);
+  if (newest.error && ROUND_COLUMN_MISSING.test(newest.error.message)) newest = await newestOf(false);
+  if (newest.error) throw friendlyError(newest.error);
+  const row = newest.data as unknown as Row | null;
   if (!row) return null;
 
   /* The run's own day, resolved in the app's zone and only then turned into
      instants — the same two-step startOfZonedWeek uses, so the two days a year
-     that are not 24 hours long cannot move the boundary. */
+     that are not 24 hours long cannot move the boundary.
+
+     THE DAY IT WAS SCHEDULED FOR, not the day it published: a run that starts
+     at 23:50 and finishes after midnight is one run, and which side of
+     midnight each row landed on is an accident of pacing. */
   const dayISO = zonedDateISO(new Date(row.scheduled_at));
   const fromISO = zonedToUtc(dayISO, '00:00').toISOString();
   const toISO = zonedToUtc(addDaysISO(dayISO, 1), '00:00').toISOString();
   const roundAt = typeof row.round_at === 'string' ? row.round_at : '';
 
-  let q = db()
-    .from('social_queue')
-    .select('id', { count: 'exact', head: true })
-    .eq('campaign_id', campaignId)
-    .eq('status', 'published')
-    .gte('scheduled_at', fromISO)
-    .lt('scheduled_at', toISO);
-  if (roundAt) q = q.eq('round_at', roundAt);
-  const counted = await q;
-  if (counted.error) throw friendlyError(counted.error);
+  /* Every published row of that day, so the run can be picked out of them in
+     JS rather than by a filter the database might refuse. One campaign, one
+     day — this is the size of a round, not of the table. */
+  const dayOf = (withRound: boolean) =>
+    db()
+      .from('social_queue')
+      .select(withRound ? 'id, round_at' : 'id')
+      .eq('campaign_id', campaignId)
+      .eq('status', 'published')
+      .gte('scheduled_at', fromISO)
+      .lt('scheduled_at', toISO)
+      .limit(5000);
+  let day = await dayOf(true);
+  if (day.error && ROUND_COLUMN_MISSING.test(day.error.message)) day = await dayOf(false);
+  if (day.error) throw friendlyError(day.error);
 
-  return { campaignId, roundAt, fromISO, toISO, count: counted.count ?? 0, lastPublishedAt: row.published_at ?? null };
+  /* `as unknown as` because the select string is chosen at runtime and the
+     client's type parser cannot follow it — the same reason the two reads are
+     written as functions rather than inline. */
+  const ids = ((day.data ?? []) as unknown as { id: string; round_at?: string | null }[])
+    .filter((r) => (typeof r.round_at === 'string' ? r.round_at : '') === roundAt)
+    .map((r) => r.id);
+
+  return { campaignId, roundAt, fromISO, toISO, ids, count: ids.length, lastPublishedAt: row.published_at ?? null };
 }
 
 /**
@@ -2515,47 +2551,58 @@ export async function queueCampaignComment(
     }
     throw new Error(saved.error.message);
   }
-  let marked = db()
-    .from('social_queue')
-    /* The old reason is cleared with the state it explained. A row that says
-       "ממתין" under last week's "הפוסט נמחק" is a screen contradicting
-       itself. */
-    .update({ comment_status: 'pending', comment_at: null, comment_note: '' })
-    .eq('campaign_id', campaignId)
-    .eq('status', 'published')
-    /*
-     * THE RUN, AND ONLY THE RUN — see LastRunScope above for what he met
-     * without these three lines. The window is on `scheduled_at` because that
-     * is what makes a run one run across midnight; `round_at` narrows it to
-     * the occasion when the database records one, and is left off when it does
-     * not, where the day IS the run.
-     */
-    .gte('scheduled_at', scope.fromISO)
-    .lt('scheduled_at', scope.toISO)
-    /*
-     * EXCEPT THE ONE THE WORKER IS HOLDING RIGHT NOW.
-     *
-     * 'commenting' is a claim: the browser is open on that post and a comment
-     * is being typed into it. Pushing it back to 'pending' from here takes it
-     * out of the claim it is standing in, and if the worker's write of the
-     * outcome then fails for any reason, the next tick picks the row up and
-     * comments on the same live post a second time — under the owner's name,
-     * permanently. Exactly the thing the claim was added to prevent, arriving
-     * through the screen instead of through a crash.
-     *
-     * One post out of the round misses this particular re-queue. It gets the
-     * comment it was already being given.
-     */
-    .neq('comment_status', 'commenting');
-  if (scope.roundAt) marked = marked.eq('round_at', scope.roundAt);
-  const wrote = await marked.select('id');
-  if (wrote.error) {
-    if (/column|comment_status|comment_note|round_at/i.test(wrote.error.message)) {
-      throw new Error('צריך להריץ את social-latest.sql ב-Supabase לפני שאפשר להוסיף תגובות. אפשר להריץ אותו שוב גם אם כבר הרצתם.');
+  if (!scope.ids.length) return 0;
+
+  /*
+   * BY ID, WHICH IS THE WHOLE OF THE RUN AND NOTHING ELSE.
+   *
+   * The scope resolved these rows and the sheet printed their number; writing
+   * to the same list is what makes the two the same set rather than two
+   * queries that agree today. It also keeps `round_at` out of a statement the
+   * database must accept — see the note above LastRunScope for the morning
+   * that cost.
+   *
+   * In batches of a hundred: this is an in(...) list in a URL, and a round of
+   * this owner's reaches several hundred groups.
+   */
+  let n = 0;
+  for (let at = 0; at < scope.ids.length; at += 100) {
+    const wrote = await db()
+      .from('social_queue')
+      /* The old reason is cleared with the state it explained. A row that says
+         "ממתין" under last week's "הפוסט נמחק" is a screen contradicting
+         itself. */
+      .update({ comment_status: 'pending', comment_at: null, comment_note: '' })
+      .in('id', scope.ids.slice(at, at + 100))
+      /* Still only rows that actually went out. The ids were resolved from
+         published rows, and this is the floor under that rather than a repeat
+         of it: a row can fail and be retried between the two. */
+      .eq('status', 'published')
+      /*
+       * EXCEPT THE ONE THE WORKER IS HOLDING RIGHT NOW.
+       *
+       * 'commenting' is a claim: the browser is open on that post and a comment
+       * is being typed into it. Pushing it back to 'pending' from here takes it
+       * out of the claim it is standing in, and if the worker's write of the
+       * outcome then fails for any reason, the next tick picks the row up and
+       * comments on the same live post a second time — under the owner's name,
+       * permanently. Exactly the thing the claim was added to prevent, arriving
+       * through the screen instead of through a crash.
+       *
+       * One post out of the round misses this particular re-queue. It gets the
+       * comment it was already being given.
+       */
+      .neq('comment_status', 'commenting')
+      .select('id');
+    if (wrote.error) {
+      if (/column|comment_status|comment_note/i.test(wrote.error.message)) {
+        throw new Error('צריך להריץ את social-latest.sql ב-Supabase לפני שאפשר להוסיף תגובות. אפשר להריץ אותו שוב גם אם כבר הרצתם.');
+      }
+      throw new Error(wrote.error.message);
     }
-    throw new Error(wrote.error.message);
+    n += wrote.data?.length ?? 0;
   }
-  return wrote.data?.length ?? 0;
+  return n;
 }
 
 /**

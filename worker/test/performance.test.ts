@@ -623,9 +623,57 @@ const code = (rel: string) =>
    * back fail. Those are different jobs: an exclusion entry is satisfied by
    * adding the column, which is exactly the mistake.
    */
+  /*
+   * ─── THE SHAPE OF THIS CHANGED ONCE, AND THE REASON DID NOT ───────────
+   *
+   * It was `!/round_at/.test(clientCode)` — the word may not appear in the
+   * file at all — and that was the right guard for as long as nothing in
+   * client.ts had any business reading the column.
+   *
+   * Then "תגובה מהירה" had to be narrowed to ONE RUN: it was queueing a
+   * comment on every post a round had ever published ("לא נותן להוסיף תגובה
+   * לא רק לפוסט שבחרתי אלא ל-224 פרסומים"), and a run is a day plus
+   * `round_at`. The blanket ban caught the first attempt, which deserved it:
+   * that one put `.eq('round_at', …)` on the UPDATE, where there is no
+   * fallback to be had and an un-migrated database would have met a dead
+   * button instead of a blank dashboard.
+   *
+   * So the guard now bans the two things that actually blanked the screen and
+   * requires the escape the old shape could not express:
+   *
+   *   · NO FILTER, EVER. A statement whose WHERE names the column is refused
+   *     whole, and a write cannot be re-run without its own predicate.
+   *   · ONLY THE TWO TOLERANT SELECTS may name it, and each must have a twin
+   *     without it, reached on the error that means "no such column".
+   *
+   * Adding the column to a broad select still fails here — through the list
+   * of permitted strings, which is exactly as narrow as the old ban was.
+   */
   is(
-    !/round_at/.test(clientCode),
-    'a read in client.ts names round_at again — PostgREST refuses the whole read on a database that has not run social-latest.sql, and the dashboard renders nothing at all. Per-round figures must come from a read that is allowed to fail.',
+    !/\.(eq|neq|gt|gte|lt|lte|in|like|ilike|is|order|contains|filter)\(\s*'round_at'/.test(clientCode),
+    'a statement in client.ts FILTERS on round_at — PostgREST refuses the whole statement on a database that has not run social-latest.sql, and unlike a read there is nothing to fall back to',
+  );
+  /* COLUMN LISTS ONLY. A bare `/'[^']*round_at[^']*'/` also matches the two
+     quotes either side of `typeof r.round_at === 'string' ? r.round_at : ''`,
+     which is JS reading a field and not a request to the database. A column
+     list is words, commas and spaces and nothing else. */
+  const roundStrings = [...clientCode.matchAll(/'([^']*)'/g)]
+    .map((m) => m[1])
+    .filter((x) => /^[a-z_]+(, ?[a-z_]+)*$/i.test(x) && /\bround_at\b/.test(x));
+  eq(
+    roundStrings,
+    ['id, round_at, scheduled_at, published_at', 'id, round_at'],
+    'client.ts names round_at in a string that is not one of lastRunScope\u2019s two tolerant selects. PostgREST refuses the whole read when the column is absent — it blanked every screen of an un-migrated database once, at 05:45, on the owner\u2019s phone.',
+  );
+  for (const twin of ['id, scheduled_at, published_at', 'id']) {
+    is(
+      clientCode.includes(`: '${twin}'`),
+      `the tolerant select has no twin without round_at — '${twin}' is the one it must fall back to, and without it the fallback reads the column it is escaping`,
+    );
+  }
+  is(
+    (clientCode.match(/ROUND_COLUMN_MISSING\.test\(/g) ?? []).length >= 2,
+    'both reads that name round_at must re-run without it on the error that means "no such column" — a select that only names it is the bug this whole block exists for',
   );
 
   /*

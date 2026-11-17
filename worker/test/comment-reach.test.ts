@@ -173,26 +173,48 @@ const queueFn = client.slice(client.indexOf('export async function queueCampaign
 const queueBody = queueFn.slice(0, queueFn.indexOf('\n}'));
 
 is(/export async function queueCampaignComment\(\s*scope: LastRunScope,/.test(client), true, 'the write takes the RESOLVED run, not a bare campaign id — a caller cannot forget to narrow it');
-is(/\.gte\('scheduled_at', scope\.fromISO\)/.test(queueBody), true, "THE BLAST RADIUS, half one: the run's own day");
-is(/\.lt\('scheduled_at', scope\.toISO\)/.test(queueBody), true, 'and its far edge, exclusive, so midnight belongs to one day only');
-is(
-  /if \(scope\.roundAt\) marked = marked\.eq\('round_at', scope\.roundAt\);/.test(queueBody),
-  true,
-  "half two: the occasion within that day — and ONLY when the database records one, because a row without `round_at` predates the column and its day IS its run",
-);
+/*
+ * THE BLAST RADIUS IS A LIST OF IDS, and that is not a detail of style.
+ *
+ * The first version of this fix filtered the UPDATE by a scheduled_at window
+ * plus `.eq('round_at', …)`, and worker/test/performance.test.ts refused it:
+ * PostgREST rejects a whole statement that names a column the database does
+ * not have, so on any database that has not run social-latest.sql the button
+ * would have died. A read can be run again without the column; an update
+ * cannot be run again without its own predicate.
+ *
+ * Ids avoid that, and they buy the stronger property as well — the rows
+ * counted for the sheet and the rows written are the SAME rows, not two
+ * queries that happen to agree.
+ */
+is(/\.in\('id', scope\.ids\.slice\(at, at \+ 100\)\)/.test(queueBody), true, 'the write touches the ids the scope resolved, in batches of a hundred');
+is(/if \(!scope\.ids\.length\) return 0;/.test(queueBody), true, 'and an empty run writes nothing rather than falling through to a filterless update');
 is(/\.eq\('status', 'published'\)/.test(queueBody), true, 'still only rows that actually went out');
 is(/\.neq\('comment_status', 'commenting'\)/.test(queueBody), true, "and still never the row the worker is holding — that guard is older than this one and outranks it");
-/* The window is on scheduled_at, NOT published_at. A run that starts at 23:50
-   and finishes after midnight is one run; keyed on when each row happened to
-   go out it would be two, and the second press would miss half of it. */
-is(/published_at/.test(queueBody), false, 'the write does not key the run on when rows published — pacing across midnight would split one run in two');
+/* The FILTERS, not the prose: the note above this write explains what naming
+   the column would cost, and a test a comment can break is a test that gets
+   deleted. */
+is(
+  /\.(eq|neq|gt|gte|lt|lte|in|is|order)\(\s*'round_at'/.test(queueBody),
+  false,
+  'the write filters on round_at: a statement naming a column an old database lacks is refused whole, with nothing to fall back to',
+);
 
 const scopeFn = client.slice(client.indexOf('export async function lastRunScope'));
 const scopeBody = scopeFn.slice(0, scopeFn.indexOf('\n}\n'));
 is(/\.order\('published_at', \{ ascending: false, nullsFirst: false \}\)/.test(scopeBody), true, 'the run is found from the NEWEST publication — ordering by scheduled_at would pick a row due later today that has not published at all');
 is(/zonedDateISO\(new Date\(row\.scheduled_at\)\)/.test(scopeBody), true, "and its day is the day that row was SCHEDULED for, resolved in the app's zone");
 is(/zonedToUtc\(dayISO, '00:00'\)/.test(scopeBody) && /zonedToUtc\(addDaysISO\(dayISO, 1\), '00:00'\)/.test(scopeBody), true, 'both edges through time.ts, so the two days a year that are not 24 hours long cannot move them');
-is(/count: 'exact', head: true/.test(scopeBody), true, 'the number shown is counted by the database over the same filters, not estimated from a list the screen happens to hold');
+is(/count: ids\.length/.test(scopeBody), true, 'the number the sheet shows IS the length of the list the write will touch — one source, so they cannot disagree');
+/*
+ * AND IT SURVIVES A DATABASE THAT HAS NOT RUN social-latest.sql. Both reads
+ * name round_at and both are allowed to fail back to a select without it,
+ * where every row has no round and the whole day folds into one run — the
+ * right answer on exactly those rows, and the fold progressByRound() already
+ * performs under the '' key.
+ */
+is((scopeBody.match(/ROUND_COLUMN_MISSING\.test\(/g) ?? []).length >= 2, true, 'both reads fall back when the column is absent');
+is(/\.filter\(\(r\) => \(typeof r\.round_at === 'string' \? r\.round_at : ''\) === roundAt\)/.test(scopeBody), true, 'the run is picked out of the day in JS, where a missing column is undefined rather than an error');
 
 /*
  * AND EVERY SCREEN ASKS THE SAME QUESTION. Three open this sheet, and before

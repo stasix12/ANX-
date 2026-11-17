@@ -2061,8 +2061,15 @@ export const WORKER_VERSION = '4.83.0';
  *                          'Комментарий к публикациям' 0
  *   (הבקרות)               planQueue 4   readMyGroups 4
  *
+ * (נמדד שוב אחרי שהשומר ב-performance.test.ts פסל את הגרסה הראשונה: היא
+ * שמה round_at בתוך ה-UPDATE, ו-PostgREST דוחה משפט שלם שנוקב בעמודה שאין
+ * במסד — כלומר על מסד שלא הריץ את social-latest.sql הכפתור היה מת. עכשיו
+ * הטווח הוא רשימת מזהים והכתיבה לא נוקבת בעמודה כלל:
+ *   lastRunScope 0   queueCampaignComment 0   ROUND_COLUMN_MISSING 0
+ *   planQueue 4)
+ *
  * אפס. לכן טביעת האצבע מודבקת והמספר נשאר — וזה בדיוק מה שהשומר אומר לעשות
  * כשהתשובה היא לא. העלאה היתה מודיעה לכל עותק מותקן שהוא מיושן ומבקשת
  * התקנה מחדש שלא משנה בייט אחד על המכונה.
  */
-export const WORKER_FINGERPRINT = 'af52dfc58868f885';
+export const WORKER_FINGERPRINT = '6d46637f54bae669';

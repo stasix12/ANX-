@@ -107,6 +107,9 @@ const cases: [string, DiscoveredGroupRow, boolean, boolean, boolean][] = [
 
 const liveRow = row({ external_id: '9', name: 'אופקים ביחד — קהילת העסקים והתושבים', members: 34_000, membership: 'none' });
 const endedRow = row({ external_id: '10', name: 'קבוצת תושבי שכונת נווה זאב ורמות באר שבע — קניה, מכירה והמלצות', members: 98_700, membership: 'none' });
+/* The group he was looking at when he reported it: in the publishing list,
+   stored as a membership, and refused by Facebook on its own page. */
+const refusedRow = row({ external_id: '11', name: 'שכונה ו החדשה באר שבע — Район Вав Хадаша', members: 2_600, membership: 'member' });
 
 /* The two states handed in exactly as the page hands them: computed by
    joinCardView from a progress blob, never hand-written here — a fixture that
@@ -130,6 +133,26 @@ const runs = `
   <p style="color:#9aa;font:12px sans-serif;margin:14px 0 4px">join log — ended with no join button, middle steps never taken</p>
   <div class="row-probe">${renderSnapshot(
     GroupRow({ row: endedRow, picked: true, already: false, busy: false, exact: false, run: endedView, fallbackImage: null, onToggle: () => {}, onAdopt: () => {}, onHide: () => {} }) as never,
+  )}</div>
+  <!--
+    ─── THE SAME STORED ROW, TWICE, WITH AND WITHOUT "refused" ─────────────
+
+    "יש חוסר סנכרון בין הקבוצות, באפליקציה רושם לי שאני חבר בקבוצה הזאת
+     ובאפליקציה לא." The row's own column still says membership: 'member'
+    in BOTH of these — that is the point. What differs is the one prop that
+    carries the app's newer evidence, and the pair is what proves the badge
+    follows it rather than the column.
+
+    Rendered rather than asserted in source because a prop that is threaded
+    and never read renders exactly the badge it was meant to replace.
+  -->
+  <p style="color:#9aa;font:12px sans-serif;margin:14px 0 4px">stored member, nothing against it</p>
+  <div class="row-probe">${renderSnapshot(
+    GroupRow({ row: refusedRow, picked: false, already: false, refused: false, busy: false, exact: false, fallbackImage: null, onToggle: () => {}, onAdopt: () => {}, onHide: () => {} }) as never,
+  )}</div>
+  <p style="color:#9aa;font:12px sans-serif;margin:14px 0 4px">stored member, but Facebook has refused this account</p>
+  <div class="row-probe">${renderSnapshot(
+    GroupRow({ row: refusedRow, picked: false, already: false, refused: true, busy: false, exact: false, fallbackImage: null, onToggle: () => {}, onAdopt: () => {}, onHide: () => {} }) as never,
   )}</div>`;
 
 const body = cases

@@ -334,8 +334,40 @@ export async function listSearches(limit = 12): Promise<DiscoverySearchRow[]> {
   );
 }
 
+/** What the publishing list already knows about the groups a search turns up. */
+export interface TargetFacts {
+  /** The external ids already in the publishing list. */
+  inList: Set<string>;
+  /**
+   * THE ONES FACEBOOK ITSELF HAS ALREADY REFUSED THIS ACCOUNT.
+   *
+   * "יש חוסר סנכרון בין הקבוצות, באפליקציה רושם לי שאני חבר בקבוצה הזאת
+   *  ובאפליקציה לא" — the discovery row said חבר while Facebook's own page
+   * for the same group offered him "הצטרפות לקבוצה".
+   *
+   * Both halves of that sentence were written by this app, out of two tables
+   * that never spoke. Three different places turn a group off the moment
+   * Facebook prints "אי אפשר לפרסם" — the nightly group check, a publication
+   * that is refused, and leaving a group from inside the app — and all three
+   * write it to `social_targets` ONLY. `social_discovery_groups.membership`
+   * is written by the search and by the "my groups" scan, and neither of them
+   * runs because a publication failed. So the row went on claiming a
+   * membership the rest of the app had already stopped believing.
+   *
+   * This is the cheap half of the answer: the screen stops saying חבר about a
+   * group its own publishing list has switched off as left. It costs no extra
+   * query — the same read that fills `inList` — and it writes nothing, so a
+   * group he switches back on by hand is believed again at once.
+   *
+   * BOTH COLUMNS, not `last_status` alone. `enabled: false` is written in the
+   * same statement by all three, and a group he re-enabled by hand is a
+   * decision of his that still carries yesterday's status word.
+   */
+  refused: Set<string>;
+}
+
 /**
- * The external ids already in the publishing list.
+ * The external ids already in the publishing list, and what became of them.
  *
  * "אם הקבוצה כבר קיימת ברשימת הקבוצות של מערכת הפרסום — להציג ✓ כבר במערכת."
  * The discovery row's own `target_id` is not enough on its own: a group he
@@ -343,13 +375,20 @@ export async function listSearches(limit = 12): Promise<DiscoverySearchRow[]> {
  * this read the screen would offer to add it a second time and the insert
  * would be refused by the unique index with an error he did not earn.
  *
- * One column, and only the groups — this runs beside a list of results.
+ * Three columns, and only the groups — this runs beside a list of results.
  */
-export async function listTargetExternalIds(): Promise<Set<string>> {
-  const rows = unwrap<{ external_id: string }[]>(
-    await db().from('social_targets').select('external_id').eq('channel', 'facebook_group').neq('external_id', ''),
+export async function listTargetFacts(): Promise<TargetFacts> {
+  const rows = unwrap<{ external_id: string; last_status: string | null; enabled: boolean | null }[]>(
+    await db()
+      .from('social_targets')
+      .select('external_id, last_status, enabled')
+      .eq('channel', 'facebook_group')
+      .neq('external_id', ''),
   );
-  return new Set(rows.map((r) => r.external_id));
+  return {
+    inList: new Set(rows.map((r) => r.external_id)),
+    refused: new Set(rows.filter((r) => r.last_status === 'left' && r.enabled === false).map((r) => r.external_id)),
+  };
 }
 
 /**

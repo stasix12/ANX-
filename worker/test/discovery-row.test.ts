@@ -158,6 +158,10 @@ async function main(): Promise<void> {
             const rowBox = r.getBoundingClientRect();
             return {
               height: Math.round(rowBox.height),
+              /* Everything the row SAYS, collapsed — the badge text is the
+                 claim under test in the `refused` pair and there is no class
+                 name that can stand in for it. */
+              text: (r.textContent || '').replace(/\s+/g, ' ').trim(),
               /* Present, non-empty, and actually inside the row. */
               name: name?.textContent?.trim() ?? '',
               nameDir: name?.getAttribute('dir') ?? '',
@@ -397,7 +401,9 @@ async function main(): Promise<void> {
       checks += 1;
       assert.equal(seen.overflow, false, say('the page scrolls sideways — a row pushed something past the screen'));
       checks += 1;
-      assert.equal(seen.rows.length, 10, say('the fixture lost rows'));
+      /* 8 ordinary rows, 2 carrying a join log, and the `refused` pair the
+         sync bug was reported on — see render-discovery.tsx. */
+      assert.equal(seen.rows.length, 12, say('the fixture lost rows'));
 
       for (const [i, r] of seen.rows.entries()) {
         checks += 4;
@@ -414,7 +420,9 @@ async function main(): Promise<void> {
          * לצורך" — so the ordinary ceiling is untouched and this one is its
          * own measured number.
          */
-        const ceiling = i >= 8 ? MAX_RUN_ROW : MAX_ROW;
+        /* Rows 8 and 9 EXACTLY, not "8 and up": the `refused` pair after
+           them are ordinary rows and keep the ordinary ceiling. */
+        const ceiling = i === 8 || i === 9 ? MAX_RUN_ROW : MAX_ROW;
         assert.ok(r.height <= ceiling, say(`row ${i} ("${r.name.slice(0, 20)}") is ${r.height}px, over the ${ceiling}px that row may take`));
         assert.ok(r.nameVisible, say(`row ${i} rendered no readable name — "${r.name}"`));
         assert.ok(r.nameInside, say(`row ${i}'s name is outside its own card`));
@@ -451,7 +459,7 @@ async function main(): Promise<void> {
          * chip would push a control off a 360px screen if it were going to.
          */
         /* ─── and the join log on the two cards that carry one ───────── */
-        if (i >= 8) {
+        if (i === 8 || i === 9) {
           checks += 8;
           const b = r.band;
           assert.ok(b, say(`row ${i} was given a run and drew no join log — the prop is threaded and never read`));
@@ -578,6 +586,52 @@ async function main(): Promise<void> {
       checks += 2;
       assert.equal(seen.rows[7].hasPicture, true, say('the row with a borrowed picture still drew a letter — the fallback is not being read'));
       assert.equal(seen.rows[0].hasPicture, false, say('a row with no picture anywhere should draw its letter tile'));
+
+      /*
+       * ─── "באפליקציה רושם לי שאני חבר בקבוצה הזאת ובאפליקציה לא" ─────────
+       *
+       * Rows 10 and 11 are THE SAME STORED ROW — `membership: 'member'` in
+       * both — rendered with and without the app's own newer evidence that
+       * Facebook refuses this account in that group. Three places in the
+       * worker switch such a group off the moment Facebook prints "אי אפשר
+       * לפרסם", and not one of them lowers the column גילוי קבוצות draws
+       * this badge from, so the screen went on saying חבר about a group the
+       * rest of the app had already given up on.
+       *
+       * The pair is the test: if the badge followed the column it would read
+       * identically in both, and if `refused` were threaded and never read —
+       * the failure mode that has already cost this feature two button skins
+       * and a borrowed picture — it would also read identically. Only a row
+       * that actually consults the prop can tell them apart.
+       */
+      const stored = seen.rows[10];
+      const refused = seen.rows[11];
+      /* `(?!ים)` because the facts line beside the badge says "2.6 אלף
+         חברים", and a bare /חבר/ passes on a row carrying no badge at all. */
+      const SAYS_MEMBER = /חבר(?!ים)/;
+      checks += 7;
+      assert.ok(SAYS_MEMBER.test(stored.text), say('the control row stopped saying חבר — the pair no longer tests anything'));
+      assert.ok(/הוסף לרשימה/.test(stored.text), say('the control row no longer offers the add action — the pair no longer tests it'));
+      assert.ok(
+        !SAYS_MEMBER.test(refused.text),
+        say('a group Facebook has refused is still badged חבר — this is the desync he reported, on screen'),
+      );
+      assert.ok(
+        /לא הצטרפת/.test(refused.text),
+        say('a group Facebook has refused is still badged as a membership — this is the desync he reported'),
+      );
+      assert.ok(
+        /אי אפשר לפרסם/.test(refused.text),
+        say('the refused row does not say WHY it stopped claiming a membership, which is the first thing he will ask'),
+      );
+      assert.ok(
+        !/הוסף לרשימה/.test(refused.text),
+        say('a group Facebook has refused is still offered for the publishing list — every round would queue a publication that cannot go out'),
+      );
+      assert.ok(
+        /פתח להצטרפות/.test(refused.text),
+        say('the refused row still offers "פתח קבוצה", which is the sentence for a group you are in'),
+      );
 
       /* Every row reserves the same picture slot, with a picture or without. */
       const slots = new Set(seen.rows.map((r) => r.avatar));

@@ -22,7 +22,7 @@ import {
   listDiscovered,
   listSearches,
   listJoined,
-  listTargetExternalIds,
+  listTargetFacts,
   listTargetPictures,
   listWorkers,
   startDiscovery,
@@ -187,6 +187,16 @@ export default function DiscoverPage() {
   const [rows, setRows] = useState<DiscoveredGroupRow[] | null>(null);
   const [searches, setSearches] = useState<DiscoverySearchRow[]>([]);
   const [inSystem, setInSystem] = useState<Set<string>>(new Set());
+  /*
+   * THE GROUPS THIS APP HAS ALREADY WATCHED FACEBOOK REFUSE — what fills it,
+   * and why it exists at all, is in client.ts under TargetFacts.refused.
+   *
+   * It is read beside `inSystem`, out of the same query, and it is used in
+   * exactly two ways: no row claims חבר while it is in here, and no bulk
+   * "add them all" button counts one. Nothing is written, so his own switch
+   * on the groups screen is still the last word.
+   */
+  const [refused, setRefused] = useState<Set<string>>(new Set());
   const [filter, setFilter] = useState<DiscoveryFilter>('all');
   const [sort, setSort] = useState<DiscoverySort>('relevance');
   const [picked, setPicked] = useState<Set<string>>(new Set());
@@ -239,13 +249,14 @@ export default function DiscoverPage() {
     const [found, saved, targets, workers, pics] = await Promise.all([
       phrase ? listDiscovered(phrase) : Promise.resolve([]),
       listSearches(),
-      listTargetExternalIds(),
+      listTargetFacts(),
       listWorkers(),
       listTargetPictures(),
     ]);
     setRows(found);
     setSearches(saved);
-    setInSystem(targets);
+    setInSystem(targets.inList);
+    setRefused(targets.refused);
     setTargetPics(pics);
     setWorkerOnline(workers.some((w) => w.online));
     setWorkerId(workers.find((w) => w.online)?.id ?? workers[0]?.id ?? null);
@@ -260,14 +271,15 @@ export default function DiscoverPage() {
       try {
         const [saved, targets, workers, mine, pics] = await Promise.all([
           listSearches(),
-          listTargetExternalIds(),
+          listTargetFacts(),
           listWorkers(),
           listJoined(),
           listTargetPictures(),
         ]);
         if (!alive) return;
         setSearches(saved);
-        setInSystem(targets);
+        setInSystem(targets.inList);
+        setRefused(targets.refused);
         setTargetPics(pics);
         setJoined(mine);
         setWorkerOnline(workers.some((w) => w.online));
@@ -404,15 +416,18 @@ export default function DiscoverPage() {
    * time. The button's own label is the promise, so the set has to match it.
    */
   const joinedNotListed = useMemo(
-    () => (rows ?? []).filter((r) => !r.hidden && r.membership === 'member' && !r.target_id && !inSystem.has(r.external_id)),
-    [rows, inSystem],
+    () =>
+      (rows ?? []).filter(
+        (r) => !r.hidden && r.membership === 'member' && !r.target_id && !inSystem.has(r.external_id) && !refused.has(r.external_id),
+      ),
+    [rows, inSystem, refused],
   );
 
   /* His own groups that the publishing list does not have. The set difference
      that this whole card exists to compute. */
   const joinedMissing = useMemo(
-    () => (joined ?? []).filter((r) => !r.hidden && !r.target_id && !inSystem.has(r.external_id)),
-    [joined, inSystem],
+    () => (joined ?? []).filter((r) => !r.hidden && !r.target_id && !inSystem.has(r.external_id) && !refused.has(r.external_id)),
+    [joined, inSystem, refused],
   );
 
   const hiddenCount = (rows ?? []).filter((r) => r.hidden).length;
@@ -531,7 +546,7 @@ export default function DiscoverPage() {
        */
       const [mine, targets, found, pics] = await Promise.all([
         listJoined(),
-        listTargetExternalIds(),
+        listTargetFacts(),
         active ? listDiscovered(active) : Promise.resolve(null),
         listTargetPictures(),
       ]);
@@ -542,7 +557,8 @@ export default function DiscoverPage() {
         toast('הקריאה עדיין רצה במחשב. פתחו את המסך שוב בעוד כמה דקות.', 'info');
       } else {
         setJoined(mine);
-        setInSystem(targets);
+        setInSystem(targets.inList);
+        setRefused(targets.refused);
         setTargetPics(pics);
         if (found) setRows(found);
         if (done.status === 'failed') toast(done.result || 'הקריאה נכשלה.', 'error');
@@ -968,6 +984,7 @@ export default function DiscoverPage() {
                 row={row}
                 picked={picked.has(row.id)}
                 already={inSystem.has(row.external_id) || !!row.target_id}
+                refused={refused.has(row.external_id)}
                 busy={busyId === row.id}
                 exact={!!phrase && nameMatches(row.name, phrase)}
                 /* The stepper rides on ONE card — the group the worker is

@@ -121,6 +121,9 @@ const TITLE: Record<string, string> = {
   target_left: 'יצאתם מקבוצה — היא כובתה',
   worker_window_storm: 'ריבוי חלונות דפדפן — פעולות הרקע נעצרו',
   nightly_group_check: 'בדיקה יומית של הקבוצות',
+  /* Written when the nightly check finds discovery rows still badged "חבר"
+     for groups the publishing list has already switched off as left. */
+  membership_synced: 'סימון החברות בקבוצות סונכרן',
   campaign_paused: 'הסבב הושהה',
   /* CHZARA. Two headlines rather than one with a word swapped: this is the
      line in his history that says his account began republishing by itself,

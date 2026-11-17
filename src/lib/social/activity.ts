@@ -52,6 +52,13 @@ const KIND: Record<string, ActivityKind> = {
      the line naming how many Pages arrived is the only evidence it ran. */
   targets_synced: 'success',
   /*
+   * שתי הטבלאות מתיישרות זו מול זו. 'success' מאותה סיבה כמו
+   * nightly_group_check: זו האפליקציה מתקנת את עצמה, והשורה שאומרת מכמה
+   * קבוצות הוסר הסימון "חבר" היא העדות היחידה שזה קרה. היא נכתבת רק כשבאמת
+   * ירד סימון — לילה שבו שום דבר לא השתנה לא כותב כלום.
+   */
+  membership_synced: 'success',
+  /*
    * הצטרפות אוטומטית לקבוצה. 'success' and not 'system': it is the machine
    * doing the thing the owner pressed, on his own account, and the line naming
    * which group is the only record that it happened. A join that did NOT

@@ -865,9 +865,20 @@ const eq = (a: unknown, b: unknown, msg: string) => {
    * they mean.
    */
   const rowSrc = readFileSync(new URL('../../src/components/social/Discovery.tsx', import.meta.url), 'utf8');
+  /*
+   * `membership` AND NOT `row.membership`, since the desync fix.
+   *
+   * The condition is the one that was here — member, and nothing softer. What
+   * changed is which word it reads: the row's stored column, or that column
+   * corrected by what this app has since watched Facebook do (see the block at
+   * the end of this file). The direction is the same one this assertion has
+   * always been protecting — a group that cannot be published to must not be
+   * offered for the publishing list — and it now catches one more way in.
+   */
   is(
-    /const canAdd = !already && row\.membership === 'member';/.test(rowSrc),
-    "A ROW ONLY OFFERS \"הוסף לרשימה\" WHERE THE SEARCH SAID HE IS A MEMBER — not where it merely failed to say otherwise",
+    /const membership: Membership = refused \? 'none' : row\.membership;/.test(rowSrc) &&
+      /const canAdd = !already && membership === 'member';/.test(rowSrc),
+    "A ROW ONLY OFFERS \"הוסף לרשימה\" WHERE HE IS A MEMBER AND NOTHING SINCE HAS SAID OTHERWISE — not where the card merely failed to say otherwise",
   );
   is(
     !/'unknown'/.test(block),
@@ -1282,9 +1293,36 @@ const eq = (a: unknown, b: unknown, msg: string) => {
    * shape and the batching, and left unpinned the only line that says WHICH
    * ROWS are in range.
    */
+  /*
+   * THE BLAST RADIUS, AND WHY IT WAS DELIBERATELY WIDENED.
+   *
+   * This line used to pin `.contains('queries', [JOINED_QUERY])` — the
+   * reserved bucket and nothing else — and called reaching further "a single
+   * scan lowers the membership of every group ever found by any search".
+   *
+   * That is what it now does, on purpose, because the narrow version left
+   * him with this: "יש חוסר סנכרון בין הקבוצות, באפליקציה רושם לי שאני חבר
+   * בקבוצה הזאת ובאפליקציה לא". The row he was looking at was found by a
+   * phrase search, so it was never in the bucket, so the one reader that
+   * cannot be wrong about membership could not touch it — he could press
+   * "בדוק את הקבוצות שלי" all day and the חבר stayed.
+   *
+   * The function's own reasoning never mentioned the bucket: the page it
+   * reconciles against is Facebook's own complete enumeration of the groups
+   * an account is in, so ANY row claiming a membership the page does not
+   * mention is claiming something untrue. What makes the wider reach safe is
+   * the guard above — nothing runs at all on a read that is not PROVEN
+   * complete — and the direction of the write: a claim is lowered, never
+   * raised, and the group is not hidden, unlinked, or taken out of the
+   * publishing list.
+   */
   is(
-    /\.contains\('queries', \[JOINED_QUERY\]\)/.test(body),
-    "THE BLAST RADIUS: only the reserved bucket is read — without this one line a single scan lowers the membership of every group ever found by any search",
+    !/\.contains\('queries'/.test(body),
+    'the reconcile is scoped to the bucket again — a row found by a phrase search would go on claiming a membership no scan can reach',
+  );
+  is(
+    /\.eq\('membership', 'member'\)/.test(body),
+    'and the database is asked for the claiming rows rather than every row in the table',
   );
   is(
     /new Set\(found\.map\(\(g\) => g\.externalId\)\)/.test(body),
@@ -1389,6 +1427,75 @@ const eq = (a: unknown, b: unknown, msg: string) => {
     /\.then\(undefined, \(\) => undefined\)/.test(dismiss),
     'and a dismissal that fails never fails the removal — he asked for the group to go, and it goes',
   );
+}
+
+/*
+ * ─── ONE GROUP, TWO TABLES, AND THEY HAD STOPPED AGREEING ────────────────
+ *
+ * "יש חוסר סנכרון בין הקבוצות, באפליקציה רושם לי שאני חבר בקבוצה הזאת
+ *  ובאפליקציה לא" — with the two screenshots: גילוי קבוצות badging the group
+ * חבר, and Facebook's own page for the same group offering "הצטרפות לקבוצה".
+ *
+ * Both sentences were written by this app. Three places in the worker switch
+ * a group off the MOMENT Facebook prints "אי אפשר לפרסם" — the nightly group
+ * check, a publication that is refused, and leaving a group from inside the
+ * app — and all three write social_targets and nothing else.
+ * social_discovery_groups.membership, which is the column the badge is drawn
+ * from, is written by the search and by the "my groups" scan, and neither of
+ * them runs because a publication failed. So the row went on claiming a
+ * membership the rest of the app had already stopped believing.
+ *
+ * The answer is in two halves and this block pins both: the screen stops
+ * believing the stale column at once, and the stored column stops saying it
+ * on the next nightly check.
+ */
+{
+  const client = readFileSync(new URL('../../src/lib/social/client.ts', import.meta.url), 'utf8');
+  const page = readFileSync(new URL('../../src/app/social/discover/page.tsx', import.meta.url), 'utf8');
+  const row = readFileSync(new URL('../../src/components/social/Discovery.tsx', import.meta.url), 'utf8');
+  const worker = readFileSync(new URL('../social-worker.ts', import.meta.url), 'utf8');
+
+  /* ─── the read side: one query, two sets, nothing written ───────────── */
+  const facts = client.slice(client.indexOf('export async function listTargetFacts'));
+  const factsBody = facts.slice(0, facts.indexOf('\n}'));
+  is(/last_status === 'left' && r\.enabled === false/.test(factsBody), "BOTH COLUMNS: all three writers set `enabled: false` in the same statement as the status word, and a group he switched back on by hand still carries yesterday's word");
+  is(/select\('external_id, last_status, enabled'\)/.test(factsBody), 'and all three come out of the one read the screen already ran — no second round trip beside a list of results');
+  is(!/update\(|upsert\(|delete\(/.test(factsBody), 'it writes nothing: his own switch on the groups screen stays the last word');
+
+  /* ─── threaded to the screen, and actually read ─────────────────────── */
+  is(/setRefused\(targets\.refused\)/.test(page), 'the screen keeps the refused set');
+  is(
+    (page.match(/setRefused\(targets\.refused\)/g) ?? []).length === 3,
+    'on all three loads — first paint, a new search, and after a scan — or the screen is honest only until it is used',
+  );
+  is(/refused=\{refused\.has\(row\.external_id\)\}/.test(page), 'and hands each row its own answer');
+  is(
+    /r\.membership === 'member' && !r\.target_id && !inSystem\.has\(r\.external_id\) && !refused\.has\(r\.external_id\)/.test(page),
+    'the bulk "add the ones you are already in" button does not count a group Facebook has refused — each one would queue a publication that cannot go out',
+  );
+  is(
+    /!r\.target_id && !inSystem\.has\(r\.external_id\) && !refused\.has\(r\.external_id\)/.test(page),
+    'and neither does the "your groups on Facebook" card',
+  );
+
+  is(/const membership: Membership = refused \? 'none' : row\.membership;/.test(row), 'the badge is drawn from the newer evidence, not from the stored column');
+  is(/const canAdd = !already && membership === 'member';/.test(row), "and the action that means \u201cyou are in this one\u201d follows the same word");
+  is(!/row\.membership/.test(row.slice(row.indexOf('const canAdd'))), 'with nothing below it still reading the stored column directly — that is how two button skins were written and never painted');
+
+  /* ─── the write side: the stored row stops saying it too ────────────── */
+  const sync = worker.slice(worker.indexOf('async function withdrawRefusedMemberships'));
+  const syncBody = sync.slice(0, sync.indexOf('\n}'));
+  is(/await withdrawRefusedMemberships\(\);/.test(worker), 'the nightly check reconciles the two tables before it looks at anything');
+  is(
+    worker.indexOf('await withdrawRefusedMemberships();') > worker.indexOf('if (!nightlyDue('),
+    'after the due check, so it is once a night and not once a tick',
+  );
+  is(/\.eq\('last_status', 'left'\)/.test(syncBody) && /\.eq\('enabled', false\)/.test(syncBody), 'it reads the same pair the screen does, for the same reason');
+  is(/update\(\{ membership: 'none' \}\)/.test(syncBody), 'and lowers the claim');
+  is(/\.eq\('membership', 'member'\)/.test(syncBody), 'only on a row that was claiming one — a row that already says nothing is left alone');
+  is(!/'member' \}/.test(syncBody.replace(/membership: 'none'/g, '')), 'and nothing here raises anything: a healthy group is not evidence of a membership');
+  is(!/\.delete\(\)/.test(syncBody) && !/hidden/.test(syncBody), "nothing is deleted and nothing is hidden — `hidden` means the OWNER dismissed it and only he may say so");
+  is(/at \+= 100\b(?!\d)/.test(syncBody) && /slice\(at, at \+ 100\)/.test(syncBody), 'in batches, because this is an in(...) list in a URL and his account has passed 160 groups');
 }
 
 console.log(`discovery tests OK — ${checks} assertions`);

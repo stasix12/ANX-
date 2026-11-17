@@ -95,6 +95,7 @@ export function GroupRow({
   row,
   picked,
   already,
+  refused = false,
   busy,
   exact = false,
   run = null,
@@ -107,6 +108,24 @@ export function GroupRow({
   row: DiscoveredGroupRow;
   picked: boolean;
   already: boolean;
+  /**
+   * FACEBOOK HAS ALREADY REFUSED THIS ACCOUNT IN THIS GROUP — and this row
+   * may not say חבר while that is true.
+   *
+   * "יש חוסר סנכרון בין הקבוצות, באפליקציה רושם לי שאני חבר בקבוצה הזאת
+   *  ובאפליקציה לא." The two sentences came out of two tables that never
+   * spoke: `social_targets` had been switched off as left — by the nightly
+   * check, by a refused publication or by leaving the group from inside the
+   * app — while `social_discovery_groups.membership` still held whatever the
+   * search or the scan last wrote, and nothing lowers it when a publication
+   * is refused.
+   *
+   * A badge is a claim, and the newer evidence wins: Facebook printing "אי
+   * אפשר לפרסם" on the group's own page outranks a word read off a search
+   * card weeks ago. So the chip reads "לא חבר" and the "הוסף לרשימה" action
+   * — whose entire meaning is "you are in this one" — is not offered.
+   */
+  refused?: boolean;
   busy: boolean;
   /**
    * True when this group's NAME really carries the phrase that was searched.
@@ -164,7 +183,16 @@ export function GroupRow({
    * is "you are in this one", or every such row becomes a publishing target
    * that fails once a day with a sensible-looking reason.
    */
-  const canAdd = !already && row.membership === 'member';
+  /*
+   * WHAT THIS ROW IS ENTITLED TO CLAIM, which is not always what is stored.
+   *
+   * `refused` is the app's own newer evidence — see the prop's note. Only
+   * the claim is lowered, and only here, on the way to the screen: nothing
+   * is written, so the stored row keeps its history and a group he switches
+   * back on by hand is believed again on the next load.
+   */
+  const membership: Membership = refused ? 'none' : row.membership;
+  const canAdd = !already && membership === 'member';
 
   const facts = [
     row.members !== null ? `${membersText(row.members)} חברים` : '',
@@ -272,8 +300,20 @@ export function GroupRow({
             </div>
           ) : (
           <div className="mt-1 flex flex-wrap items-center gap-1">
-            {row.membership !== 'unknown' && (
-              <Badge tone={MEMBERSHIP_TONE[row.membership]}>{MEMBERSHIP_SHORT[row.membership]}</Badge>
+            {membership !== 'unknown' && (
+              <Badge tone={MEMBERSHIP_TONE[membership]}>{MEMBERSHIP_SHORT[membership]}</Badge>
+            )}
+            {/* WHY it stopped saying חבר, where he is looking when he asks.
+                Said once per row and only on the rows it is true of — the
+                sentence is Facebook's own, and the group is off in the
+                publishing list until he says otherwise. */}
+            {refused && (
+              <span
+                title={t('פייסבוק אומרת שאי אפשר לפרסם בקבוצה הזו מהחשבון הזה. הקבוצה כבויה ברשימת הפרסום.')}
+                className="inline-flex items-center rounded-full bg-warning-400/10 px-1.5 py-0.5 text-[11px] font-bold text-warning-400"
+              >
+                {t('אי אפשר לפרסם')}
+              </span>
             )}
             {/* The mark, not a filter. Its one line of explanation is under
                 the heading in ResultsCard, said once for the whole list
@@ -384,17 +424,17 @@ export function GroupRow({
               target="_blank"
               rel="noopener noreferrer"
               size="sm"
-              variant={row.membership === 'member' ? 'secondary' : 'primary'}
+              variant={membership === 'member' ? 'secondary' : 'primary'}
               /* The two skins the brief names, chosen by the SAME condition as
                  before. `!` on the border because the secondary variant carries
                  border-ink-700 and both are one-class border-colour utilities in
                  the same layer — the later one wins. Measured in a browser:
                  without it the purple edge never appeared at all. */
               className={`w-full whitespace-nowrap px-1 text-[11px] ${
-                row.membership === 'member' ? '!border-brand-400/35 text-brand-400' : ''
+                membership === 'member' ? '!border-brand-400/35 text-brand-400' : ''
               }`}
             >
-              {row.membership === 'member' ? 'פתח קבוצה' : 'פתח להצטרפות'}
+              {membership === 'member' ? 'פתח קבוצה' : 'פתח להצטרפות'}
             </ButtonLink>
           )}
         </div>

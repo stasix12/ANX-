@@ -1825,6 +1825,10 @@ async function nightlyGroupCheck(): Promise<void> {
    */
   await saveWorkerSetting('maintenance', { ...seen, groupCheckAt: now.toISOString() });
 
+  /* Before the looking: make the two tables agree about what the last
+     night's looking already established. See withdrawRefusedMemberships. */
+  await withdrawRefusedMemberships();
+
   const { data, error } = await db
     .from('social_targets')
     .update({ last_synced_at: null })
@@ -1844,6 +1848,81 @@ async function nightlyGroupCheck(): Promise<void> {
     `בדיקה יומית: ${n} קבוצות ייבדקו בהדרגה כדי לוודא שעדיין אפשר לפרסם בהן. זה נעשה לאט, בין פרסומים.`,
     { groups: n },
   );
+}
+
+/**
+ * ONE GROUP, TWO TABLES, AND THEY HAD STOPPED AGREEING.
+ *
+ * "יש חוסר סנכרון בין הקבוצות, באפליקציה רושם לי שאני חבר בקבוצה הזאת
+ *  ובאפליקציה לא."
+ *
+ * Three places in this file switch a group OFF the moment Facebook's own page
+ * prints "אי אפשר לפרסם" — the nightly check above, a publication that is
+ * refused, and leaving a group from inside the app. All three write
+ * `social_targets`: `enabled: false`, `last_status: 'left'`. NONE of them
+ * touches `social_discovery_groups.membership`, which is the column גילוי
+ * קבוצות draws the חבר badge from — so the app knew perfectly well that the
+ * account cannot post there and went on telling him he was a member.
+ *
+ * The screen no longer believes the stale column (client.ts, TargetFacts),
+ * and this is the other half: the stored row stops saying it too, so the
+ * counts on the "הקבוצות שלך בפייסבוק" card and anything else that reads the
+ * column are counting the same groups the screen is showing.
+ *
+ * WHAT IT WILL NOT DO. Raise anything — a group that is on and healthy is not
+ * evidence of a membership and is left exactly as it is. Touch a group he
+ * switched back on by hand: `enabled` must be false as well, because that
+ * pair is what all three writers set together and a re-enabled group carries
+ * yesterday's status word. Delete, hide, or unlink anything: as in
+ * reconcileJoined, what goes is one wrong sentence and nothing else.
+ *
+ * Once a night, with the check it belongs to, and silent when there is
+ * nothing to say.
+ *
+ * @returns how many rows stopped claiming a membership.
+ */
+async function withdrawRefusedMemberships(): Promise<number> {
+  const db = await workerDb();
+  const { data: refused, error: read } = await db
+    .from('social_targets')
+    .select('external_id')
+    .eq('channel', 'facebook_group')
+    .eq('last_status', 'left')
+    .eq('enabled', false)
+    .neq('external_id', '');
+  if (read) {
+    console.error('[worker] ✗ סנכרון סימון החברות נכשל:', read.message);
+    return 0;
+  }
+  const ids = (refused ?? []).map((r) => (r as { external_id: string }).external_id).filter(Boolean);
+  if (!ids.length) return 0;
+
+  /* In batches, for the same reason reconcileJoined is: this is an in(...)
+     list in a URL and his own account has passed a hundred and sixty groups. */
+  let lowered = 0;
+  for (let at = 0; at < ids.length; at += 100) {
+    const { data: wrote, error } = await db
+      .from('social_discovery_groups')
+      .update({ membership: 'none' })
+      .eq('membership', 'member')
+      .in('external_id', ids.slice(at, at + 100))
+      .select('id');
+    if (error) {
+      console.error('[worker] ✗ סנכרון סימון החברות נכשל:', error.message);
+      return lowered;
+    }
+    lowered += wrote?.length ?? 0;
+  }
+  if (lowered) {
+    console.log(`[worker]    ${lowered} קבוצות שפייסבוק לא מאפשרת לפרסם בהן — הסימון "חבר" הוסר מהן`);
+    await logActivity(
+      'info',
+      'membership_synced',
+      `${lowered} קבוצות שפייסבוק לא מאפשרת לפרסם בהן מהחשבון הזה כבר לא מסומנות "חבר" במסך גילוי הקבוצות.`,
+      { groups: lowered },
+    );
+  }
+  return lowered;
 }
 
 /**
@@ -2344,7 +2423,7 @@ async function runCommands(state: WorkerState, headless: boolean, browser: Brows
                showing yesterday's numbers under a tick. */
             if (!mine.groups.length) ok = false;
             result = mine.groups.length
-              ? `נמצאו ${mine.groups.length} קבוצות שאתה חבר בהן${wrote.fresh ? `, מתוכן ${wrote.fresh} חדשות` : ''}.${dropped ? ` ${dropped === 1 ? 'קבוצה אחת שכבר אינה ברשימה שלך בפייסבוק הוסרה' : `${dropped} קבוצות שכבר אינן ברשימה שלך בפייסבוק הוסרו`} מהכרטיס.` : ''}${mine.truncated ? ' יש עוד — הרשימה ארוכה מהרגיל, ולכן לא הסרנו הפעם כלום.' : ''}`
+              ? `נמצאו ${mine.groups.length} קבוצות שאתה חבר בהן${wrote.fresh ? `, מתוכן ${wrote.fresh} חדשות` : ''}.${dropped ? ` ${dropped === 1 ? 'קבוצה אחת כבר אינה ברשימה שלך בפייסבוק' : `${dropped} קבוצות כבר אינן ברשימה שלך בפייסבוק`} — הסימון "חבר" הוסר מהן.` : ''}${mine.truncated ? ' יש עוד — הרשימה ארוכה מהרגיל, ולכן לא הסרנו הפעם כלום.' : ''}`
               : 'לא הצלחנו לקרוא את רשימת הקבוצות שלך בפייסבוק.';
           }
         } else if (normalizeQuery(phrase) === JOINED_QUERY) {
@@ -4073,12 +4152,34 @@ async function recordAccount(
 async function reconcileJoined(found: DiscoveredGroup[], truncated: boolean): Promise<number> {
   if (truncated || !found.length) return 0;
   const db = await workerDb();
-  /* The bucket is addressed by its query tag rather than by a column of its
-     own — the same array the search results use, so no migration. */
+  /*
+   * EVERY ROW THAT CLAIMS A MEMBERSHIP, NOT ONLY THE ONES IN THE BUCKET.
+   *
+   * It was filtered to the "my groups" bucket alone — a containment test on
+   * the queries array — and that is the hole he walked into: "יש חוסר סנכרון בין
+   * הקבוצות, באפליקציה רושם לי שאני חבר בקבוצה הזאת ובאפליקציה לא". The row
+   * he was looking at came from a phrase search, so it was never in the
+   * bucket, so the one reader that KNOWS the answer — Facebook's own list of
+   * this account's groups — could not touch it. He could press "בדוק את
+   * הקבוצות שלי" all day and the חבר stayed.
+   *
+   * The reasoning this function was written on does not mention the bucket.
+   * It is that the page just read is Facebook's own complete enumeration of
+   * the groups an account is in, so ANY row claiming a membership that the
+   * page does not mention is claiming something untrue — whether it got there
+   * by a misread search card, by his leaving the group, or by an admin
+   * removing him. The bucket was only where the first instance of the bug
+   * happened to live.
+   *
+   * The guard above is what makes this safe to widen: on anything short of a
+   * PROVEN complete read, nothing here runs at all. And the filter is asked
+   * of the database now as well as below, so a row that says nothing is never
+   * even fetched.
+   */
   const { data, error } = await db
     .from('social_discovery_groups')
     .select('id, external_id, membership')
-    .contains('queries', [JOINED_QUERY]);
+    .eq('membership', 'member');
   if (error) throw error;
 
   const onTheList = new Set(found.map((g) => g.externalId));
@@ -4096,7 +4197,7 @@ async function reconcileJoined(found: DiscoveredGroup[], truncated: boolean): Pr
       .in('id', stale.slice(at, at + 100));
     if (wrote) throw wrote;
   }
-  console.log(`[worker]    ${stale.length} קבוצות כבר לא ברשימת הקבוצות שלך בפייסבוק — הוסרו מהכרטיס`);
+  console.log(`[worker]    ${stale.length} קבוצות כבר לא ברשימת הקבוצות שלך בפייסבוק — הסימון "חבר" הוסר מהן`);
   return stale.length;
 }
 

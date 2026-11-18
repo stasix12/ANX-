@@ -333,7 +333,15 @@ is(/failed/.test(adoptFn), 'anything else is reported as a failure, not hidden i
 
 /* ══════════ §8 THE WEEKLY SYNC, ON HIS PC, WITH NO BROWSER ═══════════════ */
 
-is(/7 \* 24 \* 60 \* 60_000/.test(worker), 'the sync interval is seven days');
+/*
+ * HOURLY, and the brief's "אחת ל-7 ימים" is the floor that clause sets rather
+ * than the ceiling somebody read it as. Weekly produced exactly the complaint
+ * it should have: groups landed in his own discovery table and the national
+ * catalog went on showing yesterday's number for six more days. The pass
+ * opens no browser window and costs a handful of statements.
+ */
+is(/const CATALOG_SYNC_EVERY_MS = 60 \* 60_000;/.test(worker), 'the sync runs hourly, not weekly');
+is(/CATALOG_READ_MAX/.test(worker), 'and the read is bounded, now that it runs every hour');
 is(/CATALOG_SYNC_EVERY_MS/.test(syncFn), 'and the sync is the thing that reads it');
 /* STAMPED BEFORE THE WORK: a failing write must cost a week, not a retry
    every five seconds for ever. */

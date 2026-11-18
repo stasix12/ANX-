@@ -1898,11 +1898,37 @@ async function nightlyGroupCheck(): Promise<void> {
  * the rate the owner's own discovery searches grow it, and the weekly pass is
  * what carries those findings over into the shared table.
  */
-const CATALOG_SYNC_EVERY_MS = 7 * 24 * 60 * 60_000;
+/*
+ * ─── כל שעה, לא כל שבוע ──────────────────────────────────────────────────
+ *
+ * "המערכת תבצע סנכרון אוטומטי אחת ל-7 ימים" — and seven days is the floor
+ * that clause sets, not the ceiling. Read as a ceiling it produced exactly
+ * the complaint it should have: he searched, the groups landed in his own
+ * discovery table, and the national catalog went on saying 1,377 because the
+ * pass that carries them across was not due for another six days.
+ *
+ * There was never a reason for the wait. This pass opens no browser window,
+ * touches no Facebook page and costs a handful of database statements — the
+ * weekly stamp was copied from nightlyGroupCheck, which is paced because it
+ * makes the machine LOOK at a hundred groups. This one only reads two tables
+ * it already owns.
+ *
+ * So: hourly, bounded, and silent when there is nothing new.
+ */
+const CATALOG_SYNC_EVERY_MS = 60 * 60_000;
 /** Rows per statement. An `in(...)` list is a URL, and a URL has a length. */
 const CATALOG_PUBLISH_BATCH = 200;
 /** Rows read from each source table in one pass — PostgREST stops at 1000. */
 const CATALOG_READ_PAGE = 500;
+/**
+ * And a ceiling on the whole read, now that it runs every hour.
+ *
+ * At his size (1,377 discovered groups) this is three requests. The ceiling
+ * is here for the account that has searched for two years: twenty thousand
+ * rows is forty requests, and a pass that would read more stops and says so
+ * rather than turning an hourly tick into a minute of paging.
+ */
+const CATALOG_READ_MAX = 20_000;
 /**
  * How many rows one weekly pass may change.
  *
@@ -1937,7 +1963,7 @@ async function catalogFacts(db: Awaited<ReturnType<typeof workerDb>>): Promise<M
   const facts = new Map<string, CatalogFact>();
 
   /* ── discovered groups ──────────────────────────────────────────────── */
-  for (let from = 0; ; from += CATALOG_READ_PAGE) {
+  for (let from = 0; from < CATALOG_READ_MAX; from += CATALOG_READ_PAGE) {
     const { data, error } = await db
       .from('social_discovery_groups')
       .select('external_id, name, url, image_url, members, privacy')
@@ -1968,7 +1994,7 @@ async function catalogFacts(db: Awaited<ReturnType<typeof workerDb>>): Promise<M
   }
 
   /* ── and the groups he actually publishes to ────────────────────────── */
-  for (let from = 0; ; from += CATALOG_READ_PAGE) {
+  for (let from = 0; from < CATALOG_READ_MAX; from += CATALOG_READ_PAGE) {
     const { data, error } = await db
       .from('social_targets')
       .select('external_id, name, url, image_url, city, category')

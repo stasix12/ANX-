@@ -474,4 +474,108 @@ is(one(`select status from social_queue where id='${row}'`) === 'published', 'th
   eq(underAnHour.length, 3, 'three of the five qualify at an hour, which is every uncommented row older than that');
 }
 
+/* ══════ 10. "12 שעות מרגע שהוא מפרסם" — ALL FOUR LINKS, NOT JUST THE LAST ═ */
+
+/*
+ *   "תוודא שאם אני מגדיר תגובה מהירה 12 שעות מרגע שהוא מפרסם את הפוסט שזה
+ *    תואם להגדרה שלנו" — 18.11.2026
+ *
+ * Section 9 proves the cutoff selects the right rows. That is the LAST link.
+ * The question above is about the whole chain, and three links come before it:
+ * what instant `published_at` holds, whether anything moves it afterwards, and
+ * whether a timezone gets into the arithmetic between the owner's PC and the
+ * database. A fault in any one of them turns twelve hours into ten, fourteen,
+ * or "whenever something last touched the row".
+ */
+
+/* ── link 1: the column holds the instant the POST went live ───────────── */
+{
+  const composer = code('worker/facebook/composer.ts');
+  const publishWrite = worker.slice(worker.indexOf("step: 'published'"), worker.indexOf("step: 'published'") + 1200);
+  is(/const publishedAt = new Date\(\)\.toISOString\(\);/.test(composer), 'the composer stamps the publish instant itself');
+  /*
+   * AND IT IS STAMPED BEFORE THE EVIDENCE-GATHERING, not after. Taken after,
+   * the time spent hunting the post in the feed is charged to the stamp — the
+   * owner met that as a "נדחה" on a queue set to one a minute, and the comment
+   * above that line in composer.ts is the record of it. Asserted as an ORDER
+   * so the line cannot drift down the function.
+   */
+  /* AGAINST THE RETURN, not against the type union of the same words at the
+     top of the file — lastIndexOf finds the statement that actually returns
+     the outcome, which is what the stamp must come before. */
+  is(
+    composer.indexOf('const publishedAt = new Date().toISOString();') < composer.lastIndexOf("return { outcome: 'published'"),
+    'and stamps it BEFORE it goes looking for the post — otherwise the search time is charged to the stamp',
+  );
+  is(/published_at: result\.publishedAt \|\| new Date\(\)\.toISOString\(\)/.test(publishWrite), 'and the queue row takes that instant, with the clock only as a fallback for the path that has none');
+}
+
+/* ── link 2: nothing moves it afterwards ───────────────────────────────── */
+{
+  /*
+   * THREE WRITERS IN THE WHOLE PRODUCT, and the count is the pin: a fourth
+   * added without thought is how a write-once column stops being one.
+   */
+  /*
+   * COUNTED PRECISELY, because the loose version counts the wrong things:
+   * `last_published_at` is a different column on social_targets, and
+   * `published_at: string | null` is a type declaration. Neither writes an
+   * instant. What is counted here is an assignment of a VALUE to the queue
+   * row's own column.
+   */
+  /* A LITERAL SPACE, not \s* — a greedy \s* backtracks to zero width and the
+     negative lookahead then passes on the very declaration it was meant to
+     exclude, which is how this pin first counted a type as a write. */
+  const queueWrites = [...worker.matchAll(/(?<!last_)published_at: (?!string)/g)].length;
+  eq(queueWrites, 2, 'the worker writes published_at in exactly two places — the publish itself and the late verification');
+  const clientWrites = [...client.matchAll(/(?<!last_|first_)published_at: new Date\(\)/g)].length;
+  eq(clientWrites, 1, 'and the browser in exactly one — "I posted this myself". A third writer appearing without thought is how a write-once column stops being one');
+  /*
+   * AND THE LATE-VERIFICATION PATH PRESERVES AN EXISTING VALUE. It promotes a
+   * row that sat waiting for a moderator; if it stamped "now", a post that
+   * waited eight hours for approval would have its comment clock restarted at
+   * the moment we noticed. `row.published_at ||` is what stops that, and
+   * claimed_at — stamped seconds before the click — is the next best instant.
+   * Deliberately NOT updated_at, which a trigger moves on every sweep.
+   */
+  is(
+    /published_at: row\.published_at \|\| row\.claimed_at/.test(worker),
+    'the late-verification path keeps an existing stamp and never overwrites it',
+  );
+  is(!/published_at: row\.updated_at \|\|/.test(worker), 'and never falls back to updated_at first, which is the last time anything touched the row rather than a time anything went live');
+}
+
+/* ── link 3: the arm measures from that column and no other ────────────── */
+{
+  is(/\.lte\('published_at', cutoff\)/.test(arm), 'the arm compares published_at against the cutoff');
+  is(!/scheduled_at|updated_at|created_at/.test(arm), 'and reads no other instant — scheduled_at is rewritten on every deferral and updated_at on every touch');
+}
+
+/* ── link 4: no timezone gets into it ──────────────────────────────────── */
+{
+  /*
+   * THE REAL HAZARD, and the only one of the four that would be invisible in
+   * a code review: the owner's PC runs in Asia/Jerusalem and the database in
+   * UTC. Two hours of drift would make "12 שעות" mean ten or fourteen, and
+   * every row would still look correctly handled.
+   *
+   * It is safe because the arithmetic never leaves epoch milliseconds, which
+   * carry no zone, and toISOString() is UTC by definition. So the pin is in
+   * two halves: the function must not reach for this product's timezone
+   * machinery, and its answer must agree with the DATABASE's own clock.
+   */
+  const rules = code('src/lib/social/rules.ts');
+  const cut = rules.slice(rules.indexOf('export function commentArmCutoff'), rules.indexOf('export function commentArmCutoff') + 400);
+  is(cut.length > 60, 'commentArmCutoff could not be isolated — the checks over it would be vacuous');
+  is(!/zonedToUtc|zonedDateISO|Asia\/Jerusalem|getHours|getTimezoneOffset/.test(cut), 'the cutoff uses no timezone conversion at all — time.ts forces Asia/Jerusalem and must stay out of this arithmetic');
+  is(/new Date\(nowMs - clampCommentDelay\(delaySeconds\) \* 1000\)\.toISOString\(\)/.test(cut), 'it is epoch milliseconds in and UTC out, which is what the database compares against');
+
+  /* AND THE TWO CLOCKS REALLY AGREE. Asked of the database rather than
+     reasoned about: a drift of hours here is the whole failure mode. */
+  const mine = new Date(commentArmCutoff(43200, Date.now())).getTime();
+  const theirs = new Date(`${one(`select to_char((now() - interval '12 hours') at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS')`)}Z`).getTime();
+  const driftSeconds = Math.abs(mine - theirs) / 1000;
+  is(driftSeconds < 120, `the cutoff agrees with the database's own clock — ${driftSeconds.toFixed(1)}s apart, where a timezone fault would be thousands`);
+}
+
 console.log(`auto-comment OK — ${checks} assertions, the columns and the duplicate guard against a real Postgres`);

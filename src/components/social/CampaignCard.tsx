@@ -4,7 +4,7 @@ import { useId, useState } from 'react';
 import { t, keep } from '@/lib/social/i18n';
 import Link from 'next/link';
 import { canPauseRun, canResumeRun, groupProgress, neverLaunched, runBadge, runProgress, type CampaignState } from '@/lib/social/campaign';
-import { type CampaignRepeat, type CampaignRound, type CampaignSchedule } from '@/lib/social/campaign-schedule';
+import { DAY_OPENS, shownSchedule, type CampaignRepeat, type CampaignRound, type CampaignSchedule } from '@/lib/social/campaign-schedule';
 import { scheduleReadout, type AccountSpacing } from '@/lib/social/schedule-readout';
 import { accountGapSeconds, paceProfile } from '@/lib/social/rules';
 import { counted, formatDayMonthHe } from '@/lib/social/time';
@@ -874,7 +874,16 @@ export function CampaignCard({
           {schedule && (
             <span className="inline-flex min-h-8 items-center gap-1 rounded-full border border-ink-700 bg-ink-900 px-2 text-[11px] font-bold text-mist-100">
               <CalendarIcon aria-hidden className="h-3.5 w-3.5 shrink-0" style={{ color: id.ink }} />
-              {schedule.start === '00:00' ? 'כל היום' : ltr(schedule.start)}
+              {/*
+                THROUGH shownSchedule(), LIKE EVERY OTHER READOUT. A round
+                whose window is off still holds days and an hour that nothing
+                reads, and this chip printed them raw — so the collapsed card
+                said "05:30" while the same card's own expanded panel, and the
+                dashboard, both said "כל היום" about the same round.
+                "שעת ההתחלה של קמפיינים במסך קמפיינים לא מסונכרן עם העמוד
+                הראשי." It is the same split, one card apart.
+              */}
+              {shownSchedule(schedule).start === DAY_OPENS ? 'כל היום' : ltr(shownSchedule(schedule).start)}
             </span>
           )}
           {paceProfile(pace)?.label && (

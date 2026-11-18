@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { t } from '@/lib/social/i18n';
 import { Button, Sheet } from '@/components/social/ui';
-import { DAY_LABELS, DAY_NAMES, type CampaignSchedule } from '@/lib/social/campaign-schedule';
+import { DAY_LABELS, DAY_NAMES, fromShown, shownSchedule, type CampaignSchedule } from '@/lib/social/campaign-schedule';
 import { friendlyMessage } from '@/lib/social/errors';
 
 /**
@@ -52,8 +52,30 @@ export function CampaignHoursSheet({
   /** Resolves when the write really landed; rejects when it did not. */
   onSave: (next: CampaignSchedule) => Promise<void>;
 }) {
-  const [days, setDays] = useState<number[]>(schedule.days ?? []);
-  const [start, setStart] = useState(schedule.start || '08:00');
+  /*
+   * ─── WHAT THE ENGINE WILL DO, NOT WHAT THE ROW HAPPENS TO HOLD ──────────
+   *
+   * "שעת ההתחלה של קמפיינים במסך קמפיינים לא מסונכרן עם העמוד הראשי."
+   *
+   * A round whose window is OFF still has days and an hour sitting in its
+   * columns that nothing reads — campaign-schedule.ts names the live case:
+   * "א׳–ה׳ and 11:05 stored while publishing on Saturday at 03:00". Every
+   * other editor and readout in this product resolves that through
+   * shownSchedule() before drawing it; this sheet did not, so it opened on
+   * six days at 05:30 for a campaign the dashboard was drawing, correctly,
+   * as every day at any hour.
+   *
+   * AND IT WAS WORSE THAN A WRONG LABEL. The save hardcoded `enabled: true`,
+   * so one tap on "שמור שינויים" with nothing edited promoted that inert
+   * window into a live one — and client.ts:5092's `if (!schedule.enabled)`
+   * guard stops holding, so rescheduleCampaignQueue then re-spaced a queue
+   * nobody asked to re-space. campaign-schedule.ts says it in as many words:
+   * "Flipping it true on a live campaign would re-space a queue nobody asked
+   * to re-space."
+   */
+  const shown = shownSchedule(schedule);
+  const [days, setDays] = useState<number[]>(shown.days ?? []);
+  const [start, setStart] = useState(shown.start || '08:00');
   const [saving, setSaving] = useState(false);
   const [problem, setProblem] = useState('');
 
@@ -66,8 +88,9 @@ export function CampaignHoursSheet({
    */
   useEffect(() => {
     if (!open) return;
-    setDays(schedule.days ?? []);
-    setStart(schedule.start || '08:00');
+    const next = shownSchedule(schedule);
+    setDays(next.days ?? []);
+    setStart(next.start || '08:00');
     setProblem('');
   }, [open, schedule]);
 
@@ -84,7 +107,13 @@ export function CampaignHoursSheet({
     setSaving(true);
     setProblem('');
     try {
-      await onSave({ ...schedule, enabled: true, days, start });
+      /*
+       * fromShown(), NOT `enabled: true`. The flag is a CONSEQUENCE of what
+       * was chosen — every day from midnight limits nothing, and this product
+       * has always stored "limits nothing" with the flag down — and deciding
+       * it here by hand is what let an untouched sheet arm a window.
+       */
+      await onSave(fromShown({ ...schedule, days, start }));
       onClose();
     } catch (err) {
       /* friendlyMessage() AND NOT err.message — caught by layout.test.ts, and

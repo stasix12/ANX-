@@ -925,4 +925,56 @@ function ch(v: number): number {
   is(!publishesAlways({ ...drawn, enabled: true, days: [0] }), 'one day a week does not');
 }
 
+/*
+ * ─── EVERY EDITOR AND EVERY READOUT IS ON THE SAME SIDE OF shownSchedule ──
+ *
+ * "שעת ההתחלה של קמפיינים במסך קמפיינים לא מסונכרן עם העמוד הראשי."
+ *
+ * A round whose window is OFF still holds days and an hour in its columns
+ * that nothing reads — this module's own note names the live case, "א׳–ה׳
+ * and 11:05 stored while publishing on Saturday at 03:00". shownSchedule()
+ * exists so the screen draws what the ENGINE will do instead; fromShown() is
+ * its inverse, and it is what decides the flag from what was chosen.
+ *
+ * Two places were on the wrong side of that pair, and one of them did real
+ * damage:
+ *
+ *   · CampaignCard's collapsed chip printed the stored hour raw, so the card
+ *     said "05:30" while its own expanded panel and the dashboard both said
+ *     "כל היום" about the same round. A card contradicting itself one tap
+ *     apart is the sync fault he reported, at its smallest scale.
+ *
+ *   · CampaignHoursSheet opened on those inert values AND saved them with
+ *     `enabled: true` hardcoded — so one tap on "שמור שינויים", with nothing
+ *     edited, armed a window nobody had chosen. client.ts's
+ *     `if (!schedule.enabled) return` guard then stopped holding and
+ *     rescheduleCampaignQueue re-spaced a live queue. This module says it in
+ *     as many words: "Flipping it true on a live campaign would re-space a
+ *     queue nobody asked to re-space."
+ */
+{
+  const sheet = readFileSync(new URL('../../src/components/social/CampaignHoursSheet.tsx', import.meta.url), 'utf8');
+
+  is(/shownSchedule\(schedule\)/.test(sheet), 'the ימים ושעות sheet opens on what the engine will do, not on the inert columns');
+  is(
+    /const next = shownSchedule\(schedule\);/.test(sheet),
+    'and re-seeds through it on every open too — the sheet is reused for whichever card was tapped',
+  );
+  is(
+    /await onSave\(fromShown\(\{ \.\.\.schedule, days, start \}\)\);/.test(sheet),
+    'and the flag is a CONSEQUENCE of what was chosen, through fromShown()',
+  );
+  /* The literal, not the word: the comment above the call explains what
+     `enabled: true` cost, and a test a comment can break is a test that gets
+     deleted. */
+  is(!/enabled: true,/.test(sheet), 'never `enabled: true` by hand — that is what armed a window on a sheet nobody edited');
+
+  const card = readFileSync(new URL('../../src/components/social/CampaignCard.tsx', import.meta.url), 'utf8');
+  is(
+    /shownSchedule\(schedule\)\.start === DAY_OPENS \? 'כל היום' : ltr\(shownSchedule\(schedule\)\.start\)/.test(card),
+    "the collapsed card's hour chip resolves through shownSchedule, so it cannot disagree with the panel inside the same card",
+  );
+  is(!/schedule\.start === '00:00'/.test(card), 'and it compares against DAY_OPENS rather than a second copy of midnight');
+}
+
 console.log(`campaign schedule tests OK — ${checks} assertions`);

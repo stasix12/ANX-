@@ -90,6 +90,34 @@ export interface Campaign {
    * seconds is twenty minutes, at sixty it is an hour and a half.
    */
   comment_gap_seconds?: number;
+  /**
+   * ─── "תגובה מהירה אחרי פוסט" — THE SWITCH ───────────────────────────────
+   *
+   * On, a publication of this round is ARMED for its comment once it has gone
+   * out and aged past `comment_delay_seconds`. Nothing else about the feature
+   * is new: finding the post, writing the comment, verifying it against
+   * Facebook and logging the outcome are the mechanism that already carried
+   * the owner-pressed button, unchanged.
+   *
+   * THE ARMING IS NOT IN THE PUBLISHING PATH, deliberately. runJob is not
+   * touched by one character — "מאד חשוב לא לגעת כלום חוץ מזה הפרסום של
+   * הפוסטים והתזמון סוף סוף מושלם" — and the chore that already runs between
+   * publications arms the rows itself. A comment that cannot be written
+   * therefore cannot reach, delay or re-run a publication: §7 of the brief,
+   * held by the shape rather than by a rule.
+   *
+   * Absent reads as OFF, which is what every round that predates this is.
+   */
+  comment_auto?: boolean;
+  /**
+   * How old a publication must be before its comment is armed, in seconds.
+   *
+   * NOT `comment_gap_seconds`. That one is the spacing between one comment
+   * and the next, and it stays exactly what it was; this is the age of the
+   * post — "עיכוב תגובה" on the card. A post is a worse place to be the
+   * first comment on than a post that has been up a minute.
+   */
+  comment_delay_seconds?: number;
   /*
    * WHEN THIS CAMPAIGN IS ALLOWED TO PUBLISH — the five columns behind the
    * "תזמון פרסום" panel on its card. src/lib/social/campaign-schedule.ts owns

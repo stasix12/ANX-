@@ -2527,6 +2527,64 @@ export async function lastRunScope(campaignId: string): Promise<LastRunScope | n
 }
 
 /**
+ * ─── A WRITE THAT SURVIVES A DATABASE ONE MIGRATION BEHIND ────────────────
+ *
+ *   "למה כל פעם צריך להריץ את זה לכל פוסט, תסדר את זה מעכשיו"
+ *   — 18.11.2026, after a third red wall in one night
+ *
+ * THE FAULT THIS REPLACES. A screen that writes five columns and meets a
+ * database missing one of them gets nothing written and a wall of red. The
+ * four columns it could have saved are refused with the fifth, and the owner —
+ * who only wanted to type a sentence — is sent to the SQL editor.
+ *
+ * Postgres refuses the whole statement when a column is named that does not
+ * exist, and it is right to. What was wrong was asking for all five in one
+ * breath and treating the refusal as fatal.
+ *
+ * SO THIS DROPS THE COLUMN THE DATABASE NAMED AND TRIES AGAIN. PostgREST says
+ * which one, in one of two shapes depending on where it noticed:
+ *
+ *     Could not find the 'comment_auto_since' column of 'social_campaigns'
+ *     column "comment_auto_since" of relation "social_campaigns" does not exist
+ *
+ * Both carry the name in quotes, and both are matched below. A column name
+ * that cannot be read out of the message ends the loop rather than starting a
+ * guessing game — an unexplained refusal is still a refusal.
+ *
+ * IT REPORTS WHAT IT DROPPED, and the caller is expected to say so. A write
+ * that quietly saves four of five fields is a different lie from the one this
+ * fixes, and not a smaller one: the owner has to be able to see that one
+ * setting did not take, even while the other four did.
+ *
+ * BOUNDED. At most four retries — a database missing five columns of one
+ * write is not one migration behind, it is a different database, and the
+ * right answer there is the refusal.
+ */
+export async function updateTolerant(
+  table: string,
+  match: { column: string; value: string },
+  payload: Record<string, unknown>,
+): Promise<{ dropped: string[] }> {
+  const value = { ...payload };
+  const dropped: string[] = [];
+  for (let attempt = 0; attempt <= 4; attempt += 1) {
+    const res = await db().from(table).update(value).eq(match.column, match.value);
+    if (!res.error) return { dropped };
+    const missing = /(?:Could not find the|column) ["']([a-z0-9_]+)["']/i.exec(res.error.message)?.[1];
+    /* Only a column this write actually asked for. A message naming something
+       else is not ours to interpret, and stripping a key we never sent would
+       loop for ever on the same error. */
+    if (!missing || !(missing in value)) throw new Error(res.error.message);
+    delete value[missing];
+    dropped.push(missing);
+    /* Nothing left to write: the database has none of these columns, which is
+       a real refusal and not a partial save. */
+    if (!Object.keys(value).length) throw new Error(res.error.message);
+  }
+  throw new Error('השמירה נכשלה: המסד חסר יותר מדי עמודות שהמסך הזה כותב.');
+}
+
+/**
  * ─── TURN THE AUTOMATIC COMMENT ON, AND SAY WHAT IT WILL SAY ──────────────
  *
  *   "הפעלה/כיבוי של תגובה אוטומטית · הקלדה ושמירה של טקסט התגובה · בחירת
@@ -2562,11 +2620,34 @@ export async function lastRunScope(campaignId: string): Promise<LastRunScope | n
  * between one comment and the NEXT; this is how old the POST must be. They are
  * two different clocks and the schema says so — a card that wrote the gap here
  * would re-pace every round that already has comments and still delay nothing.
+ *
+ * ─── AND THE FLOOR IS NOT A COLUMN — 18.11.2026 ──────────────────────────
+ *
+ *   "למה כל פעם צריך להריץ את זה... תסדר את זה מעכשיו"
+ *
+ * "When was this switched on" was a column for one day, and that day cost the
+ * owner a third trip to the SQL editor. It needs no column: it is one instant
+ * per round, read once per arming pass by a loop that already holds ten rows
+ * in memory, and never filtered or sorted on. social_settings is a key/value
+ * store both the browser and the arm on the PC already read, and it needs no
+ * migration — now or for the next thing this feature needs.
+ *
+ * KEYED BY ROUND INSIDE ONE ROW rather than a row per round: the whole map is
+ * what the arm wants, in one read, and a round that no longer exists leaves a
+ * key nobody looks at rather than a row somebody has to clean up.
  */
+/**
+ * The settings row the floor lives in — one map, round id to the instant its
+ * switch was last turned on. Named once, here, because the arm on the owner's
+ * PC reads the same key and a second spelling is a feature that silently does
+ * nothing.
+ */
+export const COMMENT_AUTO_SINCE_KEY = 'comment-auto-since';
+
 export async function setCampaignAutoComment(
   campaignId: string,
   next: { auto: boolean; text: string; delaySeconds: number },
-): Promise<{ auto: boolean; text: string; delaySeconds: number }> {
+): Promise<{ auto: boolean; text: string; delaySeconds: number; dropped: string[] }> {
   /* CLAMPED HERE AS WELL AS IN THE INPUT, because this is the last place
      before the database: the range is the one the column itself CHECKs (v45,
      one hour to twelve), read from rules.ts so the picker, this write and the
@@ -2595,21 +2676,36 @@ export async function setCampaignAutoComment(
    * first; and a save that only changes the text or the delay does not quietly
    * move the floor under a queue that is already building.
    */
-  const payload: Record<string, unknown> = next.auto
-    ? { ...value, comment_auto_since: new Date().toISOString() }
-    : { ...value };
-  const saved = await db().from('social_campaigns').update(payload).eq('id', campaignId);
-  if (saved.error) {
-    /* THE MISSING MIGRATION SAYS SO, IN HEBREW, NAMING THE FILE — the same
-       answer queueCampaignComment gives, for the same reason: Postgres answers
-       a missing column with a sentence about relations, and the switch would
-       otherwise read as dead. */
-    if (/column|comment_auto|comment_auto_since|comment_delay_seconds|comment_text/i.test(saved.error.message)) {
+  /*
+   * TOLERANT, so a database one migration behind saves what it can rather than
+   * refusing the sentence the owner just typed. What could not be saved is
+   * reported back and said on the card — a quiet partial save is its own lie.
+   */
+  let dropped: string[] = [];
+  try {
+    ({ dropped } = await updateTolerant('social_campaigns', { column: 'id', value: campaignId }, { ...value }));
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    /* THE MISSING MIGRATION SAYS SO, IN HEBREW, NAMING THE FILE — reached only
+       when NOTHING could be written, which means the comment columns
+       themselves are absent and the feature has no home at all. */
+    if (/column|comment_auto|comment_delay_seconds|comment_text/i.test(message)) {
       throw new Error('צריך להריץ את social-latest.sql ב-Supabase לפני שאפשר להפעיל תגובה אוטומטית. אפשר להריץ אותו שוב גם אם כבר הרצתם.');
     }
-    throw new Error(saved.error.message);
+    throw new Error(message);
   }
-  return { auto: value.comment_auto, text: value.comment_text, delaySeconds: value.comment_delay_seconds };
+
+  /*
+   * AND THE FLOOR, ON THE WAY ON ONLY. Turning the switch off leaves the stamp
+   * where it is, so a round switched off and on starts from the second moment;
+   * and a save that only changes the text or the delay does not move the floor
+   * under a queue that is already building.
+   */
+  if (next.auto) {
+    const since = await getSetting<Record<string, string>>(COMMENT_AUTO_SINCE_KEY, {});
+    await saveSetting(COMMENT_AUTO_SINCE_KEY, { ...since, [campaignId]: new Date().toISOString() });
+  }
+  return { auto: value.comment_auto, text: value.comment_text, delaySeconds: value.comment_delay_seconds, dropped };
 }
 
 /**
@@ -2665,20 +2761,20 @@ export async function clearPendingComments(): Promise<number> {
 
   /*
    * THE FLOOR, FOR EVERY ROUND THAT IS STILL ARMED. Without it this function
-   * is a button that empties a bucket with the tap running.
+   * is a button that empties a bucket with the tap running: the arm refills
+   * the queue on its next pass, seconds later.
    *
-   * Tolerated rather than required: a database that has not run v46 has no
-   * such column, and the clearing above is still worth doing — the owner
-   * pressed a button that says "empty the queue", and it emptied.
+   * In the settings row, like the switch itself — so this needs no migration
+   * and cannot fail on a database one version behind.
    */
-  try {
-    await db()
-      .from('social_campaigns')
-      .update({ comment_auto_since: new Date().toISOString() })
-      .eq('comment_auto', true)
-      .neq('status', 'archived');
-  } catch {
-    /* no column, no floor to raise — see above */
+  const armed = unwrap<{ id: string }[]>(
+    await db().from('social_campaigns').select('id').eq('comment_auto', true).neq('status', 'archived'),
+  );
+  if (armed.length) {
+    const now = new Date().toISOString();
+    const since = await getSetting<Record<string, string>>(COMMENT_AUTO_SINCE_KEY, {});
+    for (const row of armed) since[row.id] = now;
+    await saveSetting(COMMENT_AUTO_SINCE_KEY, since);
   }
   return cleared;
 }

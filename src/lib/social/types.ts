@@ -118,19 +118,25 @@ export interface Campaign {
    * first comment on than a post that has been up a minute.
    */
   comment_delay_seconds?: number;
-  /**
-   * WHEN THE SWITCH WAS LAST TURNED ON — the floor under the automatic arm.
+  /*
+   * ─── WHAT WAS HERE: comment_auto_since ──────────────────────────────────
    *
-   * Without it, flipping the switch on reached back over everything the round
-   * had ever published: the owner watched his queue go from 25 to 166 in half
-   * an hour on posts from previous days. "תגובה מהירה אחרי פוסט" means from
-   * the moment it is switched on, and this column is that moment.
+   * The floor under the automatic arm — when the switch was last turned on.
+   * It was a column for less than an hour (v46), and that hour cost the owner
+   * a third trip to the SQL editor in one night: "למה כל פעם צריך להריץ את
+   * זה... תסדר את זה מעכשיו".
    *
-   * undefined/null means the switch has not been turned on since the column
-   * existed, and the arm treats that as a floor nothing passes — the safe
-   * reading, because the alternative is reaching into history again.
+   * It needed no column. It is one instant per round, read once per arming
+   * pass by a loop already holding ten rows in memory, never filtered or
+   * sorted on. It lives in social_settings under 'comment-auto-since' —
+   * a key/value store both the browser and the arm already read — and v47
+   * drops the column. The floor itself did not change and is still enforced:
+   * see armAutoComments and COMMENT_AUTO_SINCE_KEY.
+   *
+   * This note sits in the type rather than nowhere because schema-columns
+   * .test.ts checks every field here against a real column, and a field that
+   * is deliberately NOT a column has to say so where the next reader looks.
    */
-  comment_auto_since?: string | null;
   /*
    * WHEN THIS CAMPAIGN IS ALLOWED TO PUBLISH — the five columns behind the
    * "תזמון פרסום" panel on its card. src/lib/social/campaign-schedule.ts owns

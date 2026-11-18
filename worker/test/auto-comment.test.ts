@@ -82,7 +82,30 @@ const latest = src('supabase/social-latest.sql');
    opposite of what it means to. */
 const writer = client.slice(client.indexOf('export async function setCampaignAutoComment'), client.indexOf('export async function clearPendingComments'));
 is(writer.length > 300, 'setCampaignAutoComment could not be isolated — every check over it would be vacuous');
-is(/\.from\('social_campaigns'\)/.test(writer), 'it writes the ROUND');
+/* THROUGH updateTolerant, which names the table rather than chaining from
+   db() — so the pin is on the table it is handed, not on the call shape. */
+is(/updateTolerant\('social_campaigns'/.test(writer), 'it writes the ROUND');
+/*
+ * ─── AND IT SURVIVES A DATABASE ONE MIGRATION BEHIND — 18.11.2026 ────────
+ *
+ *   "למה כל פעם צריך להריץ את זה... תסדר את זה מעכשיו"
+ *
+ * A write that names five columns and meets a database missing one of them
+ * used to refuse all five and show a wall of red. It now drops the column the
+ * database named and tries again — and REPORTS what it dropped, because a
+ * partial save that says "נשמר" is its own lie.
+ */
+{
+  const tol = client.slice(client.indexOf('export async function updateTolerant'), client.indexOf('export const COMMENT_AUTO_SINCE_KEY'));
+  is(tol.length > 400, 'updateTolerant could not be isolated — the checks over it would be vacuous');
+  is(/Could not find the\|column/.test(tol), "it reads the column's name out of either shape PostgREST answers with");
+  is(/!\(missing in value\)/.test(tol), 'and only drops a column this write actually asked for — a name it never sent would loop for ever on the same error');
+  is(/if \(!Object\.keys\(value\)\.length\) throw/.test(tol), 'a write with nothing left to say is a refusal, not a partial save');
+  is(/attempt <= 4/.test(tol), 'and it is bounded: five missing columns is a different database, not a missing migration');
+  is(/dropped: string\[\]/.test(tol), 'what it dropped comes back to the caller');
+  const card2 = code('src/components/social/QuickCommentCard.tsx');
+  is(/dropped\.length/.test(card2), 'and the card says it rather than reporting a clean save');
+}
 is(!/social_queue/.test(writer), "and never a publication — a screen cannot arm a row, which is half of why a comment can't cause a repeat post");
 is(!/status:/.test(writer), 'and nothing in it writes a publication status under any spelling');
 for (const col of ['comment_auto', 'comment_text', 'comment_delay_seconds']) {
@@ -593,14 +616,25 @@ is(one(`select status from social_queue where id='${row}'`) === 'published', 'th
  * has to mean from the moment it is switched on.
  */
 {
-  is(/comment_auto_since/.test(arm), 'the arm reads when the switch was turned on');
-  is(/if \(!round\.comment_auto_since\) continue;/.test(arm), 'and a round with no such instant arms NOTHING — the safe reading, because the alternative is reaching into history again');
-  is(/\.gte\('published_at', round\.comment_auto_since\)/.test(arm), 'the window has a floor as well as a ceiling, and both are asked of the database');
+  is(/const floor = since\[round\.id\];/.test(arm), 'the arm reads when the switch was turned on');
+  is(/if \(!floor\) continue;/.test(arm), 'and a round with no such instant arms NOTHING — the safe reading, because the alternative is reaching into history again');
+  is(/\.gte\('published_at', floor\)/.test(arm), 'the window has a floor as well as a ceiling, and both are asked of the database');
   /* THE STAMP IS WRITTEN ONLY ON THE WAY ON. Writing it on every save would
      move the floor under a queue already building whenever the text changed;
      writing it on the way OFF would lose where the round started. */
-  is(/next\.auto\s*\n?\s*\?\s*\{ \.\.\.value, comment_auto_since: new Date\(\)\.toISOString\(\) \}/.test(writer), 'the switch stamps the floor on the way ON');
-  is(/:\s*\{ \.\.\.value \}/.test(writer), 'and a save that only changes the text or the delay leaves it where it is');
+  /*
+   * ─── THE FLOOR IS NOT A COLUMN ANY MORE — 18.11.2026 ─────────────────
+   *
+   * It was one for less than an hour, and that hour cost a third trip to the
+   * SQL editor. It is one instant per round, read once a pass by a loop that
+   * already holds ten rows, never filtered or sorted on — so it lives in the
+   * settings row both sides already read, and needs no migration ever.
+   */
+  is(/if \(next\.auto\) \{/.test(writer), 'the switch stamps the floor on the way ON only');
+  is(/saveSetting\(COMMENT_AUTO_SINCE_KEY/.test(writer), 'into the settings row, not into a column');
+  is(!/comment_auto_since/.test(writer.slice(0, writer.indexOf('if (next.auto)'))), 'and the column is not written at all — a save that only changes the text or the delay leaves the floor where it is');
+  is(/export const COMMENT_AUTO_SINCE_KEY/.test(client), "the key is named once, because the arm on the PC reads the same one and a second spelling is a feature that silently does nothing");
+  is(new RegExp("getSetting<Record<string, string>>\\('comment-auto-since'").test(worker), 'and the arm reads that very key');
 
   /* ─── AND THE BUTTON ─────────────────────────────────────────────────── */
   const reset = client.slice(client.indexOf('export async function clearPendingComments'), client.indexOf('export async function queueCampaignComment'));
@@ -614,7 +648,7 @@ is(one(`select status from social_queue where id='${row}'`) === 'published', 'th
      this function sets, and it is the comment's own. A bare /status:/ matches
      that too — the same backtracking trap this file already met once. */
   is(!/(?<!comment_)status: /.test(reset), 'and writes no publication status — a reset of a comment queue may not move a post');
-  is(/comment_auto_since: new Date\(\)\.toISOString\(\)/.test(reset), 'and it raises the floor on every armed round, or it is a button that empties a bucket with the tap running');
+  is(/saveSetting\(COMMENT_AUTO_SINCE_KEY, since\)/.test(reset), 'and it raises the floor on every armed round, or it is a button that empties a bucket with the tap running');
   is(/\.limit\(100\)/.test(reset), 'in pages, because PostgREST stops returning rows at a thousand however many it changed');
 
   /* THE SCREEN: beside the number it zeroes, and only when there is one. */
@@ -631,9 +665,16 @@ is(one(`select status from social_queue where id='${row}'`) === 'published', 'th
 {
   const v46 = src('supabase/social-schema-v46.sql');
   const rb46 = src('supabase/social-schema-v46-rollback.sql');
-  is(/add column if not exists comment_auto_since timestamptz/.test(v46), 'v46 adds the floor');
-  is(!/not null/.test(v46.slice(v46.indexOf('add column if not exists comment_auto_since'), v46.indexOf('add column if not exists comment_auto_since') + 120)), 'nullable, because "we do not know when this began" is a real state and must not be defaulted into a lie');
-  is(/where comment_status = 'pending'/.test(v46), 'and it empties the queue the defect built');
+  is(/where comment_status = 'pending'/.test(v46), 'v46 empties the queue the defect built');
+  /*
+   * AND v47 TAKES ITS COLUMN BACK OUT. v46 is left exactly as it shipped — a
+   * migration that may already have run is not edited — so the correction is
+   * its own file, and it is a no-op on a database that never ran v46.
+   */
+  const v47 = src('supabase/social-schema-v47.sql');
+  is(/drop column if exists comment_auto_since/.test(v47), 'v47 removes the column the floor no longer needs');
+  is(/⚠/.test(v47), 'and says out loud that a value already written to it is lost');
+  is(!/comment_auto_since/.test(code('src/lib/social/types.ts').replace(/[\s\S]*WHAT WAS HERE[\s\S]*?\*\//, '')), 'and no type still declares it as a column, which is what schema-columns.test.ts would fail on');
   for (const kept of ["'done'", "'failed'", "'unverified'", "'commenting'"]) {
     is(!v46.includes(`comment_status = ${kept}`), `without touching a ${kept} row`);
   }

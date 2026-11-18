@@ -126,6 +126,11 @@ export function QuickCommentCard({
   text: string;
   delaySeconds: number;
   /** One writer for all three stored values — see setCampaignAutoComment. */
+  /**
+   * One writer for all three stored values — see setCampaignAutoComment. It
+   * may answer with the columns the database could not take, and the card
+   * says them rather than reporting a clean save.
+   */
   onSave: (next: { auto: boolean; text: string; delaySeconds: number }) => Promise<unknown> | void;
   disabled?: boolean;
   className?: string;
@@ -169,8 +174,18 @@ export function QuickCommentCard({
     writing.current = true;
     setBusy(true);
     try {
-      await onSave(next);
-      if (!quiet) toast('נשמר.');
+      /*
+       * WHAT COULD NOT BE SAVED IS SAID, EVEN WHEN THE SAVE SUCCEEDED.
+       *
+       * The write survives a database one migration behind by dropping the
+       * column it does not have and trying again — but a partial save that
+       * reports "נשמר" is its own lie, and not a smaller one than the red
+       * wall it replaced. So the names come back and the card says them.
+       */
+      const answer = (await onSave(next)) as { dropped?: string[] } | void;
+      const dropped = answer && Array.isArray(answer.dropped) ? answer.dropped : [];
+      if (dropped.length) toast(`נשמר, אבל ${dropped.length === 1 ? 'הגדרה אחת לא נשמרה' : `${dropped.length} הגדרות לא נשמרו`} — המסד עדיין לא מעודכן.`, 'error');
+      else if (!quiet) toast('נשמר.');
     } catch (err) {
       if (!quiet) toast(friendlyMessage(err, 'השמירה נכשלה.'), 'error');
       throw err;

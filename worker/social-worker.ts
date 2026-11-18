@@ -5033,7 +5033,7 @@ const COMMENT_ARM_CAMPAIGNS = 10;
 async function armAutoComments(db: SupabaseClient): Promise<number> {
   const rounds = await db
     .from('social_campaigns')
-    .select('id, comment_auto, comment_delay_seconds, comment_text, comment_auto_since')
+    .select('id, comment_auto, comment_delay_seconds, comment_text')
     .eq('comment_auto', true)
     .neq('status', 'archived')
     .limit(COMMENT_ARM_CAMPAIGNS);
@@ -5046,15 +5046,27 @@ async function armAutoComments(db: SupabaseClient): Promise<number> {
    * the screen already explains that in Hebrew when the switch is pressed.
    */
   if (rounds.error) {
-    if (/column|comment_auto|comment_auto_since|comment_delay_seconds/i.test(rounds.error.message)) return 0;
+    if (/column|comment_auto|comment_delay_seconds/i.test(rounds.error.message)) return 0;
     throw new Error(rounds.error.message);
   }
   const list = (rounds.data ?? []) as unknown as {
     id: string;
     comment_delay_seconds: number | null;
     comment_text: string | null;
-    comment_auto_since: string | null;
   }[];
+
+  /*
+   * ─── THE FLOOR, FROM THE SETTINGS ROW AND NOT FROM A COLUMN ───────────
+   *
+   *   "למה כל פעם צריך להריץ את זה... תסדר את זה מעכשיו" — 18.11.2026
+   *
+   * One instant per round — when its switch was last turned on. It was a
+   * column for a day, and that day cost the owner a third trip to the SQL
+   * editor for a value that is read once a pass by a loop already holding ten
+   * rows in memory, and never filtered or sorted on. The browser writes the
+   * same key; COMMENT_AUTO_SINCE_KEY in client.ts names it once for both.
+   */
+  const since = await getSetting<Record<string, string>>('comment-auto-since', {});
 
   let armed = 0;
   for (const round of list) {
@@ -5079,7 +5091,8 @@ async function armAutoComments(db: SupabaseClient): Promise<number> {
      * reading is "we do not know when this began" — the alternative is
      * reaching into the history again. One tap on the switch gives it a stamp.
      */
-    if (!round.comment_auto_since) continue;
+    const floor = since[round.id];
+    if (!floor) continue;
 
     /* THE SAME CLAMP THE SCREEN AND THE CLIENT USE, from the one place it is
        written. A stored value older than v45 — or one a future version widens
@@ -5102,7 +5115,7 @@ async function armAutoComments(db: SupabaseClient): Promise<number> {
       /* … AND NOT FROM BEFORE THE SWITCH. Both bounds in the database, so the
          window is one question the index can answer rather than a filter
          applied to rows that were fetched anyway. */
-      .gte('published_at', round.comment_auto_since)
+      .gte('published_at', floor)
       /* NEWEST FIRST — the end a comment can still be left at. The oldest end
          is where this chore's own candidate window used to be stuck, and the
          note on `pending()` below is the record of what that cost. */

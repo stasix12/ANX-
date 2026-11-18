@@ -1358,8 +1358,12 @@ export default function SocialDashboard() {
     async (campaign: Pick<Campaign, 'id'>, next: { auto: boolean; text: string; delaySeconds: number }) => {
       setScheduleBusy((b) => ({ ...b, [campaign.id]: true }));
       try {
-        await setCampaignAutoComment(campaign.id, next);
+        /* The answer carries which columns the database could not take, and
+           the card says them — a partial save that reports success is its own
+           lie. See updateTolerant. */
+        const answer = await setCampaignAutoComment(campaign.id, next);
         await load();
+        return answer;
       } finally {
         setScheduleBusy((b) => ({ ...b, [campaign.id]: false }));
       }

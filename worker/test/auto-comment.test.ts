@@ -228,7 +228,22 @@ is(/\.neq\('status', 'archived'\)/.test(arm), 'and never an archived round');
 /* CAPPED, so switching the feature on after a month of publishing does not
    turn "from now on" into a backlog of thousands. */
 is(/COMMENT_ARM_MAX/.test(arm) && /const COMMENT_ARM_MAX = \d+;/.test(worker), 'the pass is capped per round');
-is(/COMMENT_ARM_CAMPAIGNS/.test(arm), 'and per round-count, so one pass cannot run long');
+/*
+ * ─── AND THE CAP IS ON WORK, NOT ON ROUNDS LOOKED AT ────────────────────
+ *
+ * The read was .limit(10) with NO ORDER BY: the same arbitrary ten rows every
+ * pass, so an eleventh round could be switched on and never looked at. Worse,
+ * the two `continue` guards threw those slots away before any work was done,
+ * so ten rounds with no text could starve the live one indefinitely. An
+ * adversarial review found it.
+ */
+is(/\.order\('created_at', \{ ascending: true \}\)/.test(arm), 'the rounds come back in a repeatable order, not whatever the heap answers with');
+is(/\.limit\(COMMENT_ARM_CEILING\)/.test(arm), 'the read is bounded by a backstop rather than by a work budget');
+is(/if \(worked >= COMMENT_ARM_CAMPAIGNS\) break;/.test(arm), 'and the work budget is counted in the loop');
+is(
+  arm.indexOf('worked += 1') > arm.indexOf("update({ comment_status: 'pending'"),
+  'counted only AFTER a round really armed something — a round with nothing ready must not push the one behind it out of this pass',
+);
 is(/ascending: false/.test(arm), 'and it takes the NEWEST publications — the only end a comment can still be left at');
 
 /* ══════════════ 5. THE DELAY IS THE POST'S OWN AGE ═════════════════════ */
@@ -575,7 +590,12 @@ is(one(`select status from social_queue where id='${row}'`) === 'published', 'th
 /* ── link 3: the arm measures from that column and no other ────────────── */
 {
   is(/\.lte\('published_at', cutoff\)/.test(arm), 'the arm compares published_at against the cutoff');
-  is(!/scheduled_at|updated_at|created_at/.test(arm), 'and reads no other instant — scheduled_at is rewritten on every deferral and updated_at on every touch');
+  /* THE WINDOW, not the whole function: the round read orders by created_at
+     so its answer is repeatable, which is a different question from which
+     instant a PUBLICATION is judged by. */
+  const window = arm.slice(arm.indexOf("from('social_queue')"), arm.indexOf('limit(COMMENT_ARM_MAX)'));
+  is(window.length > 100, 'the publication window could not be isolated — the check over it would be vacuous');
+  is(!/scheduled_at|updated_at|created_at/.test(window), 'and judges a publication by no other instant — scheduled_at is rewritten on every deferral and updated_at on every touch');
 }
 
 /* ── link 4: no timezone gets into it ──────────────────────────────────── */
@@ -630,9 +650,31 @@ is(one(`select status from social_queue where id='${row}'`) === 'published', 'th
    * already holds ten rows, never filtered or sorted on — so it lives in the
    * settings row both sides already read, and needs no migration ever.
    */
-  is(/if \(next\.auto\) \{/.test(writer), 'the switch stamps the floor on the way ON only');
+  /*
+   * ─── THE PIN THAT WAS VACUOUS, AND THE BUG IT LET THROUGH ─────────────
+   *
+   * This asserted the text `: { ...value }` existed and called that "a save
+   * that only changes the text or the delay leaves the floor where it is".
+   * That regex matched the switch-OFF branch. The text-only case was never
+   * tested, and the code was wrong: the condition was `if (next.auto)` — the
+   * value being SAVED — so EVERY save while the switch was on re-stamped the
+   * floor. A typo fixed at 14:00 on a round switched on at 09:00 with a
+   * twelve-hour delay dropped five hours of publications below the new floor,
+   * permanently, with nothing logged and no row showing a failure.
+   *
+   * An assertion whose message describes one thing while its regex tests
+   * another is worse than no assertion: it reads as covered. So the pin is
+   * now on the TRANSITION, and on the order that makes a transition knowable
+   * at all.
+   */
+  is(/const wasOn = before\[0\]\?\.comment_auto === true;/.test(writer), 'the previous state of the switch is read');
+  is(
+    writer.indexOf('const wasOn') < writer.indexOf('updateTolerant'),
+    'BEFORE the update — after it there is no previous state left, and a check that reads it afterwards always sees what it just wrote',
+  );
+  is(/if \(!wasOn \|\| !floored\)/.test(writer), 'and the floor moves only when a round that was OFF is turned on, or when one is on and has no floor at all');
+  is(/if \(next\.auto\) \{/.test(writer), 'never on the way off');
   is(/saveSetting\(COMMENT_AUTO_SINCE_KEY/.test(writer), 'into the settings row, not into a column');
-  is(!/comment_auto_since/.test(writer.slice(0, writer.indexOf('if (next.auto)'))), 'and the column is not written at all — a save that only changes the text or the delay leaves the floor where it is');
   is(/export const COMMENT_AUTO_SINCE_KEY/.test(client), "the key is named once, because the arm on the PC reads the same one and a second spelling is a feature that silently does nothing");
   is(new RegExp("getSetting<Record<string, string>>\\('comment-auto-since'").test(worker), 'and the arm reads that very key');
 

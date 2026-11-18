@@ -2658,6 +2658,18 @@ export async function setCampaignAutoComment(
      written and not an `unknown` cast back into shape. The floor is added to
      the PAYLOAD rather than to this object, because it is written and never
      read back by the caller. */
+  /*
+   * READ BEFORE WRITE, and the order is the whole of the fix below: the floor
+   * moves on a TRANSITION, and after the update there is no previous state
+   * left to compare against — `comment_auto` would already be what we just
+   * wrote. The first version of this fix read it afterwards and would have
+   * stamped on every save exactly as before, while looking correct.
+   */
+  const before = unwrap<{ comment_auto: boolean | null }[]>(
+    await db().from('social_campaigns').select('comment_auto').eq('id', campaignId).limit(1),
+  );
+  const wasOn = before[0]?.comment_auto === true;
+
   const value = {
     comment_auto: next.auto,
     comment_text: next.text.slice(0, 500),
@@ -2696,14 +2708,39 @@ export async function setCampaignAutoComment(
   }
 
   /*
-   * AND THE FLOOR, ON THE WAY ON ONLY. Turning the switch off leaves the stamp
-   * where it is, so a round switched off and on starts from the second moment;
-   * and a save that only changes the text or the delay does not move the floor
-   * under a queue that is already building.
+   * ─── AND THE FLOOR, ON THE WAY ON AND ONLY ON THE WAY ON ────────────────
+   *
+   * THIS WAS WRONG FOR AN HOUR AND THE COMMENT ABOVE IT CLAIMED OTHERWISE.
+   * The condition was `if (next.auto)` — the value being SAVED — so every
+   * save while the switch was on re-stamped the floor. Fixing a typo in the
+   * comment text at 14:00, on a round switched on at 09:00 with a twelve-hour
+   * delay, moved the floor to 14:00 and dropped every publication from 09:00
+   * to 14:00 below it. Those rows are still comment_status '' and the floor
+   * only ever moves forward, so they could never become candidates again:
+   * five hours of group posts silently losing the comment he asked for, with
+   * nothing logged and no row showing a failure.
+   *
+   * An adversarial review found it, and found that the test meant to pin it
+   * was vacuous — it matched the switch-OFF branch while its message claimed
+   * the text-only one. Both are fixed; see auto-comment.test.ts.
+   *
+   * SO THE QUESTION IS NOW A TRANSITION, not a value. The floor moves when a
+   * round that was OFF is turned on, or when one is on and has no floor at
+   * all (the state every round was in the moment this feature shipped). A
+   * save that only changes the words or the delay leaves it exactly where it
+   * is — which is what the sentence above always promised.
+   *
+   * The previous state is READ rather than taken from the screen: a card that
+   * has been open for a minute does not know what another tab did in between,
+   * and the cost of being wrong here is a whole delay window of lost comments.
+   * It is read at the TOP of this function, before the update — see there.
    */
   if (next.auto) {
     const since = await getSetting<Record<string, string>>(COMMENT_AUTO_SINCE_KEY, {});
-    await saveSetting(COMMENT_AUTO_SINCE_KEY, { ...since, [campaignId]: new Date().toISOString() });
+    const floored = typeof since[campaignId] === 'string' && since[campaignId].length > 0;
+    if (!wasOn || !floored) {
+      await saveSetting(COMMENT_AUTO_SINCE_KEY, { ...since, [campaignId]: new Date().toISOString() });
+    }
   }
   return { auto: value.comment_auto, text: value.comment_text, delaySeconds: value.comment_delay_seconds, dropped };
 }

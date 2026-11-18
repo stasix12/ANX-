@@ -4972,8 +4972,21 @@ const COMMENT_CLAIM_STALE_MS = 15 * 60_000;
  * to have been deleted or to have fallen past a scrolling search.
  */
 const COMMENT_ARM_MAX = 25;
-/** How many rounds one pass looks at. A tenant with more gets the rest next tick. */
+/**
+ * How many rounds one pass may actually ARM in — counted on rounds that had
+ * work, never on rounds that were merely read. The distinction is the fix for
+ * a starvation an adversarial review found: rounds with no text and rounds
+ * with no floor used to consume this budget before doing anything, so ten
+ * stale rounds could hide a live one for ever.
+ */
 const COMMENT_ARM_CAMPAIGNS = 10;
+/**
+ * And a ceiling on the READ, which is a different question: a backstop against
+ * an account with more armed rounds than anyone imagined, not a work budget.
+ * Ordered, so that even at the ceiling the answer is repeatable rather than
+ * whatever the heap happens to hand back.
+ */
+const COMMENT_ARM_CEILING = 200;
 
 /**
  * ─── ARM THE COMMENTS THE OWNER ASKED FOR AUTOMATICALLY ───────────────────
@@ -5031,12 +5044,34 @@ const COMMENT_ARM_CAMPAIGNS = 10;
  * is worse than a row that honestly never had one.
  */
 async function armAutoComments(db: SupabaseClient): Promise<number> {
+  /*
+   * ─── EVERY ARMED ROUND, NOT AN ARBITRARY TEN ────────────────────────────
+   *
+   * THIS WAS `.limit(COMMENT_ARM_CAMPAIGNS)` WITH NO ORDER BY, and an
+   * adversarial review was right about what that costs. Without an ORDER BY
+   * the ten rows are whatever the heap answers with — the SAME ten on every
+   * pass while the table does not move — so an eleventh round could be
+   * switched on, saved, and never looked at. Worse, the two guards below
+   * (`continue` on no text, `continue` on no floor) threw those slots away
+   * before any work was done, so ten stale rounds could starve the live one
+   * indefinitely.
+   *
+   * The cap belonged to the wrong thing. Rounds with the switch on are a
+   * handful; it is PUBLICATIONS that are many, and those are capped per round
+   * below by COMMENT_ARM_MAX. So the read takes them all, ordered so the
+   * answer is at least repeatable, and the work cap moves to the loop — where
+   * it counts rounds that actually HAD something to arm rather than rounds
+   * that were merely looked at.
+   *
+   * The ceiling stays as a backstop against an account nobody imagined.
+   */
   const rounds = await db
     .from('social_campaigns')
     .select('id, comment_auto, comment_delay_seconds, comment_text')
     .eq('comment_auto', true)
     .neq('status', 'archived')
-    .limit(COMMENT_ARM_CAMPAIGNS);
+    .order('created_at', { ascending: true })
+    .limit(COMMENT_ARM_CEILING);
   /*
    * A DATABASE THAT HAS NOT RUN v44 SAYS SO ONCE AND CHANGES NOTHING.
    *
@@ -5069,7 +5104,10 @@ async function armAutoComments(db: SupabaseClient): Promise<number> {
   const since = await getSetting<Record<string, string>>('comment-auto-since', {});
 
   let armed = 0;
+  /* Rounds this pass actually did something in — see COMMENT_ARM_CAMPAIGNS. */
+  let worked = 0;
   for (const round of list) {
+    if (worked >= COMMENT_ARM_CAMPAIGNS) break;
     /* NO WORDS, NOTHING TO SAY. A round with the switch on and an empty text
        would arm rows the chore then has to refuse — see the guard it already
        has — so they are not armed in the first place. */
@@ -5142,6 +5180,10 @@ async function armAutoComments(db: SupabaseClient): Promise<number> {
     if (wrote.error) throw new Error(wrote.error.message);
     const n = (wrote.data ?? []).length;
     armed += n;
+    /* Counted here and not at the top of the loop: a round that turned out to
+       have nothing ready has not used the budget, and must not push a round
+       behind it out of this pass. */
+    worked += 1;
     if (n) console.log(`[comments] armed ${n} publication(s) for an automatic comment (round ${round.id}, not before ${delay}s)`);
   }
   return armed;

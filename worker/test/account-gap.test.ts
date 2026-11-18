@@ -233,51 +233,48 @@ const codeOnly = (src: string) => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/
       !/זה חל על כל הסבבים/.test(page),
       `${where} no longer announces an account-wide change it no longer makes`,
     );
-    /* And the one write that IS account-wide is still announced, on the one
-       control that makes it: picking a mode. */
-    is(/חל על כל החשבון/.test(page), `${where} still says out loud that picking a publishing mode is an account-wide act`);
+    /*
+     * ─── RE-POINTED 18.11.2026 ────────────────────────────────────────────
+     *
+     *   "יש להעביר את בחירת מהירות הפרסום מלוח הבקרה אל מסך ההגדרות."
+     *
+     * The account-wide write left both screens with the picker, so neither of
+     * them announces it any more — because neither of them makes it. The
+     * announcement moved with the control, and is pinned on the settings
+     * screen below. Keeping this assertion pointed here would be demanding a
+     * sentence about a write that no longer happens on this screen, which is
+     * exactly the stale-copy failure this file exists to catch.
+     */
+    is(!/applyPace\(/.test(codeOnly(page)), `${where} no longer writes the account pace at all — one account setting, one door`);
   }
 
-  /* And the panel says so BEFORE the write, where the choice is being made. */
+  /*
+   * ─── AND THE SCREEN THAT NOW MAKES IT SAYS SO, BEFORE AND AFTER ─────────
+   *
+   * Four assertions used to live here, on the panel and on the mode card
+   * inside it: that the panel can be told the account floor, that it hands
+   * that floor to the card, that the card states it in the unit it has, and
+   * that it does so on one spoken element. The picker moved to הגדרות on
+   * 18.11.2026 and the floor moved with it — the panel edits one round and
+   * knows nothing about the account's pace now.
+   *
+   * Every one of those claims is re-asked of where the control actually is.
+   * What must still be true is what it always was: the number the ENGINE is
+   * holding reaches the control that states it, in the unit it really has,
+   * and the account-wide scope is named where the choice is made.
+   */
   const panel = readFileSync(new URL('../../src/components/social/CampaignSchedulePanel.tsx', import.meta.url), 'utf8');
   const card = readFileSync(new URL('../../src/components/social/SmartPaceCard.tsx', import.meta.url), 'utf8');
-  is(/accountFloorSeconds\?: number;/.test(panel), 'the panel can be told what the account floor currently is');
-  /*
-   * ─── RE-POINTED 07.11.2026 ───────────────────────────────────────────────
-   *
-   * This asked for `accountFloorSeconds > schedule.gapSeconds` — the condition
-   * on a line that appeared only while the campaign's own chosen gap sat below
-   * the account floor, warned that saving would take the floor down for every
-   * round, and cleared itself once the write landed.
-   *
-   * THE CONDITION CANNOT ARISE ANY MORE, which is why the line is gone rather
-   * than moved: "יש להסיר לחלוטין מהממשק את השדה הישן: הפרש בין פרסומים. אין
-   * להשאיר אותו במקום אחר ואין ליצור הגדרה כפולה." There is no per-campaign
-   * gap field left to disagree with the floor, so there is no moment at which
-   * one campaign's choice is about to move an account-wide number. What the
-   * self-clearing notice existed to prevent is now structural instead: picking
-   * a mode IS an account-wide act, and מצב פרסום חכם says so permanently.
-   *
-   * So the pin becomes the two halves of that which still have to be true —
-   * the floor the ENGINE enforces still reaches the control that states it,
-   * and that control states it as a fact about the engine rather than as a
-   * comparison against a number that no longer exists.
-   */
+  const settingsScreen = readFileSync(new URL('../../src/app/social/settings/page.tsx', import.meta.url), 'utf8');
+  is(!/accountFloorSeconds/.test(codeOnly(panel)), 'the panel no longer takes the account floor — it has nothing left to state it on');
+  is(!/SmartPaceCard/.test(codeOnly(panel)), 'and no longer draws the control that did');
   is(
-    /currentGapSeconds=\{effectiveGapSeconds\}/.test(codeOnly(panel)),
-    'the account floor still reaches the control that states it — the mode card is handed the same effectiveGapSeconds the deleted field used to show',
+    /currentGapSeconds=\{accountGapSeconds\(limits, browser, true\)\}/.test(codeOnly(settingsScreen)),
+    'the settings screen hands the card the floor the ENGINE enforces — the sum of both halves, through the one function that adds them',
   );
-  /*
-   * RE-POINTED 09.11.2026. The card was rebuilt to a reference that draws no
-   * text under the tiles, so the floor is no longer PRINTED — it is SPOKEN,
-   * in the card's screen-reader line, through paceGapWords(). The claim that
-   * matters survives and is asked of that line: the number the engine is
-   * holding must still reach the control, and must still be stated in the
-   * unit it actually has rather than rounded into minutes.
-   */
   is(
     /paceGapWords\(currentGapSeconds\)/.test(codeOnly(card)),
-    'the card still states the floor the engine is holding, in the unit it actually has, so that number is never left un-named',
+    'the card still states that floor in the unit it actually has, so the number is never left un-named',
   );
   is(
     /data-pace-state/.test(codeOnly(card)),
@@ -285,8 +282,10 @@ const codeOnly = (src: string) => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/
   );
   is(
     /typeof currentGapSeconds === 'number' && Number\.isFinite\(currentGapSeconds\)/.test(codeOnly(card)),
-    'guarded on the floor being KNOWN rather than on it disagreeing with a campaign — a caller that cannot read the account settings says nothing instead of guessing',
+    'guarded on the floor being KNOWN — a caller that cannot read the account settings says nothing instead of guessing',
   );
+  is(/חל על כל החשבון/.test(codeOnly(settingsScreen)), 'and the screen that makes the account-wide write says so out loud, on the write');
+
   /*
    * ─── RE-POINTED 07.11.2026 ───────────────────────────────────────────────
    *
@@ -467,8 +466,18 @@ const codeOnly = (src: string) => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/
    * it names where the number IS changed, since an instruction that cannot
    * work is worse than none.
    */
-  is(/שמירה מהמסך הזה לא תיגע/.test(codeOnly(settings)), 'the read-only line promises that saving here will not touch the floor');
-  is(/מצב פרסום חכם/.test(codeOnly(settings)), 'and names the control that does change it, by the name it has on screen');
+  /*
+   * ─── RE-POINTED 18.11.2026: THE LEVER IS ON THIS SCREEN ─────────────────
+   *
+   * Two assertions here demanded the sentence "שמירה מהמסך הזה לא תיגע בו"
+   * and the name "מצב פרסום חכם". Both described a screen that could only
+   * REPORT the gap. The picker is here now, so the honest version of the same
+   * requirement is that the figure sits beside the control that changes it and
+   * that שמור still does not write it — the first is pinned above, the second
+   * is the save() check further down this file and in settings-tabs.test.ts.
+   */
+  is(/SmartPaceCard/.test(codeOnly(settings)), 'the control that changes the floor is on this screen, beside the figure it changes');
+  is(!/מצב פרסום חכם/.test(codeOnly(settings)), 'and the screen no longer points at a campaign card for it');
 
   /* And the screen says the real figure, which is the part that was NOT
      deleted — it is now printed unconditionally, see above. */

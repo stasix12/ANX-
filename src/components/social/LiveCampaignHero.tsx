@@ -19,7 +19,7 @@ import {
 } from '@/lib/social/campaign';
 import { type CampaignRepeat, type CampaignRound, type CampaignSchedule } from '@/lib/social/campaign-schedule';
 import { scheduleReadout, type AccountSpacing } from '@/lib/social/schedule-readout';
-import { accountGapSeconds, paceProfile } from '@/lib/social/rules';
+import { paceProfile } from '@/lib/social/rules';
 import { countdownTo } from '@/lib/social/countdown';
 import { LATEST_SCHEMA_FILE } from '@/lib/social/errors';
 import { agree, counted, formatTimeHe, relativeHe } from '@/lib/social/time';
@@ -28,6 +28,7 @@ import { QUEUE_STEP_LABEL, type QueueStep } from '@/lib/social/types';
 import type { Campaign, MediaItem, PaceId, SocialTarget } from '@/lib/social/types';
 import { CampaignScheduleBoard } from './CampaignScheduleBoard';
 import { CampaignSchedulePanel } from './CampaignSchedulePanel';
+import { QuickCommentCard } from './QuickCommentCard';
 import { ProgressRing } from './ProgressRing';
 import { PostCover } from './PostCover';
 import { stageElapsed } from './PublicationItem';
@@ -272,7 +273,9 @@ export function LiveCampaignHero({
   onRepeatChange,
   spacing,
   pace,
-  onPaceChange,
+  quickComment,
+  onQuickCommentChange,
+  onComment,
   floorHours,
   frozenUntil = null,
   scheduleBusy = false,
@@ -354,8 +357,30 @@ export function LiveCampaignHero({
    * explains at length what field this replaced and why the mode writes the
    * account's own gap rather than the campaign's column.
    */
+  /*
+   * WHICH MODE IS ON — A READOUT NOW, NOT A CONTROL. The board's "מצב פרסום"
+   * box prints it; the picker moved to הגדרות ← מהירות פרסום on 18.11.2026, so
+   * this card no longer takes a handler.
+   */
   pace?: PaceId | null;
-  onPaceChange?: (id: PaceId) => void;
+  /**
+   * ─── THE ROUND'S AUTOMATIC COMMENT, AS STORED ──────────────────────────
+   *
+   * The three columns v44 and v14 keep on the round — the switch, the words
+   * and the minimum age of a post before it is commented — plus whether an
+   * image is attached, which is derived from comment_media rather than stored
+   * twice. Absent on any caller that cannot write them, and the card is then
+   * not drawn at all.
+   */
+  quickComment?: { auto: boolean; text: string; delaySeconds: number; hasMedia: boolean };
+  /** The one writer — see setCampaignAutoComment in client.ts. */
+  onQuickCommentChange?: (next: { auto: boolean; text: string; delaySeconds: number }) => Promise<unknown> | void;
+  /**
+   * Opens the app's EXISTING comment window for this round, which is where an
+   * image for the comment is chosen. The card's "סוג תגובה" box is the door;
+   * this is what it opens, so there is no second uploader.
+   */
+  onComment?: () => void;
   /** How close two publications of one post to one group may be, in hours —
       the account's setting, defaulted by the panel when absent. */
   floorHours?: number;
@@ -922,11 +947,8 @@ export function LiveCampaignHero({
                 busy={scheduleBusy}
                 /* The second gate, so the panel can say which of the two is
                    actually deciding — see the note on the prop. */
-                accountFloorSeconds={spacing ? accountGapSeconds(spacing, spacing, true) : undefined}
                 /* מצב פרסום חכם — the account's publishing mode, the handler
                    that writes it, and the rest it is currently serving. */
-                pace={pace}
-                onPaceChange={onPaceChange}
                 /* The account's own repeat floor, so the card judges the rounds
                    against the number in Settings rather than a constant. */
                 floorHours={floorHours}
@@ -952,6 +974,42 @@ export function LiveCampaignHero({
             </div>
           )}
         </CampaignScheduleBoard>
+      )}
+
+      {/*
+        ─── "תגובה מהירה אחרי פוסט" — THE CARD THAT REPLACED מצב פרסום חכם ───
+
+          "יש להסיר מלוח הבקרה את הכרטיס הקיים ״מצב פרסום חכם״ ולהחליפו בכרטיס
+           החדש: ״תגובה מהירה אחרי פוסט״." — 18.11.2026
+
+        ON THE ROUND, AND OUTSIDE THE SCHEDULE EDITOR, which are two decisions:
+
+          · on the round, because the words it edits are the round's own column
+            (comment_text, since v14) and a card that edited "the account's
+            comment" would be a second source of truth for a sentence this
+            product deliberately keeps in one place;
+          · outside the editor, because the mode tiles it replaces were inside
+            it — and this card is a switch the owner should see without opening
+            anything, while the editor is for the window and the hour.
+
+        It is drawn only when the screen can actually write it. A card with no
+        handler would be a switch that does nothing, which is the decorative-
+        control failure this product has a standing rule against.
+      */}
+      {quickComment && onQuickCommentChange && (
+        <QuickCommentCard
+          className="mt-2"
+          campaignName={keep(campaign.name)}
+          auto={quickComment.auto}
+          text={quickComment.text}
+          delaySeconds={quickComment.delaySeconds}
+          hasMedia={quickComment.hasMedia}
+          onSave={onQuickCommentChange}
+          /* The app's existing comment window — where the image for a comment
+             is chosen, and the only place it ever was. */
+          onOpenComment={onComment}
+          disabled={busy}
+        />
       )}
 
       {/*

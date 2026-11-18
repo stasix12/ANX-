@@ -4957,6 +4957,147 @@ const COMMENT_CANDIDATES = 5;
  */
 const COMMENT_CLAIM_STALE_MS = 15 * 60_000;
 
+
+/**
+ * ─── HOW MANY PUBLICATIONS ONE ARMING PASS MAY MARK ───────────────────────
+ *
+ * The pass is two reads and one write per round — no browser, no Facebook —
+ * so it is cheap, and it runs inside the comment chore's own 45-second window.
+ * The cap is here because an account that switches the feature on after a
+ * month of publishing has thousands of rows that have never been commented,
+ * and marking all of them in one statement would turn "comments from now on"
+ * into a backlog of thousands which the chore drains at one per tick for
+ * weeks. Twenty-five a pass is the newest twenty-five, which is also the only
+ * end a comment can still be left at: an old group post is the one most likely
+ * to have been deleted or to have fallen past a scrolling search.
+ */
+const COMMENT_ARM_MAX = 25;
+/** How many rounds one pass looks at. A tenant with more gets the rest next tick. */
+const COMMENT_ARM_CAMPAIGNS = 10;
+
+/**
+ * ─── ARM THE COMMENTS THE OWNER ASKED FOR AUTOMATICALLY ───────────────────
+ *
+ *   "לאחר פרסום מוצלח, המערכת מנסה להוסיף את התגובה לפוסט המתאים, רק במקומות
+ *    שבהם קיימת הרשאה ותמיכה בפלטפורמה... מניעת כפילויות באמצעות מזהה פרסום
+ *    ייחודי... כישלון בתגובה לא יגרום לפרסום חוזר של הפוסט." — 18.11.2026
+ *
+ * THIS IS THE ONLY NEW WIRE IN THE WHOLE FEATURE. Everything after it — the
+ * candidate window below, finding the post, writing the comment, verifying it
+ * against Facebook, recording success, failure and reason on the row — already
+ * existed for the button a person presses. What did not exist was anybody
+ * marking a publication "ready for its comment" except that person.
+ *
+ * ─── WHY IT IS HERE AND NOT IN THE PUBLISH PATH ──────────────────────────
+ *
+ * The obvious place is the line that writes status 'published'. It is the wrong
+ * one, for three reasons that each cost something real:
+ *
+ *   1. THERE ARE THREE SUCH LINES, not one — the normal publish, the late
+ *      verification that promotes a parked row (the owner had 139 of those
+ *      parked on a single day), and the manual "I posted this myself" mark.
+ *      A hook on the first would silently skip two whole classes of post.
+ *   2. A PUBLICATION MUST NOT CARRY A COMMENT'S RISK. Marking the row inside
+ *      the publish transaction puts a comment column into the one write whose
+ *      failure modes end in a repeat post. Keeping the two apart is what makes
+ *      "כישלון תגובה לא יגרום לפרסום חוזר" structural rather than a promise:
+ *      nothing in this function or anything it calls touches `status`.
+ *   3. THE DELAY IS AN AGE, and an age cannot be evaluated at the moment of
+ *      publishing. Asked here, it is simply "published_at is older than the
+ *      round's delay" — one comparison, re-asked every pass, with no timer to
+ *      lose when the worker restarts.
+ *
+ * ─── ONE COMMENT PER PUBLICATION, KEYED ON THE PUBLICATION ────────────────
+ *
+ * The "מזהה פרסום ייחודי" is the queue row's own id. A row is armed only while
+ * its `comment_status` is still '' — never a 'done', a 'failed' or an
+ * 'unverified' one — and the UPDATE repeats that condition, so two workers
+ * racing cannot both arm it and a row that has already had its attempt is
+ * never armed again. The claim the chore makes before commenting is a second
+ * compare-and-set on top of that.
+ *
+ * It deliberately does NOT re-arm a failure. A person pressing "נסה שוב" may
+ * ask for a second attempt; an automatic loop that retried for ever would keep
+ * re-opening the same group page and would keep the owner believing a comment
+ * is on its way that never arrives.
+ *
+ * ─── AND ONLY WHERE THE PLATFORM CAN DO IT ────────────────────────────────
+ *
+ * Commenting is implemented for Facebook GROUPS and nothing else: the lookup
+ * builds /groups/<id>/ addresses and gives up without one. So a target whose
+ * url is not a group is left at '' rather than armed — "אם הפלטפורמה לא
+ * מאפשרת זאת, יש להציג מצב ברור ולא לדמות הצלחה". Arming it would produce a
+ * row that hunts, fails and reads as a comment that was tried and lost, which
+ * is worse than a row that honestly never had one.
+ */
+async function armAutoComments(db: SupabaseClient): Promise<number> {
+  const rounds = await db
+    .from('social_campaigns')
+    .select('id, comment_auto, comment_delay_seconds, comment_text')
+    .eq('comment_auto', true)
+    .neq('status', 'archived')
+    .limit(COMMENT_ARM_CAMPAIGNS);
+  /*
+   * A DATABASE THAT HAS NOT RUN v44 SAYS SO ONCE AND CHANGES NOTHING.
+   *
+   * Naming an absent column refuses the whole statement, so there is no half
+   * answer to work with. The feature is simply off until social-latest.sql has
+   * been run — which is exactly the state every account is in before it — and
+   * the screen already explains that in Hebrew when the switch is pressed.
+   */
+  if (rounds.error) {
+    if (/column|comment_auto|comment_delay_seconds/i.test(rounds.error.message)) return 0;
+    throw new Error(rounds.error.message);
+  }
+  const list = (rounds.data ?? []) as unknown as { id: string; comment_delay_seconds: number | null; comment_text: string | null }[];
+
+  let armed = 0;
+  for (const round of list) {
+    /* NO WORDS, NOTHING TO SAY. A round with the switch on and an empty text
+       would arm rows the chore then has to refuse — see the guard it already
+       has — so they are not armed in the first place. */
+    if (!round.comment_text || !round.comment_text.trim()) continue;
+
+    const delay = Math.max(5, Math.min(3600, Math.round(round.comment_delay_seconds ?? 30)));
+    const cutoff = new Date(Date.now() - delay * 1000).toISOString();
+    const ready = await db
+      .from('social_queue')
+      .select('id, target:social_targets(url)')
+      .eq('campaign_id', round.id)
+      .eq('status', 'published')
+      .eq('comment_status', '')
+      .lte('published_at', cutoff)
+      /* NEWEST FIRST — the end a comment can still be left at. The oldest end
+         is where this chore's own candidate window used to be stuck, and the
+         note on `pending()` below is the record of what that cost. */
+      .order('published_at', { ascending: false, nullsFirst: false })
+      .limit(COMMENT_ARM_MAX);
+    if (ready.error) {
+      if (/column|comment_status|published_at/i.test(ready.error.message)) return armed;
+      throw new Error(ready.error.message);
+    }
+    const rows = (ready.data ?? []) as unknown as { id: string; target?: { url?: string | null } | null }[];
+    /* THE PLATFORM GATE, through parseGroupUrl rather than by string surgery:
+       a stored address can be /groups/123, a vanity name, or carry a query. */
+    const ids = rows.filter((r) => parseGroupUrl(String(r.target?.url ?? ''))).map((r) => r.id);
+    if (!ids.length) continue;
+
+    const wrote = await db
+      .from('social_queue')
+      .update({ comment_status: 'pending', comment_at: null, comment_note: '' })
+      .in('id', ids)
+      /* THE COMPARE-AND-SET. Two workers, or this worker twice, cannot both
+         arm one row: the second update matches nothing. */
+      .eq('comment_status', '')
+      .select('id');
+    if (wrote.error) throw new Error(wrote.error.message);
+    const n = (wrote.data ?? []).length;
+    armed += n;
+    if (n) console.log(`[comments] armed ${n} publication(s) for an automatic comment (round ${round.id}, not before ${delay}s)`);
+  }
+  return armed;
+}
+
 /**
  * Rows left claimed by a worker that never came back.
  *
@@ -5078,6 +5219,26 @@ async function runCampaignComments(state: WorkerState, headless: boolean, roomMs
    * — a post that reads as waiting for a comment it will never get.
    */
   await sweepStuckComments(db);
+
+  /*
+   * AND THE ROUNDS THAT COMMENT BY THEMSELVES, ARMED BEFORE THE WINDOW BELOW
+   * IS BUILT — so a publication that has just aged past its delay can be
+   * commented on in this very pass instead of waiting for the next one.
+   *
+   * Inside this chore and nowhere else, which is three guarantees at once: it
+   * never runs beside a live publication (the chore is idle-only), it never
+   * runs without a browser to follow it (the guard at the top of this
+   * function), and it cannot delay a post, because by the time it runs there
+   * is nothing due.
+   *
+   * A failure here must not take the chore down with it: the comments that are
+   * already pending are the ones somebody is waiting for.
+   */
+  try {
+    await armAutoComments(db);
+  } catch (err) {
+    console.warn('[comments] arming failed:', err instanceof Error ? err.message : err);
+  }
 
   const pending = (known: boolean, newest: boolean) => {
     const q = db

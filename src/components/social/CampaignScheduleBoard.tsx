@@ -326,7 +326,12 @@ export function CampaignScheduleBoard({
               only have got easier, never tighter.
             */
             label={t('מצב פרסום')}
-            aria={`מצב פרסום: ${pace ? pace.label : 'לא נבחר'}. פתיחת עריכת התזמון של ${campaignName}`}
+            /* t() ON THE MODE'S WORD, 18.11.2026: this sentence is translated
+               from the dictionary ("Режим публикации: §…"), so a raw Hebrew
+               label dropped into the slot leaves Hebrew and Russian on one
+               line. The visible span below stays bare, because a bare Hebrew
+               text node is what the DOM translator handles by itself. */
+            aria={`מצב פרסום: ${pace ? t(pace.label) : 'לא נבחר'}. פתיחת עריכת התזמון של ${campaignName}`}
             onClick={onEdit}
             disabled={disabled}
             editing={editing}

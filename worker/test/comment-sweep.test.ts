@@ -83,8 +83,29 @@ is(
  * 'unverified' must leave the pending set in the same pass, or the read below
  * it would offer the claim a row the sweep had just condemned.
  */
-const sweepAt = worker.indexOf('await sweepStuckComments(db);\n\n  const pending =');
-is(sweepAt > 0, true, 'the sweep still runs immediately before the candidate read');
+/*
+ * ─── RE-POINTED 18.11.2026 ────────────────────────────────────────────────
+ *
+ * This matched the two statements as ADJACENT text. The automatic-comment
+ * arming pass now sits between them — deliberately, and in that order:
+ *
+ *   sweepStuckComments   releases a dead worker's claim (to 'unverified')
+ *   armAutoComments      marks published rows the owner asked to comment on
+ *   const pending = …    reads the candidates
+ *
+ * A row armed in this pass is therefore a candidate in the same pass, which is
+ * the point; and a row the sweep has just condemned has already left the
+ * pending set before either of the two below look at it.
+ *
+ * So the claim is asked as an ORDER rather than as adjacency, which is what it
+ * always meant.
+ */
+const sweepAt = worker.indexOf('await sweepStuckComments(db);\n\n  /*');
+const armAt = worker.indexOf('await armAutoComments(db);');
+const pendingAt = worker.indexOf('const pending =');
+is(sweepAt > 0, true, 'the sweep still runs inside the chore');
+is(armAt > sweepAt, true, 'the arming runs after the sweep — a condemned row must not be re-offered');
+is(pendingAt > armAt, true, 'and the candidate read runs after both, so a row armed in this pass can be commented in it');
 
 /*
  * TWO CALL SITES, AND BOTH MATTER. Startup covers a crash-and-restart; the one

@@ -193,8 +193,19 @@ async function main(): Promise<void> {
     eq(await fields.count(), 1, 'ONE FIELD — the start hour. The closing hour and the interval both have no control here any more');
     eq(await page.locator('[data-schedule] input[type="time"]').count(), 1, 'and it is a clock, not a list');
     eq(await page.locator('[data-schedule] select').count(), 0, 'there is no dropdown on this card at all — the gap list is gone and must not return');
-    /* And the mechanism that replaced it is present, live, and a radio group. */
-    eq(await page.locator('[data-schedule] [data-smart-pace] [role="radio"]').count(), 3, 'מצב פרסום חכם draws exactly three modes');
+    /*
+     * AND THE SPEED PICKER IS NOT HERE EITHER, SINCE 18.11.2026.
+     *
+     *   "יש להעביר את בחירת מהירות הפרסום מלוח הבקרה אל מסך ההגדרות."
+     *
+     * This asserted that מצב פרסום חכם draws exactly three modes INSIDE this
+     * panel. The picker moved to הגדרות — four cards, one door, tested in
+     * pace-cards.test.ts against the real control — so the claim inverts: the
+     * panel offers the window and the hour, and nothing that paces the
+     * account. The two assertions above already forbid the gap returning as a
+     * field; this one forbids it returning as a mode.
+     */
+    eq(await page.locator('[data-schedule] [data-smart-pace]').count(), 0, 'and no speed picker — it is in הגדרות ← מהירות פרסום now, which is the only place the account is paced from');
 
     /* The reference's own order: the start time first, the modes under it. */
     const start = page.locator('[data-schedule] input[type="time"]');
@@ -288,52 +299,17 @@ async function main(): Promise<void> {
     eq(await start.getAttribute('dir'), 'ltr', 'the clock reads left to right inside the RTL card, like every other hour in this product');
     await setStart('06:30');
     /*
-     * ─── AND THE INTERVAL, WHICH IS A MODE NOW ───────────────────────────
+     * ─── WHAT WAS HERE: TAPPING A MODE AND READING THE CONSEQUENCE ───────
      *
-     * This selected 1500 seconds from the gap dropdown and read the summary
-     * back. The dropdown is gone; the pace is chosen by tapping one of three
-     * cards, and the card's OWN summary line is what states the consequence.
-     * Driven through the real control rather than through props, which is the
-     * point of this file.
+     * Forty lines that clicked איטי inside this panel and checked that the
+     * card named the mode, its interval, the rate that interval works out to,
+     * that the mode is account-wide, that it promised no rest, and that none
+     * of it was drawn as ink. Every one of those claims still holds and every
+     * one is now asked of the real control where it lives: the four cards on
+     * the settings screen — worker/test/pace-cards.test.ts, driven in a real
+     * browser at three widths, including the one thing this panel never had to
+     * answer (the fourth card that cannot be pressed).
      */
-    const mode = (label: string) => page.locator(`[data-schedule] [data-smart-pace] [role="radio"]`).filter({ hasText: label });
-    await mode('איטי').first().click();
-    eq(await mode('איטי').first().getAttribute('aria-checked'), 'true', 'tapping a mode selects it');
-    /*
-     * ─── RE-POINTED 09.11.2026 — THE LINE MOVED, THE FACTS DID NOT ────────
-     *
-     *   "אין להציג טקסטי הסבר או זמני פרסום מתחת לכרטיסיות."
-     *
-     * The card was rebuilt to a new reference and the summary sentence under
-     * the row is gone from the SCREEN. Every fact it carried is still read off
-     * PACE_PROFILES and still SPOKEN — in the chosen tile's aria-label and in
-     * the card's screen-reader line — so this asks the same questions of the
-     * accessible name, which is where a sighted reader's eyes and a blind
-     * reader's ears now diverge and where a wrong number would hide.
-     */
-    const paceLine = async () =>
-      ((await mode('איטי').first().getAttribute('aria-label')) ?? '') +
-      ' ' +
-      (await page.locator('[data-schedule] [data-smart-pace] [data-pace-state]').innerText());
-    is((await paceLine()).includes('איטי'), 'the chosen mode is named');
-    is((await paceLine()).includes('2 דקות'), 'with its interval — the slow mode is two minutes since 08.11.2026');
-    is(/30 פרסומים בשעה/.test(await paceLine()), 'and the rate that gap works out to, computed rather than typed');
-    is((await paceLine()).includes('על כל החשבון'), 'and that the mode is account-wide, which is the one consequence that reaches outside this campaign');
-    /* AND NOT A WORD ABOUT A REST, which was removed on 08.11.2026: a line
-       that still promised one would describe a hold the engine is not
-       applying. */
-    is(!/הפסקה|רצופים/.test(await paceLine()), 'and nothing about an automatic rest, because there is none');
-    /*
-     * AND IT IS NOT DRAWN. The reference's whole point is a shorter card, so
-     * this measures ink rather than strings: the spoken line must occupy no
-     * space, and the tiles must paint their word and nothing else.
-     */
-    const srBox = await page.locator('[data-schedule] [data-smart-pace] [data-pace-state]').boundingBox();
-    is(Boolean(srBox && srBox.width <= 1 && srBox.height <= 1), 'the spoken line occupies no drawn space — no explanatory text under the tiles');
-    is(
-      !/שניות|בשעה|דק׳/.test(await page.locator('[data-schedule] [data-smart-pace] [role="radio"]').first().innerText()),
-      'and no tile draws a publishing time inside it',
-    );
     /*
      * THE SCHEDULE SUMMARY NO LONGER CARRIES THE INTERVAL, deliberately: two
      * places stating one number is the "הגדרה כפולה" the brief forbids, and
@@ -354,60 +330,17 @@ async function main(): Promise<void> {
     );
 
     /*
-     * RE-POINTED 07.11.2026 — THE LIST OF 33 INTERVALS IS NOW THREE MODES.
+     * ─── WHAT WAS HERE: WHAT THE PANEL OFFERS AS AN INTERVAL ─────────────
      *
-     * This read the <option> elements off the gap dropdown and demanded 33 of
-     * them, starting at "30 שניות". The dropdown is gone: "יש להסיר לחלוטין
-     * מהממשק את השדה הישן: הפרש בין פרסומים… במקומו יש להשתמש במנגנון החדש של
-     * שלושת מצבי הפרסום."
+     * First 33 <option> elements off a gap dropdown (07.11.2026: deleted), then
+     * the three mode tiles that replaced it (18.11.2026: moved to הגדרות). The
+     * claim both versions made — that what is OFFERED is read off the real
+     * elements, so a mode in PACE_PROFILES that never reaches a card fails —
+     * is now made by pace-cards.test.ts against the four cards themselves.
      *
-     * The claim survives the change of control: what is OFFERED is read off
-     * the real elements, not off the constant, so a mode that exists in
-     * PACE_PROFILES and never reaches the card still fails here — which is
-     * exactly what the 33-option version was for.
+     * What this panel must offer is one clock and nothing else, and the
+     * assertions at the head of this section are what hold that.
      */
-    const cards = page.locator('[data-schedule] [data-smart-pace] [role="radio"]');
-    /*
-     * ─── RE-POINTED 09.11.2026 — READ THE ACCESSIBLE NAME, NOT THE INK ────
-     *
-     *   "אין להציג טקסטי הסבר או זמני פרסום מתחת לכרטיסיות."
-     *
-     * The new reference draws a tile as an icon above a word and nothing else,
-     * so textContent is now just "מהיר". The claim this block was written for
-     * is unchanged and is asked of the accessible name instead: what is
-     * OFFERED is read off the real elements, each mode still carries its own
-     * gap and rate, and no two modes read alike. A mode that exists in
-     * PACE_PROFILES and never reaches the card still fails here.
-     *
-     * Both are read: `words` is what is painted, `names` is what is spoken.
-     */
-    const words = await cards.evaluateAll((els) => els.map((e) => (e.textContent ?? '').replace(/\s+/g, ' ').trim()));
-    const labels = await cards.evaluateAll((els) => els.map((e) => (e.getAttribute('aria-label') ?? '').replace(/\s+/g, ' ').trim()));
-    eq(labels.length, 3, 'three modes are offered, no more and no fewer');
-    is(words[0] === 'מהיר', 'מהיר first — fastest at the start of the row, which in RTL draws it rightmost as the reference does');
-    is(words[1] === 'בינוני', 'בינוני second');
-    is(words[2] === 'איטי', 'איטי third');
-    is(words.every((w) => !/\d/.test(w)), 'and a tile paints its word alone — no number is drawn on it');
-    /* Each mode still carries its gap and the rate that gap works out to, off
-       the table rather than typed. They are spoken, not drawn: the reference
-       forbids the ink, nothing forbids telling a screen-reader user which
-       mode is which. */
-    is(labels[0].includes('40 שניות') && labels[0].includes('90 פרסומים בשעה'), 'מהיר: every 40 seconds, about 90 an hour');
-    is(labels[1].includes('דקה וחצי') && labels[1].includes('40 פרסומים בשעה'), 'בינוני: every minute and a half, about 40 an hour');
-    is(labels[2].includes('2 דקות') && labels[2].includes('30 פרסומים בשעה'), 'איטי: every 2 minutes, about 30 an hour');
-    /*
-     * AND NO TWO READ THE SAME. The medium mode is 90 seconds and the slow one
-     * 120; a label that rounded to the nearest minute printed both as two
-     * minutes, which is how an owner stops believing the screen.
-     */
-    eq(new Set(labels).size, 3, 'three modes, three different readings');
-    /* AND NOT A WORD ABOUT A REST, anywhere on the card. */
-    {
-      const whole = (await page.locator('[data-schedule] [data-smart-pace]').innerText()).replace(/\s+/g, ' ');
-      is(!/הפסקה/.test(whole), 'the card promises no automatic rest — "תבטל את הדקות המתנה בין 10 פוסטים זה לא רלוונטי"');
-      is(!/10 פרסומים/.test(whole), 'and no longer counts ten publications in a row');
-    }
-
     /* ---------------------------------------------------------------- *
      * 3. THERE IS NO SWITCH ANY MORE — THE DAYS DECIDE.
      *

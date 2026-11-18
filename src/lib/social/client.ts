@@ -2527,6 +2527,71 @@ export async function lastRunScope(campaignId: string): Promise<LastRunScope | n
 }
 
 /**
+ * ─── TURN THE AUTOMATIC COMMENT ON, AND SAY WHAT IT WILL SAY ──────────────
+ *
+ *   "הפעלה/כיבוי של תגובה אוטומטית · הקלדה ושמירה של טקסט התגובה · בחירת
+ *    עיכוב תגובה · לאחר פרסום מוצלח, המערכת מנסה להוסיף את התגובה לפוסט
+ *    המתאים." — 18.11.2026
+ *
+ * THREE COLUMNS ON THE ROUND, AND NOT ONE ROW OF THE QUEUE.
+ *
+ * This writes the owner's INTENT — the switch, the words, and how old a post
+ * must be before it is commented. It marks no publication: the arming is the
+ * worker's, in runCampaignComments, where it can see which posts have actually
+ * gone out and how long ago. That split is the whole safety of the feature:
+ *
+ *   · a screen cannot arm a row that has not published, so a failed comment
+ *     can never reach the publish path — "כישלון תגובה לא יגרום לפרסום חוזר
+ *     של הפוסט". Nothing here touches `status` at all;
+ *   · the worker arms only rows whose comment_status is still '' — never a
+ *     'done', a 'failed' or an 'unverified' one — so one publication receives
+ *     at most one automatic comment, keyed on its own queue id, which is the
+ *     "מזהה פרסום ייחודי" the brief asks for;
+ *   · and nothing is reported as a success before Facebook confirms it: the
+ *     verification that already exists (the comment box emptying, with
+ *     'unverified' when Enter was pressed and nothing came back) is untouched.
+ *
+ * `comment_text` IS THE SAME COLUMN THE SHEET WRITES, deliberately. A second
+ * place to keep the sentence would be a second answer to "what does this round
+ * say", and the one thing v14 was built to prevent is the round's words living
+ * in two columns. The consequence is worth knowing and is on the card: the
+ * worker reads the words at the moment it comments, so editing them changes
+ * what later comments say.
+ *
+ * `comment_delay_seconds` IS NOT `comment_gap_seconds`. The gap is the pause
+ * between one comment and the NEXT; this is how old the POST must be. They are
+ * two different clocks and the schema says so — a card that wrote the gap here
+ * would re-pace every round that already has comments and still delay nothing.
+ */
+export async function setCampaignAutoComment(
+  campaignId: string,
+  next: { auto: boolean; text: string; delaySeconds: number },
+): Promise<{ auto: boolean; text: string; delaySeconds: number }> {
+  /* CLAMPED HERE AS WELL AS IN THE INPUT, because this is the last place
+     before the database: 5..3600 is the CHECK v44 put on the column, and 500
+     characters is the ceiling the brief sets on the text. A value out of range
+     would otherwise be a statement the database rejects with an English
+     sentence nobody can act on. */
+  const value = {
+    comment_auto: next.auto,
+    comment_text: next.text.slice(0, 500),
+    comment_delay_seconds: Math.max(5, Math.min(3600, Math.round(next.delaySeconds))),
+  };
+  const saved = await db().from('social_campaigns').update(value).eq('id', campaignId);
+  if (saved.error) {
+    /* THE MISSING MIGRATION SAYS SO, IN HEBREW, NAMING THE FILE — the same
+       answer queueCampaignComment gives, for the same reason: Postgres answers
+       a missing column with a sentence about relations, and the switch would
+       otherwise read as dead. */
+    if (/column|comment_auto|comment_delay_seconds|comment_text/i.test(saved.error.message)) {
+      throw new Error('צריך להריץ את social-latest.sql ב-Supabase לפני שאפשר להפעיל תגובה אוטומטית. אפשר להריץ אותו שוב גם אם כבר הרצתם.');
+    }
+    throw new Error(saved.error.message);
+  }
+  return { auto: value.comment_auto, text: value.comment_text, delaySeconds: value.comment_delay_seconds };
+}
+
+/**
  * Ask for a comment on the posts of ONE RUN of this round.
  *
  * THE OWNER DECIDES WHEN, which is the whole point: a price list is worth

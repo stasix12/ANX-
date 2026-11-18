@@ -113,7 +113,6 @@ if (new URLSearchParams(location.search).get('s') === 'sheet') {
           groups={f.st.targetCount}
           schedule={{ enabled: !(f as { off?: boolean }).off, days: f.days, start: '08:00', gapSeconds: 90 } as never}
           pace="medium"
-          onPaceChange={() => undefined}
           onPause={() => undefined}
           onResume={() => undefined}
           editHref="/social/posts/new"

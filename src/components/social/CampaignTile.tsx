@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { t, keep } from '@/lib/social/i18n';
 import { campaignIdentity } from '@/components/social/CampaignCard';
-import { PACE_PROFILES, paceProfile } from '@/lib/social/rules';
+import { paceProfile } from '@/lib/social/rules';
 import type { PaceId } from '@/lib/social/types';
 import type { CampaignSchedule } from '@/lib/social/campaign-schedule';
 import type { CampaignState } from '@/lib/social/campaign';
@@ -43,7 +43,7 @@ import type { Campaign } from '@/lib/social/types';
  *   row. The days keep their letters, comma-joined without spaces — "א,ב,ג"
  *   — for the same reason and in the reference's own spelling.
  *
- * NO HANDLER, href OR CONDITION BELOW IS NEW. onPause, onResume, onPaceChange,
+ * NO HANDLER, href OR CONDITION BELOW IS NEW. onPause, onResume,
  * onMenu, onHours, editHref and statsHref are the props this tile already had
  * and the page already wired; the ⋯, the switch, the speed select, the days
  * button, the pencil and the chart all call exactly what they called before.
@@ -66,9 +66,12 @@ export interface CampaignTileProps {
   /** How many groups this campaign publishes to. */
   groups: number;
   schedule: CampaignSchedule;
-  /** The account's publishing speed. One account, one pace — see rules.ts. */
+  /**
+   * The account's publishing speed — PRINTED, never chosen here. One account,
+   * one pace (rules.ts), and since 18.11.2026 one picker, in
+   * הגדרות ← מהירות פרסום.
+   */
   pace?: PaceId | null;
-  onPaceChange?: (id: PaceId) => void;
   /** Running → pause, paused/stopped/completed → back to publishing. */
   onPause?: () => void;
   onResume?: () => void;
@@ -151,7 +154,6 @@ export function CampaignTile({
   groups,
   schedule,
   pace,
-  onPaceChange,
   onPause,
   onResume,
   editHref,
@@ -361,36 +363,40 @@ export function CampaignTile({
           </p>
         )}
 
-        {/* THE SPEED IS THE ACCOUNT'S, not this campaign's — one engine, one
-            pace, exactly as rules.ts defines it. The reference draws a fourth
-            mode; the product has three, and inventing a fourth here would be
-            a control that promises a setting nothing reads. */}
-        {/* A <label> wrapping it is an accessible name to a browser and not to
-            layout.test.ts's static walk, which reads the control's own
-            attributes — so the name is on the control, where both can see it. */}
-        <label className="anxt-pace">
+        {/*
+          THE SPEED IS THE ACCOUNT'S, not this campaign's — one engine, one
+          pace, exactly as rules.ts defines it. This was a <select> and it is a
+          READOUT now: "יש להעביר את בחירת מהירות הפרסום מלוח הבקרה אל מסך
+          ההגדרות" (18.11.2026), and a tile on a list of rounds is the third
+          place an account setting may not also be chosen from.
+
+          THE BOX IS THE SAME BOX. Same .anxt-pace pill, same glyph, same
+          height — the row it sits in is measured at 360/390/430/600 by
+          campaign-tile.test.ts, so the pill keeps its place and only its
+          insides stopped being a control. The chevron went with the dropdown:
+          it pointed at a menu that no longer opens.
+
+          "לא נבחר" rather than a blank, for the state every account is in
+          until somebody picks a mode — see rules.ts, and the same words the
+          dashboard's own box prints.
+        */}
+        {/*
+          THE MODE'S OWN WORD GOES THROUGH t(), AND ONLY INSIDE THE ARIA.
+          The visible span below is a bare Hebrew text node, which the DOM
+          translator rewrites by itself — that is how every mode name in this
+          product has been translated since the Russian was added. An
+          accessible NAME is different: the sentence around it IS translated
+          from the dictionary, so a raw label would leave "Скорость публикации:
+          רגיל" on one line, which is exactly what russian-rendered.test.ts
+          calls a half-translated sentence.
+        */}
+        <p className="anxt-pace" aria-label={`${t('מהירות פרסום')}: ${profile ? t(profile.label) : t('לא נבחר')}`}>
           <svg aria-hidden viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
             <path d="M12 21a9 9 0 1 1 9-9" />
             <path d="m12 12 4.5-3" />
           </svg>
-          <select
-            aria-label={t('מהירות פרסום')}
-            value={profile?.id ?? ''}
-            disabled={busy || !onPaceChange}
-            onChange={(e) => onPaceChange?.(e.target.value as PaceId)}
-          >
-            {!profile && <option value="">{t('מהירות')}</option>}
-            {PACE_PROFILES.map((p) => (
-              <option key={p.id} value={p.id}>{p.label}</option>
-            ))}
-          </select>
-          {/* THE CHEVRON THE REFERENCE DRAWS, and the reason it can be here
-              now: the control has a whole row to itself rather than a third
-              of a 155px tile, which is why the two-up version left it out. */}
-          <svg aria-hidden className="anxt-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="m6 9.5 6 6 6-6" />
-          </svg>
-        </label>
+          <span dir="auto" className="anxt-pacename">{profile ? profile.label : t('לא נבחר')}</span>
+        </p>
 
         <button
           type="button"

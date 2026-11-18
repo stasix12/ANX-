@@ -2153,7 +2153,13 @@ console.log('unit tests OK');
     !/(שניות|דקות) בין פרסום לפרסום/.test(tunerCode),
     'and no caption carries a unit of its own above it — that is how "600" came to sit over the word "דקות"',
   );
-  assert.ok(tunerCode.includes('מצב פרסום חכם'), 'the read-only block says where the number IS changed now');
+  /* RE-POINTED 18.11.2026: the speed picker moved to הגדרות, so the doorway
+     out of this read-only figure points there — "יש להעביר את בחירת מהירות
+     הפרסום מלוח הבקרה אל מסך ההגדרות". A sentence naming a control that is no
+     longer on a campaign card would be an instruction that cannot be followed,
+     which is worse than none. */
+  assert.ok(tunerCode.includes('מהירות פרסום'), 'the read-only block says where the number IS changed now');
+  assert.ok(!tunerCode.includes('מצב פרסום חכם'), 'and does not send him to a card that no longer carries the control');
   /* And the editor must not grow back here, in any of its three shapes — that
      is the "אין להשאיר אותו במקום אחר ואין ליצור הגדרה כפולה" half. */
   assert.ok(!/inputMode=/.test(tunerCode), 'no typed gap field returns to this sheet');
@@ -2167,8 +2173,17 @@ console.log('unit tests OK');
      publications was removed, so this pattern no longer looks for one. */
   const paceRows = [...rules.matchAll(/\{ id: '(\w+)', label: '([^']+)', tone: '\w+', gapSeconds: (\d+) \}/g)];
   assert.equal(paceRows.length, 3, 'three modes, which is the whole of the choice now — fast, medium, slow');
-  assert.ok(/PACE_PROFILES\.map\(/.test(paceCard), 'the picker draws them off the engine\u2019s own table — a hand-written row is how a mode becomes unreachable');
-  assert.ok(/role="radio"/.test(paceCard) && /onClick=\{\(\) => onChange\(p\.id\)\}/.test(paceCard), 'and each one is a single tap that names its own id');
+  /* RE-POINTED 18.11.2026. The card is four cards now and is built from
+     paceCards(), which carries the three real rows of THIS table plus the
+     fourth the reference draws and the product has no gap for. The claim is
+     unchanged and is stronger: a hand-written row is how a mode becomes
+     unreachable, and an invented gap is how one becomes a lie. */
+  assert.ok(/paceCards\(\)/.test(paceCard), 'the picker draws them off the engine\u2019s own table — a hand-written row is how a mode becomes unreachable');
+  assert.ok(!/PACE_PROFILES\.map\(/.test(paceCard), 'and not from a second list beside it');
+  assert.ok(
+    /role="radio"/.test(paceCard) && /onClick=\{\(\) => card\.profile && onChange\(card\.profile\.id\)\}/.test(paceCard),
+    'each one is a single tap that names its own id — and a card with no profile sends nothing, which is how "בטוח" ships unavailable rather than inventing a gap',
+  );
   /*
    * THE FLOOR THE STEPPER USED TO RESPECT. `const STEP = 30` was there because
    * thirty seconds is the engine's own minimum — MIN_GAP_SECONDS, the value
@@ -6182,10 +6197,24 @@ const scenario: { step: string; line: string }[] = [];
     /accountGapLabel\(accountGapSeconds\(limits, browser, true\)\)/.test(settings),
     'the settings screen still states the gap the engine is actually holding, computed the one way everything computes it',
   );
-  assert.ok(settings.includes('מצב פרסום חכם'), 'and names where that number is changed, now that it is not changed here');
+  /*
+   * ─── RE-POINTED 18.11.2026 — THE LEVER CAME HERE ────────────────────────
+   *
+   *   "יש להעביר את בחירת מהירות הפרסום מלוח הבקרה אל מסך ההגדרות."
+   *
+   * Two assertions demanded the sentence "שמירה מהמסך הזה לא תיגע בו" and the
+   * name "מצב פרסום חכם". Both described a screen that could only REPORT this
+   * number. The picker is on this screen now, so the figure sits beside the
+   * control that changes it — and the thing the two sentences were protecting
+   * is unchanged and is pinned harder: שמור still does not write the gap (the
+   * loop above), and the speed is written on the tap instead.
+   */
+  assert.ok(settings.includes('SmartPaceCard'), 'the control that changes that number is on this screen, beside the figure');
+  assert.ok(!settings.includes('מצב פרסום חכם'), 'and the screen no longer sends him to a campaign card for it');
+  assert.ok(/async function pickPace/.test(settings), 'it writes on the tap, through its own handler');
   assert.ok(
-    settings.includes('שמירה מהמסך הזה לא תיגע בו'),
-    'and says the save leaves it alone — which is the pin two paragraphs up, told to the owner',
+    settings.includes('שומרים על השעה שנכתבה להם'),
+    'and says what a speed change does NOT do: rows already in the queue keep the hour written on them',
   );
   /*
    * AND THE DELETION LEFT ONE THING OPEN, pinned so it cannot be forgotten:

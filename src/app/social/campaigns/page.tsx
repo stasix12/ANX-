@@ -35,7 +35,6 @@ import {
   reopenCampaign,
   getBrowserSettings,
   getLimits,
-  applyPace,
   lastPublishedAt,
   saveCampaign,
   rescheduleCampaignQueue,
@@ -666,36 +665,19 @@ export default function CampaignsPage() {
    * complaint "שינויים בהגדרות קמפיין לא נשמרים" in its original form.
    */
   /*
-   * THE SAME WRITE THE DASHBOARD MAKES — see its changeAccountGap.
+   * ─── WHAT WAS HERE: changePace ───────────────────────────────────────────
    *
-   * This screen already SHOWED the account's gap (it hands the card
-   * accountFloorSeconds) while still writing the campaign's column, so a gap
-   * changed here reverted on the next read and the two screens disagreed:
-   * "שעת פרסום ותזמון הפוסטים לא מסונכרן בן מסך פרסום קמפיינים לבין המסך
-   * הראשי". One field, one number, one writer, on both screens.
+   * The twin of the dashboard's handler, behind this screen's two mode
+   * pickers — the card's panel and the grid tile's dropdown. Both went on
+   * 18.11.2026: "יש להעביר את בחירת מהירות הפרסום מלוח הבקרה אל מסך ההגדרות",
+   * and one account setting may not have three doors. applyPace() is unchanged
+   * and is now called from הגדרות ← מהירות פרסום; see the longer note in
+   * src/app/social/page.tsx for what the move costs and why that is what the
+   * brief asked for.
+   *
+   * `pace` is still loaded and still handed to both cards: each PRINTS which
+   * mode is on.
    */
-  const changePace = useCallback(
-    async (campaign: Campaign, id: PaceId) => {
-      setScheduleBusy((b) => ({ ...b, [campaign.id]: true }));
-      try {
-        const { pace: picked, gap, campaigns: synced } = await applyPace(id);
-        await changeSchedule(campaign, { ...readSchedule(campaign), gapSeconds: picked.gapSeconds });
-        await load();
-        /* ומספר הסבבים שסונכרנו נאמר בקול, כמו בלוח — כתיבה שמגיעה לסבבים
-           מלבד זה שנלחץ לא תהיה שקטה. */
-        toast(
-          `מצב "${picked.label}" הופעל — פרסום כל ${accountGapLabel(gap.minGapSeconds + gap.groupMinGapSeconds)}. חל על כל החשבון.` +
-            (synced > 1 ? ` (${synced} סבבים סונכרנו למצב הזה)` : ''),
-          'info',
-        );
-      } catch (err) {
-        toast(friendlyMessage(err, 'החלפת מצב הפרסום נכשלה.'), 'error');
-      } finally {
-        setScheduleBusy((b) => ({ ...b, [campaign.id]: false }));
-      }
-    },
-    [changeSchedule, load, toast],
-  );
 
   /*
    * ─── THE SHEET'S SAVE, AWAITED ─────────────────────────────────────────
@@ -1190,7 +1172,6 @@ export default function CampaignsPage() {
                   groups={state.targetCount}
                   schedule={scheduleOf(c)}
                   pace={pace}
-                  onPaceChange={(id) => void changePace(c, id)}
                   /* THE SAME TWO HANDLERS THE CARD USES. Not a second way to
                      pause a campaign — the identical act() keys, so the tile
                      greys out on the same write and the page reloads once. */
@@ -1331,9 +1312,9 @@ export default function CampaignsPage() {
                 schedule={scheduleOf(c)}
                 onScheduleChange={(next) => changeSchedule(c, next)}
                 spacing={spacing}
-                /* מצב פרסום חכם — the mode is the ACCOUNT's, see changePace. */
+                /* WHICH MODE IS ON — a chip on this card, chosen in
+                   הגדרות ← מהירות פרסום. */
                 pace={pace}
-                onPaceChange={(id) => void changePace(c, id)}
                 repeat={readRepeat(c, floorHours)}
                 onRepeatChange={(next) => void changeRepeat(c, next)}
                 /* The account's own protection from Settings, so this list

@@ -24,11 +24,10 @@ import {
   shownSchedule,
 } from '@/lib/social/campaign-schedule';
 import { roundState, type RoundState } from '@/lib/social/campaign';
-import { EMPTY_PROGRESS, type CampaignProgress, type PaceId } from '@/lib/social/types';
+import { EMPTY_PROGRESS, type CampaignProgress } from '@/lib/social/types';
 import { type ScheduleReadout } from '@/lib/social/schedule-readout';
 import { CalendarIcon, CheckIcon, ClockIcon, MoreIcon, PlusIcon, RepeatIcon, TrashIcon } from '@/components/icons';
 import { NextPublication } from './NextPublication';
-import { SmartPaceCard } from './SmartPaceCard';
 import { InfoDot, Toggle, WorkingNote } from './ui';
 
 /**
@@ -151,9 +150,6 @@ export function CampaignSchedulePanel({
   repeat,
   onRepeatChange,
   roundProgress,
-  accountFloorSeconds,
-  pace,
-  onPaceChange,
   floorHours = MIN_REPEAT_HOURS,
   neverLaunched = false,
   waiting = 0,
@@ -235,52 +231,21 @@ export function CampaignSchedulePanel({
   /** Also straight through: which group the next publication goes to. */
   nextTargetName?: string | null;
   nextTargetImage?: string | null;
-  /**
-   * The ACCOUNT-WIDE floor this campaign also has to clear, in seconds.
+  /*
+   * ─── WHAT WAS HERE: accountFloorSeconds, pace AND onPaceChange ──────────
    *
-   * The gap field above is only the first of two gates. The second is
-   * `minGap + groupMinGap` across the whole account — 65 minutes out of the
-   * box — and choosing "30 שניות" under it used to change NOTHING the owner
-   * could see: the field said thirty seconds, the card counted down from it,
-   * and the engine held the row for an hour. "ושבאמת יספיק לפרסם בתווך זמן
-   * זה" is about that hour, not about the field.
+   * All three existed for the mode card that stood at 4c below, and they went
+   * out with it on 18.11.2026 when the speed picker moved to הגדרות. The floor
+   * was what that card said while no mode was picked ("הפרסום יוצא כרגע כל
+   * X"), and both callers computed it the same way — accountGapSeconds(spacing,
+   * spacing, true) — from the same `spacing` they still pass. Nothing else in
+   * this panel ever read it: the per-campaign gap FIELD it was once a warning
+   * about was deleted on 07.11.2026.
    *
-   * So saving a smaller gap now LOWERS that floor to match (client.ts's
-   * matchAccountGapTo), and this panel is where the owner is told so — before
-   * the write, because it is the one consequence on this panel that reaches
-   * outside the campaign he is looking at. Optional: a caller that cannot
-   * read the account's settings says nothing rather than guessing.
+   * The mode itself is not lost from these screens: it is printed by
+   * CampaignScheduleBoard above this panel on the dashboard and by
+   * CampaignCard's chip on the list, both straight from `limits.pace`.
    */
-  accountFloorSeconds?: number;
-  /**
-   * ─── WHICH PUBLISHING MODE IS ON, AND THE CALLBACK THAT CHANGES IT ──────
-   *
-   * "יש להסיר לחלוטין מהממשק את השדה הישן: הפרש בין פרסומים… במקומו יש
-   *  להשתמש במנגנון החדש של שלושת מצבי הפרסום." — 07.11.2026.
-   *
-   * WHAT THE FIELD THAT USED TO BE HERE WAS, because the anatomy is worth
-   * keeping: three different numbers wore the name "מרווח בין פרסומים" —
-   *
-   *   1. the launch sheet's, written to the ACCOUNT settings by
-   *      applyGapFloor(), and therefore the real one;
-   *   2. this card's, `schedule_gap_seconds` on the campaign row, read only
-   *      by plan.ts while the schedule flag is UP and by nothing at publish
-   *      time, so with the flag down it governed nothing at all;
-   *   3. the account settings, which spacingGate() and rules.ts both compare
-   *      against.
-   *
-   * The field showed (2) and the engine obeyed (3). It was fixed by making
-   * the field write the account's gap in both directions; it is now DELETED,
-   * and a mode writes that same account gap — through the same applyGapFloor()
-   * — plus the rest that the gap alone could never express.
-   *
-   * `pace` is undefined/null on every account that has never picked a mode,
-   * which is all of them until somebody taps: the card draws that state
-   * honestly rather than lighting up the nearest mode. The handler belongs to
-   * the caller because the caller owns the write and the reload.
-   */
-  pace?: PaceId | null;
-  onPaceChange?: (id: PaceId) => void;
   /**
    * HOW CLOSE TWO PUBLICATIONS OF ONE POST TO ONE GROUP MAY BE, in hours.
    *
@@ -378,14 +343,6 @@ export function CampaignSchedulePanel({
    * must reason about the hour the engine will actually use.
    */
   const starts = roundStarts(shown, []);
-  /*
-   * THE GAP ON SCREEN IS THE ACCOUNT'S, NOT THE CAMPAIGN'S, and it is no
-   * longer a field — only a fact the mode card states while no mode is
-   * picked. Falls back to the campaign's stored value for a caller that
-   * cannot read the account's settings, so nothing renders blank.
-   */
-  const effectiveGapSeconds =
-    typeof accountFloorSeconds === 'number' && Number.isFinite(accountFloorSeconds) ? accountFloorSeconds : shown.gapSeconds;
   const verdict = repeat ? roundsVsRepeat(starts, repeat, floorHours) : null;
   /* The window that would let these rounds publish, from the ONE copy of that
      arithmetic the writer also uses — see repeatFitFor(). Null for every
@@ -737,28 +694,38 @@ export function CampaignSchedulePanel({
         */}
       </div>
 
-      {/* ─── 4c. מצב פרסום חכם ────────────────────────────────────────────── */}
       {/*
-        OUTSIDE THE LAVENDER BLOCK, because it is its own card in the
-        reference — the image draws three stacked blocks under this heading,
-        each with its own fill, and this is the second of them.
+        ─── 4c. WHAT WAS HERE: מצב פרסום חכם ──────────────────────────────
 
-        Drawn only when a caller can actually write it. A panel handed no
-        handler would otherwise show three buttons that do nothing, which is
-        the decorative-control failure this product has a standing rule
-        against ("יש לממש את הפונקציונליות בפועל ולא ליצור כפתורים
-        דקורטיביים").
+          "יש להעביר את בחירת מהירות הפרסום מלוח הבקרה אל מסך ההגדרות."
+          — 18.11.2026
+
+        The three mode tiles stood here, and this panel was the ONLY place in
+        the product that drew them — which meant the account's one pace was
+        chosen on a campaign card, on two screens, in two different shapes
+        (bare inside this panel on /social/campaigns, inside its own white
+        shell on the dashboard), beside a third control that did the same thing
+        on the grid tile. One account setting, three doors.
+
+        THE MODE IS NOW IN הגדרות ← מהירות פרסום, as four cards, and this panel
+        edits only what belongs to the round in front of it: the window, the
+        days, the hour and the daily repeat.
+
+        NOTHING WAS DELETED BUT THE DOOR. applyPace() in client.ts — the
+        account's gap pair through applyGapFloor, limits.pace, and every
+        round's own gap column — is the same writer it always was, called from
+        the settings screen now. The mode is still SHOWN beside this panel:
+        CampaignScheduleBoard's "מצב פרסום" box prints it on the dashboard and
+        CampaignCard's chip prints it on the list.
+
+        AND THE ONE REAL DIFFERENCE, written down because the owner will meet
+        it: the two handlers that fed this card also called changeSchedule() on
+        the pressed round, which re-stamped that round's queue. A settings
+        screen has no pressed round, so a mode change now re-stamps nothing —
+        "משפיע על תזמון עתידי בלי... לשבש פרסומים שכבר נמצאים בביצוע". Rows
+        already written keep their instant; "הגדרות תור מתקדמות" is still the
+        one tool that re-times them, as it always has been.
       */}
-      {onPaceChange && (
-        <SmartPaceCard
-          compact={compact}
-          className="mt-1.5"
-          pace={pace}
-          onChange={onPaceChange}
-          disabled={disabled || busy}
-          currentGapSeconds={effectiveGapSeconds}
-        />
-      )}
 
       {/*
         ─── סבבים ביום (ריצות) — REMOVED AT THE OWNER'S REQUEST ─────────────

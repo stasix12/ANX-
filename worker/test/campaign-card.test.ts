@@ -579,8 +579,24 @@ async function main(): Promise<void> {
          * grow: the mode cards' forced 96px floor, a wrapping pill and a
          * three-line summary were all cut after the first measurement put the
          * card at 929.
+         *
+         * ─── 915 → 665, 18.11.2026, AND WHAT GAVE IT BACK ─────────────────
+         *
+         * The speed picker moved to הגדרות — "יש להעביר את בחירת מהירות
+         * הפרסום מלוח הבקרה אל מסך ההגדרות" — and the 187px block went with
+         * it. MEASURED at the same four widths:
+         *
+         *     360px   874 → 607     (-267)
+         *     390px   867 → 615
+         *     430px   860 → 624
+         *     600px   911 → 659
+         *
+         * The ceiling comes DOWN by the suite's own convention — max plus a
+         * few — rather than being left at a number no card can reach any more.
+         * A ceiling with 250px of slack in it stops catching growth, which is
+         * its only job.
          */
-        const ceiling = card.panel ? 915 : 400;
+        const ceiling = card.panel ? 665 : 400;
         assert.ok(
           card.height <= ceiling,
           say(`card ${i} is ${card.height}px, over its ${ceiling} ceiling — ${card.panel ? 'with the scheduling block, the next publication, the daily repeat and a turn-it-back-on button it measured 685 to 911 when this was written' : "a card with no scheduling block measured 322 to 394 here"}`),
@@ -845,18 +861,22 @@ async function main(): Promise<void> {
           `${where}: the start-hour field is drawn at more than one width — ${p.fieldWidths.join(', ')}px`,
         );
         /*
-         * AND THE THREE MODES, WHICH MUST STAY ON ONE ROW AT EVERY WIDTH.
-         * This is the geometry claim the two-field row used to make, moved to
-         * the control that replaced it: three equal cards, one line. A mode
-         * that drops to a second line is a mode the owner cannot compare, and
-         * at 360px that is the width this file exists to catch.
+         * ─── AND NO MODES AT ALL, SINCE 18.11.2026 ────────────────────────
+         *
+         *   "יש להעביר את בחירת מהירות הפרסום מלוח הבקרה אל מסך ההגדרות."
+         *
+         * This asserted three equal cards on one row inside this card's
+         * scheduling block — the geometry claim the deleted two-field row used
+         * to make. The picker moved to הגדרות ← מהירות פרסום, where it is four
+         * cards and is measured at four widths by pace-cards.test.ts, so the
+         * claim here inverts: an account setting may not also be chosen from a
+         * list of rounds, and the 187px the block cost comes back to a card
+         * the owner called too tall.
+         *
+         * The MODE IS STILL ON THIS CARD as a chip — see the `chips` count
+         * above, which is unchanged and still pinned to one row.
          */
-        assert.equal(p.modes, 3, `${where}: ${p.modes} publishing modes — the reference draws three`);
-        assert.equal(p.modeRows, 1, `${where}: the three modes wrapped onto ${p.modeRows} rows`);
-        assert.ok(
-          p.modeWidths.length === 1,
-          `${where}: the three modes are different widths — ${p.modeWidths.join(', ')}px`,
-        );
+        assert.equal(p.modes, 0, `${where}: ${p.modes} publishing modes — the picker belongs to הגדרות now, not to a round`);
 
         /*
          * "✓ Toggle" — ONE now, and it is חזרה יומית's.

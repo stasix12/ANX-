@@ -45,12 +45,25 @@ const src = (p: string) => readFileSync(new URL(`../../${p}`, import.meta.url), 
   is(!/from '@\/lib\/social\/client'/.test(tile), 'and reads nothing — every number is handed in');
 
   /*
-   * AND IT MAY NOT INVENT A SETTING. The reference draws a fourth speed
-   * ("בטוח"); rules.ts has three. A control offering a mode nothing reads
-   * would be a decorative button, which §9 forbids outright.
+   * ─── THE SPEED IS PRINTED HERE, NOT CHOSEN — SINCE 18.11.2026 ──────────
+   *
+   *   "יש להעביר את בחירת מהירות הפרסום מלוח הבקרה אל מסך ההגדרות."
+   *
+   * This tile carried a <select> built from PACE_PROFILES, and it was the
+   * THIRD control in the product that wrote one account-wide setting. The
+   * picker is now in הגדרות ← מהירות פרסום and this is a readout: the pill
+   * keeps its box (the row below is measured at four widths), and what is
+   * inside it stopped being a control.
+   *
+   * "בטוח" is still not invented HERE, and that pin is unchanged — the fourth
+   * card exists on the settings screen only, disabled, with no gap of its own.
+   * A tile on a list of rounds is not where a mode nothing reads may appear.
    */
-  is(/PACE_PROFILES\.map/.test(tile), 'the speed list is built FROM rules.ts, so a card and the engine cannot disagree about a mode');
-  is(!/בטוח/.test(tile), 'and the reference’s fourth mode is not invented here');
+  is(!/<select/.test(tile), 'the tile offers no speed dropdown any more — one account setting, one door');
+  is(!/onPaceChange/.test(tile), 'and takes no handler for writing a mode');
+  is(/paceProfile\(pace/.test(tile), 'it resolves the mode through rules.ts, so the word it prints is the engine\'s own');
+  is(/לא נבחר/.test(tile), 'and says "לא נבחר" for the state every account is in until somebody picks one');
+  is(!/בטוח/.test(tile), 'the reference’s fourth mode is not invented here');
 
   /*
    * ─── ימים ושעות ────────────────────────────────────────────────────────

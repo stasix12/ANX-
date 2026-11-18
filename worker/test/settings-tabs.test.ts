@@ -123,13 +123,40 @@ for (const key of ['concurrentJobs', 'maxPerCampaignPerDay']) {
  * figure must come from accountGapSeconds (base + group surcharge), never from
  * either half on its own.
  */
-eq((code.match(/accountGapSeconds\(limits, browser, true\)/g) ?? []).length, 1,
-  'the screen states the enforced gap exactly once, now that there is no box for it to disagree with');
+/*
+ * ─── TWICE NOW, AND BOTH ARE THE SAME SENTENCE'S TWO HALVES ──────────────
+ *
+ *   "יש להעביר את בחירת מהירות הפרסום מלוח הבקרה אל מסך ההגדרות."
+ *   — 18.11.2026
+ *
+ * The speed picker moved onto this screen, and the gap figure moved with it:
+ * it is now stated beside the control that sets it instead of pointing at a
+ * campaign card. The two calls are the card's own spoken line (what is in
+ * force while nothing is chosen) and the notice under it (the same number,
+ * drawn) — one card, one subject.
+ *
+ * The rule this pin protects is unchanged and is asked below: the figure comes
+ * from accountGapSeconds (base + group surcharge), never from either half.
+ */
+eq((code.match(/accountGapSeconds\(limits, browser, true\)/g) ?? []).length, 2,
+  'the enforced gap is read through the one function that adds both halves, in the two places the speed card needs it — and nowhere else');
 is(/accountGapLabel\(accountGapSeconds\(limits, browser, true\)\)/.test(code),
   'and it prints the floor the ENGINE enforces — the sum of the two halves, through the one function that adds them');
 is(!/limits\.minGapMinutes \+|minGapMinutes \* 60/.test(code),
   'never by adding the minute columns up here, which is how this screen once showed 1 דק׳ over a thirty-second engine');
-is(/מצב פרסום חכם/.test(code), 'and it names where that number IS changed, because a figure with no lever beside it is a dead end');
+/*
+ * ─── THE LEVER IS ON THIS SCREEN NOW, SO IT IS NOT NAMED ELSEWHERE ───────
+ *
+ * This asserted the notice names "מצב פרסום חכם" on the campaign card as the
+ * place the gap is changed. True until the picker moved here; false the moment
+ * it did. The requirement behind it — "a figure with no lever beside it is a
+ * dead end" — is met better: the lever is the four cards directly above the
+ * figure, and the old sentence is gone rather than re-worded, so there is no
+ * second place claiming to own the number.
+ */
+is(/SmartPaceCard/.test(code), 'the speed picker itself is on this screen — the lever is beside the figure rather than named in a sentence');
+is(!/מצב פרסום חכם/.test(code), 'and the screen no longer points at a campaign card for it');
+is(/מהירות פרסום/.test(code), 'under the heading the reference gives it');
 /* `setBrowser(br)` on the mount read is what makes the reading possible and
    must stay. What must not exist is an UPDATE of it — the object form
    `setBrowser({ ...browser, X: ... })` or the functional form

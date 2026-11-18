@@ -23,7 +23,6 @@ import {
   countPublishedSince,
   getControl,
   getLimits,
-  applyPace,
   listActivity,
   listCampaigns,
   commentTotals,
@@ -45,6 +44,7 @@ import {
   getBrowserSettings,
   lastPublishedAt,
   saveCampaign,
+  setCampaignAutoComment,
   setCampaignRepeat,
   repeatRefusedText,
   syncWeeklyHours,
@@ -1272,51 +1272,57 @@ export default function SocialDashboard() {
    * exactly the thing to delete rather than leave lying about.
    */
   /*
-   * ─── PICK A PUBLISHING MODE — מצב פרסום חכם ──────────────────────────────
+   * ─── WHAT WAS HERE: changePace ───────────────────────────────────────────
    *
-   * THE SAME TWO WRITES changeAccountGap MADE, plus the mode itself:
+   *   "יש להעביר את בחירת מהירות הפרסום מלוח הבקרה אל מסך ההגדרות."
+   *   — 18.11.2026
    *
-   *   applyPace()      — the account's gap, through applyGapFloor(), in BOTH
-   *     directions, exactly as the deleted gap field wrote it; and
-   *     `limits.pace`, which is the rest and is new. client.ts explains why
-   *     the order of those two matters.
-   *   changeSchedule() — everything that has always happened on a gap change:
-   *     the campaign's own column, the re-arm, and the RE-STAMP of rows
-   *     already in the queue. Reused rather than reimplemented, because that
-   *     path is the tested one — and without it the rows already written keep
-   *     the old cadence and the new mode governs only what is queued next.
+   * The handler behind the three mode tiles on the round card: applyPace() for
+   * the account's gap pair and every round's gap column, then changeSchedule()
+   * on the round whose card was pressed, which re-stamped THAT round's queue.
    *
-   * The campaign's own column is written to the same number. It governs
-   * nothing at publish time, but plan.ts takes max(account, campaign) while a
-   * schedule flag is up, and the two disagreeing is how a card comes to
-   * promise an interval the queue will never use.
+   * The picker now lives on one screen — הגדרות ← מהירות פרסום — and calls the
+   * same applyPace(). What did NOT travel with it is the second call: a
+   * settings screen has no pressed round, and the account-wide re-space is the
+   * one applyPace itself refuses to do, because it re-anchors from now() and
+   * would drag another round's overdue rows onto today (client.ts spells that
+   * out where it declines to call it). So a mode change writes the gate the
+   * engine obeys and leaves written rows where they are — "משפיע על תזמון
+   * עתידי בלי לשכפל משימות או לשבש פרסומים שכבר נמצאים בביצוע" — and the
+   * settings card says so in one line instead of promising otherwise.
+   *
+   * `data.limits.pace` is still read below: the round card PRINTS which mode
+   * is on, through CampaignScheduleBoard's "מצב פרסום" box. A readout with no
+   * handler is the whole of what changed on this screen.
    */
-  const changePace = useCallback(
-    async (campaign: Campaign, id: PaceId) => {
+  /*
+   * ─── THE AUTOMATIC COMMENT, SAVED FROM THE ROUND CARD ───────────────────
+   *
+   *   "הפעלה/כיבוי של תגובה אוטומטית · הקלדה ושמירה של טקסט התגובה · בחירת
+   *    עיכוב תגובה." — 18.11.2026
+   *
+   * ONE WRITE AND A RELOAD, and it RE-THROWS. The switch on that card is
+   * <Toggle>, which shows the new state at once and rolls itself back when the
+   * write rejects — so swallowing the error here would leave a switch that
+   * looks on over a round that is off. The card says what went wrong for the
+   * text and the delay; the switch says it for itself.
+   *
+   * It marks no publication. The columns written here are the round's
+   * INTENT; which rows are ready for a comment is decided on the owner's PC,
+   * by the comment chore, which is the only place that can see what has
+   * actually gone out — see setCampaignAutoComment.
+   */
+  const saveAutoComment = useCallback(
+    async (campaign: Pick<Campaign, 'id'>, next: { auto: boolean; text: string; delaySeconds: number }) => {
       setScheduleBusy((b) => ({ ...b, [campaign.id]: true }));
       try {
-        const { pace, gap, campaigns: synced } = await applyPace(id);
-        await changeSchedule(campaign, { ...readSchedule(campaign), gapSeconds: pace.gapSeconds });
+        await setCampaignAutoComment(campaign.id, next);
         await load();
-        /* The SUM is what the engine compares against — minGap plus the group
-           surcharge — so that is the number the toast names, not the one the
-           mode nominally asked for. They differ whenever the surcharge had to
-           absorb part of it.
-
-           ומספר הסבבים שסונכרנו נאמר בקול: כתיבה שמגיעה לסבבים מלבד זה
-           שנלחץ לא תהיה שקטה. */
-        toast(
-          `מצב "${pace.label}" הופעל — פרסום כל ${accountGapLabel(gap.minGapSeconds + gap.groupMinGapSeconds)}. חל על כל החשבון.` +
-            (synced > 1 ? ` (${synced} סבבים סונכרנו למצב הזה)` : ''),
-          'info',
-        );
-      } catch (err) {
-        toast(friendlyMessage(err, 'החלפת מצב הפרסום נכשלה.'), 'error');
       } finally {
         setScheduleBusy((b) => ({ ...b, [campaign.id]: false }));
       }
     },
-    [changeSchedule, load, toast],
+    [load],
   );
 
   const changeRepeat = useCallback(
@@ -2166,10 +2172,26 @@ export default function SocialDashboard() {
                      the campaign's own row; the write is the block above. */
                   schedule={scheduleOf(run.campaign)}
                   onScheduleChange={(next) => changeSchedule(run.campaign, next)}
-                  /* מצב פרסום חכם. The mode is the ACCOUNT's, so it does not
-                     travel through onScheduleChange — see changePace. */
+                  /* WHICH MODE IS ON — printed by the card, chosen in
+                     הגדרות ← מהירות פרסום. The mode is the ACCOUNT's, so it
+                     never travelled through onScheduleChange either. */
                   pace={data.limits.pace}
-                  onPaceChange={(id) => void changePace(run.campaign, id)}
+                  /*
+                    "תגובה מהירה אחרי פוסט" — the card that replaced the three
+                    mode tiles here. Straight off the round's own columns, with
+                    the TYPE derived from comment_media rather than stored a
+                    second time.
+                  */
+                  quickComment={{
+                    auto: run.campaign.comment_auto === true,
+                    text: run.campaign.comment_text ?? '',
+                    delaySeconds: run.campaign.comment_delay_seconds ?? 30,
+                    hasMedia: (run.campaign.comment_media?.length ?? 0) > 0,
+                  }}
+                  onQuickCommentChange={(next) => saveAutoComment(run.campaign, next)}
+                  /* The app's existing comment window, which the card's
+                     "סוג תגובה" box opens — one sheet, not a second uploader. */
+                  onComment={() => setCommentFor(run.campaign)}
                   spacing={{
                     minGapMinutes: data.limits.minGapMinutes,
                     groupMinGapMinutes: data.browser.groupMinGapMinutes,

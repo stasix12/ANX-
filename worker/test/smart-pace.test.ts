@@ -40,7 +40,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
-import { PACE_PROFILES, evaluateQueueItem, paceProfile, paceRatePerHour } from '../../src/lib/social/rules';
+import { PACE_PROFILES, PACE_UNAVAILABLE, evaluateQueueItem, paceCards, paceProfile, paceRatePerHour } from '../../src/lib/social/rules';
 import { DEFAULT_BROWSER, DEFAULT_LIMITS, type LimitsSettings, type PaceId } from '../../src/lib/social/types';
 
 let checks = 0;
@@ -69,8 +69,14 @@ function stripComments(code: string): string {
 
 /* ══════════════ 1. THE TABLE IS THE SPECIFICATION, NUMBER FOR NUMBER ══════ */
 
-eq(PACE_PROFILES.map((p) => p.id), ['fast', 'medium', 'slow'], 'three modes, fast → slow, which is the order an RTL row draws as איטי · בינוני · מהיר');
-eq(PACE_PROFILES.map((p) => p.label), ['מהיר', 'בינוני', 'איטי'], 'and the words the brief uses for them');
+eq(PACE_PROFILES.map((p) => p.id), ['fast', 'medium', 'slow'], 'three modes, fast → slow');
+/*
+ * "רגיל" AND NOT "בינוני", SINCE 18.11.2026 — the reference image for
+ * הגדרות ← מהירות פרסום names the middle card רגיל, and the word lives in this
+ * one table so a card and a toast cannot spell one mode two ways. Same id,
+ * same ninety seconds: it is a rename, not a fourth mode.
+ */
+eq(PACE_PROFILES.map((p) => p.label), ['מהיר', 'רגיל', 'איטי'], 'and the words the reference uses for them');
 
 for (const [id, gap, tone] of [
   ['fast', 40, 'warning'],
@@ -100,7 +106,7 @@ for (let i = 1; i < PACE_PROFILES.length; i += 1) {
 /* ══════════════ 1b. THE GAPS THE OWNER SET, AND THE RATE THEY WORK OUT TO ═ */
 
 eq(paceProfile('fast')!.gapSeconds, 40, 'מהיר is 40 seconds — "סבב מהיר יוצא כל 40 שניות לקבוצה"');
-eq(paceProfile('medium')!.gapSeconds, 90, 'בינוני is a minute and a half');
+eq(paceProfile('medium')!.gapSeconds, 90, 'רגיל is a minute and a half — "בינוני כל דקה וחצי", the owner\'s own number, under the word the reference gives it');
 eq(paceProfile('slow')!.gapSeconds, 120, 'איטי is two minutes');
 
 /*
@@ -112,7 +118,7 @@ for (const p of PACE_PROFILES) {
   eq(Math.round(paceRatePerHour(p) * 100), Math.round((3600 / p.gapSeconds) * 100), `${p.id}: the rate is the gap turned round, with nothing averaged into it`);
 }
 eq(Math.round(paceRatePerHour(paceProfile('fast')!)), 90, 'מהיר ≈ 90 an hour');
-eq(Math.round(paceRatePerHour(paceProfile('medium')!)), 40, 'בינוני ≈ 40 an hour');
+eq(Math.round(paceRatePerHour(paceProfile('medium')!)), 40, 'רגיל ≈ 40 an hour');
 eq(Math.round(paceRatePerHour(paceProfile('slow')!)), 30, 'איטי ≈ 30 an hour');
 
 /*
@@ -417,7 +423,18 @@ eq(offenders, [], 'no screen labels a control "הפרש בין פרסומים" o
   const panel = stripComments(src('src/components/social/CampaignSchedulePanel.tsx'));
   is(!/GAP_CHOICES/.test(panel), 'the campaign panel no longer offers a list of gaps');
   is(!/onAccountGapChange/.test(panel), 'and no longer takes a handler for writing one');
-  is(/SmartPaceCard/.test(panel), 'it renders מצב פרסום חכם instead');
+  /*
+   * ─── RE-POINTED 18.11.2026 ────────────────────────────────────────────
+   *
+   *   "יש להעביר את בחירת מהירות הפרסום מלוח הבקרה אל מסך ההגדרות."
+   *
+   * This used to assert the panel RENDERS the mode card. The picker moved to
+   * הגדרות, so the pin inverts: the panel must no longer draw it, and — the
+   * half that matters — the gap must not come back as a field here either,
+   * which the two assertions above already hold.
+   */
+  is(!/SmartPaceCard/.test(panel), 'the panel no longer draws the speed picker — it moved to הגדרות ← מהירות פרסום');
+  is(!/onPaceChange/.test(panel), 'and takes no handler for writing a mode');
 }
 {
   const quick = stripComments(src('src/components/social/QuickPublishSheet.tsx'));
@@ -426,59 +443,96 @@ eq(offenders, [], 'no screen labels a control "הפרש בין פרסומים" o
 }
 {
   const settings = stripComments(src('src/app/social/settings/page.tsx'));
-  is(!/minGapMinutes:/.test(settings), 'and Settings no longer WRITES the gap — the box is gone, and so is the field in its save, which is what stops a screen open for ten minutes reverting a mode picked in between');
+  is(!/minGapMinutes:/.test(settings), 'and Settings still has no BOX for the gap, and still does not write it in save() — which is what stops a screen open for ten minutes reverting a mode picked in between');
+  /*
+   * AND THIS IS WHERE THE MODE IS CHOSEN NOW. The gap is still not a field —
+   * it is written by applyPace, from a tap, onto a fresh read of both rows.
+   */
+  is(/SmartPaceCard/.test(settings), 'Settings draws the four speed cards — "יש להעביר את בחירת מהירות הפרסום... אל מסך ההגדרות"');
+  is(/applyPace\(id\)/.test(settings), 'and writes through the one writer every screen used, rather than a second copy of it');
+  /* UP TO pickPace AND NOT TO clearRateLimit: pickPace sits between the two,
+     and a slice that swallowed it would be asserting that the mode is absent
+     from the very function that writes it. */
+  const save = settings.slice(settings.indexOf('async function save()'), settings.indexOf('const pacing = useRef'));
+  is(save.length > 100, 'save() could not be isolated — the check below would be vacuous');
+  is(!/applyPace|pace:/.test(save), 'the speed is NOT part of שמור: it writes on the tap, because applyPace touches the browser row too and save() may not');
 }
 
-/* ══════════════ 9. §3 — THE CARD, AND WHAT IT MAY NOT SAY ════════════════ */
+/* ══════════════ 9. THE CARD, AND WHAT IT MAY NOT SAY ═════════════════════ */
 
+/*
+ * ─── RE-POINTED 18.11.2026 TO A NEW REFERENCE IMAGE ──────────────────────
+ *
+ *   "ארבע כרטיסיות עגולות לחלוטין (בטוח / רגיל / מהיר / איטי), אייקון ושם
+ *    ממורכזים, בחירה מודגשת בכחול מלא עם טקסט לבן... ללא תיאורים ארוכים,
+ *    קומפקטי ורספונסיבי (שתי שורות של שתיים במסכים צרים)."
+ *
+ * The card was three tiles in one row inside a white shell on a campaign card.
+ * It is four circles on the settings screen now. What each pin was protecting
+ * is re-asked of the new shape — the radio semantics, one source for the
+ * labels, the second channel beside colour, the numbers spoken and not drawn,
+ * the min-w-0 guard, and the promise no mode may make — and one pin is NEW and
+ * is the whole of what this brief added: the fourth card cannot be pressed.
+ */
 {
   const card = src('src/components/social/SmartPaceCard.tsx');
   const code = stripComments(card);
 
-  is(/role="radiogroup"/.test(code) && /role="radio"/.test(code), 'the three modes are a radio group — one choice, announced as one choice');
+  is(/role="radiogroup"/.test(code) && /role="radio"/.test(code), 'the modes are a radio group — one choice, announced as one choice');
   is(/aria-checked=\{on\}/.test(code), 'with the chosen one marked for a screen reader');
-  is(/PACE_PROFILES\.map/.test(code), 'the row is built FROM the table the engine reads, so a card and a gate cannot disagree about a mode');
-  is(/grid-cols-3/.test(code), 'all three on one line — "יש להציג את שלוש האפשרויות בשורה אחת"');
-  /*
-   * ─── RE-POINTED 09.11.2026 TO A NEW REFERENCE IMAGE ──────────────────────
-   *
-   *   "התמונה המצורפת היא הרפרנס הסופי… מהיר – כרטיסייה כחולה עם רקע Gradient
-   *    כחול, אייקון ברק לבן וסימון בחירה… סימון בחירה ברור, ללא כפילות של
-   *    סימוני V… אין להציג טקסטי הסבר או זמני פרסום מתחת לכרטיסיות."
-   *
-   * Four pins here described the OLD visual language — a soft brand-300/15
-   * fill and two drawn summary sentences — and the new reference replaces
-   * both. What each pin was really protecting is re-asked of the new shape,
-   * and two of them come back STRONGER: the selection mark is now pinned as
-   * exactly one (the brief forbids the duplication the reference image itself
-   * draws), and the numbers are pinned as present-but-unpainted rather than
-   * merely present.
-   */
-  is(/border-brand-600/.test(code), 'the chosen one takes a blue border — "מסגרת כחולה עדינה"');
-  is(/bg-gradient-to-br from-brand-500 to-brand-600/.test(code), 'and a blue gradient behind it — "כרטיסייה כחולה עם רקע Gradient כחול"');
-  is(/from-ink-850 to-ink-800/.test(code), 'while the other two stay white falling to the pale blue — "כרטיסייה בהירה בגווני לבן ותכלת"');
-  is(/text-on-brand/.test(code), 'with a white glyph on the chosen one — "אייקון ברק לבן"');
-  is(/CheckIcon/.test(code), 'and a check mark, which is the second channel a border colour alone cannot give a colour-blind reader');
-  is((code.match(/<CheckIcon/g) ?? []).length === 1, 'exactly ONE check mark is RENDERED on a tile — "סימון בחירה ברור, ללא כפילות של סימוני V". The reference image draws two on the lit tile; the brief forbids the duplication in so many words, so the ring stays and the badge does not.');
-  is(/LeafIcon/.test(code), 'and the slow mode wears a leaf — "אייקון עלה", and a shield would be a promise about Meta this card may not make');
+  is(/paceCards\(\)/.test(code), 'the row is built FROM rules.ts, so a card and a gate cannot disagree about a mode or its name');
+  is(!/PACE_PROFILES\.map/.test(code), 'and not from a second, hand-written list beside it');
+  is(/grid-cols-2/.test(code) && /sm:grid-cols-4/.test(code), 'two up on a phone, four across from the first breakpoint — "שתי שורות של שתיים במסכים צרים"');
+  is(/rounded-full/.test(code) && /aspect-square/.test(code), 'and each one is a circle — "כרטיסיות עגולות לחלוטין"');
 
-  /* THE NUMBERS ARE STILL READ OFF THE TABLE — and no longer painted. */
+  /* ─── THE FOURTH CARD IS DRAWN AND CANNOT BE CHOSEN ─────────────────────
+   *
+   *   "אין להמציא ערכים למצב ״בטוח״. אם לא קיימת הגדרה, יש להשאיר אותו לא
+   *    זמין עד להגדרה מפורשת."
+   *
+   * The product has three gaps and the reference draws four cards. The fourth
+   * ships disabled rather than with a number nobody decided — the same answer
+   * this repository gave the first time it was asked (CampaignTile.tsx, pinned
+   * by campaign-tile.test.ts).
+   */
+  eq(paceCards().map((c) => c.id), ['safe', 'medium', 'fast', 'slow'], 'four cards, in the order the reference draws them');
+  eq(paceCards().map((c) => c.label), ['בטוח', 'רגיל', 'מהיר', 'איטי'], 'with the reference\'s own four words');
+  eq(paceCards().filter((c) => c.profile === null).map((c) => c.id), ['safe'], 'exactly one of them has no profile — and it is בטוח');
+  eq(PACE_UNAVAILABLE.id, 'safe', 'the unavailable mode is named once, in rules.ts');
+  is(!('gapSeconds' in (PACE_UNAVAILABLE as unknown as Record<string, unknown>)), 'and it carries NO gap — the type cannot hold a value nobody has decided');
+  is(!PACE_PROFILES.some((p) => p.id === ('safe' as PaceId)), 'it is not in the table the engine reads, so nothing can be paced by it');
+  eq(paceProfile('safe' as PaceId), null, 'and a row that somehow stored it resolves to "no mode" rather than crashing');
+  is(/disabled=\{disabled \|\| unavailable\}/.test(code), 'the card with no profile is disabled');
+  is(/card\.profile && onChange\(card\.profile\.id\)/.test(code), 'and cannot send a mode even if something pressed it');
+
+  is(/bg-brand-500/.test(code), 'the chosen one is solid blue — "בחירה מודגשת בכחול מלא"');
+  is(/text-on-brand/.test(code), 'with white glyph and word on it');
+  is(/border-brand-700/.test(code), 'and a border a shade darker than the fill — "מסגרת מודגשת עדינה"');
+  is(/from-ink-850 to-ink-800/.test(code), 'while the unchosen ones stay white falling to the pale blue — "לבן/תכלת עם מסגרת כחולה דקה"');
+  is(/motion-safe:transition-all/.test(code) && /motion-safe:scale-/.test(code), 'the selection animation is short AND behind motion-safe — a phone asked to stop animating gets the colours without the movement');
+  is(/CheckIcon/.test(code), 'a check mark is the second channel a fill colour alone cannot give a colour-blind reader');
+  is((code.match(/<CheckIcon/g) ?? []).length === 1, 'and exactly one is rendered — "סימון בחירה ברור, ללא כפילות"');
+  is(/LeafIcon/.test(code), 'איטי still wears a leaf');
+  is(!/ShieldIcon/.test(code), 'and nothing wears a shield — a shield is a promise about Meta, which no mode here may make, least of all the one called "בטוח"');
+
+  /* THE NUMBERS ARE STILL READ OFF THE TABLE — and still not painted. */
   is(/data-pace-state/.test(code), 'the card states the chosen mode and its interval in one place');
-  is(/className="sr-only"/.test(code), 'and that place is spoken, not drawn — "אין להציג טקסטי הסבר או זמני פרסום מתחת לכרטיסיות"');
-  is(/paceRatePerHour\(p\)/.test(code), 'each mode still quotes the rate, computed rather than typed');
-  is(/paceGapWords\(p\.gapSeconds\)/.test(code), 'and its own gap off the table, so a card and a gate cannot disagree about a mode');
+  is(/className="sr-only"/.test(code), 'and that place is spoken, not drawn — "ללא תיאורים ארוכים"');
+  is(/paceRatePerHour\(card\.profile\)/.test(code), 'each mode still quotes the rate, computed rather than typed');
+  is(/paceGapWords\(card\.profile\.gapSeconds\)/.test(code), 'and its own gap off the table');
+
   /*
-   * A TILE MAY NOT PAINT A NUMBER. Asserted on the JSX that actually renders —
+   * A CARD MAY NOT PAINT A NUMBER. Asserted on the JSX that actually renders —
    * from the glyph to the close of the button — rather than on the whole file,
    * because the gap and the rate DO appear above it, inside the aria-label,
    * which is the point: spoken, never drawn.
    */
   {
     const body = code.slice(code.indexOf('<Icon className='), code.indexOf('</button>'));
-    is(body.length > 80, 'the tile body could not be isolated — the checks over it would be vacuous');
-    is(!/paceGapWords/.test(body), 'no tile draws its gap as text');
+    is(body.length > 80, 'the card body could not be isolated — the checks over it would be vacuous');
+    is(!/paceGapWords/.test(body), 'no card draws its gap as text');
     is(!/paceRatePerHour/.test(body), 'and none draws its rate');
-    is(/\{p\.label\}/.test(body), 'the only text a tile renders is the mode\'s own word');
+    is(/\{card\.label\}/.test(body), 'the only text a card renders is the mode\'s own word');
   }
 
   /* EVERY multi-column grid in this product carries the min-w-0 guard, or a
@@ -490,11 +544,11 @@ eq(offenders, [], 'no screen labels a control "הפרש בין פרסומים" o
   /*
    * "אין להציג את המצבים כהבטחה למניעת חסימות בפייסבוק."
    *
-   * The reference image's own subtitle ends "להגנה מפייסבוק". That half is
-   * deliberately not reproduced: the specification forbids it in so many
-   * words, and the two cannot both be honoured. This checks the STRINGS, not
-   * the comments — a comment may quote the forbidden phrase to explain why it
-   * is absent, and this file's own prose above does exactly that.
+   * This checks the STRINGS, not the comments — a comment may quote the
+   * forbidden phrase to explain why it is absent, and this file's own prose
+   * does exactly that. It matters more now than it did: one of the four cards
+   * is literally called "safe", and nothing on this screen may let that word
+   * become a claim about Facebook.
    */
   for (const bad of ['להגנה מפייסבוק', 'מונע חסימה', 'ימנע חסימה', 'לא תיחסם', 'בטוח מול פייסבוק', 'מבטיח']) {
     is(!code.includes(bad), `the card never promises "${bad}" — no mode can promise anything about Meta`);

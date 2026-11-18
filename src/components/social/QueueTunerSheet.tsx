@@ -950,7 +950,7 @@ export function QueueTunerSheet({
               <p dir="auto" className="text-[32px] font-extrabold leading-none text-mist-100">{gapChoiceLabel(gap)}</p>
               <p className="mt-1.5 text-xs font-bold text-mist-500">בין פרסום לפרסום</p>
               <p className="mt-2 text-[11px] font-bold leading-4 text-brand-400">
-                נקבע לפי מצב הפרסום שנבחר בכרטיס הקמפיין (״מצב פרסום חכם״), ושם גם משנים אותו.
+                נקבע לפי מהירות הפרסום שבחרתם בהגדרות (״מהירות פרסום״), ושם גם משנים אותה.
               </p>
             </div>
 

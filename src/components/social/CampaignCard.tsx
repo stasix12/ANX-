@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { canPauseRun, canResumeRun, groupProgress, neverLaunched, runBadge, runProgress, type CampaignState } from '@/lib/social/campaign';
 import { DAY_OPENS, shownSchedule, type CampaignRepeat, type CampaignRound, type CampaignSchedule } from '@/lib/social/campaign-schedule';
 import { scheduleReadout, type AccountSpacing } from '@/lib/social/schedule-readout';
-import { accountGapSeconds, paceProfile } from '@/lib/social/rules';
+import { paceProfile } from '@/lib/social/rules';
 import { counted, formatDayMonthHe } from '@/lib/social/time';
 import { ltr } from './DateTime';
 import type { Campaign, MediaItem, PaceId } from '@/lib/social/types';
@@ -190,7 +190,6 @@ export function CampaignCard({
   onRepeatChange,
   spacing,
   pace,
-  onPaceChange,
   floorHours,
   scheduleBusy = false,
   ordinal = 1,
@@ -298,8 +297,14 @@ export function CampaignCard({
    * explains at length what field this replaced and why the mode writes the
    * account's own gap rather than the campaign's column.
    */
+  /*
+   * WHICH MODE IS ON — A READOUT NOW, NOT A CONTROL.
+   *
+   * The chip below prints it. The picker that used to sit inside this card's
+   * schedule panel moved to הגדרות ← מהירות פרסום on 18.11.2026, so this card
+   * no longer takes a handler: one account setting, one door.
+   */
   pace?: PaceId | null;
-  onPaceChange?: (id: PaceId) => void;
   /** How close two publications of one post to one group may be, in hours —
       the account's setting, defaulted by the panel when absent. */
   floorHours?: number;
@@ -954,9 +959,6 @@ export function CampaignCard({
             campaignName={keep(campaign.name)}
             disabled={scheduleBusy}
             busy={scheduleBusy}
-            accountFloorSeconds={spacing ? accountGapSeconds(spacing, spacing, true) : undefined}
-            pace={pace}
-            onPaceChange={onPaceChange}
             /* The account's own repeat floor, so the card judges the rounds
                against the number in Settings rather than a constant. */
             floorHours={floorHours}

@@ -26,7 +26,6 @@ import { useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { CampaignSchedulePanel } from '@/components/social/CampaignSchedulePanel';
 import { DEFAULT_CAMPAIGN_SCHEDULE, type CampaignSchedule } from '@/lib/social/campaign-schedule';
-import type { PaceId } from '@/lib/social/types';
 import { type ScheduleReadout } from '@/lib/social/schedule-readout';
 
 declare global {
@@ -66,12 +65,12 @@ function Harness() {
      is in when he looks at it. */
   const [schedule, setSchedule] = useState<CampaignSchedule>({ ...DEFAULT_CAMPAIGN_SCHEDULE, enabled: true });
   /*
-   * מצב פרסום חכם, held here exactly as the page holds it: the account's
-   * stored mode, handed down and written back. Starts NULL, which is the
-   * state every live account loads in — none of them has picked a mode yet —
-   * so the test opens on the honest "nothing chosen" card and taps one.
+   * NO `pace` STATE ANY MORE. The three mode tiles left this panel on
+   * 18.11.2026 — "יש להעביר את בחירת מהירות הפרסום... אל מסך ההגדרות" — so
+   * there is no mode to hand down and nothing here to write it back. The
+   * four-card picker has its own harness; this one is the window, the days,
+   * the hour and the daily repeat, which is all the panel edits now.
    */
-  const [pace, setPace] = useState<PaceId | null>(null);
   const [busy, setBusy] = useState(false);
   window.__busy = setBusy;
   return (
@@ -86,8 +85,6 @@ function Harness() {
           window.__changes.push(next);
           setSchedule(next);
         }}
-        pace={pace}
-        onPaceChange={setPace}
         /* Exactly as both callers pass them: switched off while it saves,
            and saying why. */
         disabled={busy}

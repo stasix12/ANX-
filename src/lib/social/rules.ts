@@ -242,7 +242,7 @@ export function accountGapLabel(seconds: number): string {
  */
 export interface PaceProfile {
   id: PaceId;
-  /** The word on the card: מהיר / בינוני / איטי. */
+  /** The word on the card: מהיר / רגיל / איטי. */
   label: string;
   /**
    * The semantic colour the specification assigns this mode — orange for
@@ -260,9 +260,77 @@ export interface PaceProfile {
 
 export const PACE_PROFILES: PaceProfile[] = [
   { id: 'fast', label: 'מהיר', tone: 'warning', gapSeconds: 40 },
-  { id: 'medium', label: 'בינוני', tone: 'brand', gapSeconds: 90 },
+  /*
+   * "רגיל" AND NOT "בינוני", SINCE 18.11.2026.
+   *
+   * The reference image for הגדרות ← מהירות פרסום draws four cards and names
+   * the second one רגיל — "התמונה המצורפת מחייבת 1:1... אין לפרש מחדש את
+   * העיצוב". It is the SAME MODE: same id, same ninety seconds, same row in
+   * this table. Only the word on it changed, and it changed HERE rather than
+   * in the component, because this table is the one place the product reads a
+   * mode's name from and a second spelling on a screen is how a card and a
+   * toast come to disagree about which mode is on.
+   *
+   * The owner's own sentence from 08.11.2026 — "סבב מהיר יוצא כל 40 שניות
+   * לקבוצה, בינוני כל דקה וחצי, ואיטי כל 2 דקות" — is kept verbatim in the
+   * header above and everywhere else it is quoted. It is the record of where
+   * the number came from, not a label.
+   */
+  { id: 'medium', label: 'רגיל', tone: 'brand', gapSeconds: 90 },
   { id: 'slow', label: 'איטי', tone: 'success', gapSeconds: 120 },
 ];
+
+/**
+ * ─── THE FOURTH CARD, WHICH SHIPS WITH NO NUMBERS OF ITS OWN ─────────────
+ *
+ *   "אין להמציא ערכים למצב ״בטוח״. אם לא קיימת הגדרה, יש להשאיר אותו לא
+ *    זמין עד להגדרה מפורשת." — 18.11.2026
+ *
+ * The reference draws four speed cards. This product has three gaps, and the
+ * owner has asked for this fourth mode once before (09.11.2026, quoted in
+ * client.ts) — the answer then was to refuse to invent it, written down in
+ * CampaignTile.tsx and pinned by campaign-tile.test.ts. The instruction above
+ * is the same answer, so the card is DRAWN and NOT SELECTABLE.
+ *
+ * WHY IT CANNOT SIMPLY BE GIVEN A NUMBER, said once so nobody tries:
+ *
+ *   · it may not reuse איטי's 120s — two cards printing one gap is two names
+ *     for one mode, which campaign-schedule.test.ts refuses;
+ *   · it may not be FASTER than איטי, or the table stops being rankable
+ *     (smart-pace.test.ts owns that property);
+ *   · it may not exceed 1800s, the CHECK on social_campaigns.schedule_gap_
+ *     seconds — applyPace's fan-out would be rejected and swallowed by its own
+ *     try/catch, leaving the mode stored and every round desynced from it.
+ *
+ * So there is no unoccupied number this product endorses, and a card with an
+ * invented one would promise an account a brake it never applied. It carries
+ * no `tone` and no `gapSeconds` BECAUSE IT HAS NONE: the type cannot hold a
+ * value nobody has decided.
+ */
+export const PACE_UNAVAILABLE: { id: 'safe'; label: string } = { id: 'safe', label: 'בטוח' };
+
+/** Every id the speed picker can draw — three real modes and the fourth. */
+export type PaceCardId = PaceId | typeof PACE_UNAVAILABLE.id;
+
+/**
+ * The four cards in the order the reference draws them — בטוח · רגיל · מהיר ·
+ * איטי, which in an RTL grid fills right-to-left and top-to-bottom, so a
+ * narrow screen shows בטוח · רגיל on the first row and מהיר · איטי on the
+ * second, exactly as the image does.
+ *
+ * ONE SOURCE, NOT TWO. The three real cards carry their PACE_PROFILES row
+ * rather than a copy of its label and gap, so a mode renamed or re-timed in
+ * the table above changes on the screen in the same edit. The fourth carries
+ * `profile: null`, which is the whole of what "לא זמין" means here — a card
+ * with no profile has no gap to write, and the component has nothing to send.
+ */
+export function paceCards(): { id: PaceCardId; label: string; profile: PaceProfile | null }[] {
+  const order: PaceCardId[] = [PACE_UNAVAILABLE.id, 'medium', 'fast', 'slow'];
+  return order.map((id) => {
+    const profile = id === PACE_UNAVAILABLE.id ? null : paceProfile(id as PaceId);
+    return { id, label: profile ? profile.label : PACE_UNAVAILABLE.label, profile };
+  });
+}
 
 /** The mode a stored id names, or null — which is "no mode", the state every
     account is in until somebody picks one, and means no rest at all. */

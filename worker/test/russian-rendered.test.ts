@@ -283,6 +283,9 @@ const NO_TRANSLATE_SITES = [
   'src/components/social/PreLaunchReview.tsx:2',
   'src/components/social/PublicationItem.tsx:4',
   'src/components/social/QueueTunerSheet.tsx:2',
+  /* The round's own name on the automatic-comment card — his word for his
+     round, which is not ours to translate. */
+  'src/components/social/QuickCommentCard.tsx:1',
   'src/components/social/QuickCommentsCard.tsx:2',
   'src/components/social/QuickPublishSheet.tsx:3',
   'src/components/social/SocialShell.tsx:1',

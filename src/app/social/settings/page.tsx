@@ -7,9 +7,10 @@ import { ScreenProbe } from '@/components/social/ScreenProbe';
 import { SocialShell } from '@/components/social/SocialShell';
 import { LangSwitch } from '@/components/social/LangSwitch';
 import { Button, Card, Field, Loading, Notice, SegmentedControl, inputClass, useToast } from '@/components/social/ui';
-import { clearMetaHold, getBrowserSettings, getControl, getLimits, loadAdminPresence, saveSetting } from '@/lib/social/client';
-import { DEFAULT_BROWSER, DEFAULT_LIMITS, type AdminPresence, type BrowserSettings, type ControlSettings, type LimitsSettings } from '@/lib/social/types';
+import { applyPace, clearMetaHold, getBrowserSettings, getControl, getLimits, loadAdminPresence, saveSetting } from '@/lib/social/client';
+import { DEFAULT_BROWSER, DEFAULT_LIMITS, type AdminPresence, type BrowserSettings, type ControlSettings, type LimitsSettings, type PaceId } from '@/lib/social/types';
 import { accountGapLabel, accountGapSeconds } from '@/lib/social/rules';
+import { SmartPaceCard } from '@/components/social/SmartPaceCard';
 import { friendlyMessage } from '@/lib/social/errors';
 
 type Tab = 'limits' | 'admin';
@@ -182,13 +183,16 @@ export default function SettingsPage() {
        * "יש להסיר לחלוטין מהממשק את השדה הישן: הפרש בין פרסומים. אין להשאיר
        *  אותו במקום אחר ואין ליצור הגדרה כפולה." — 07.11.2026.
        *
-       * `minGapMinutes` and `minGapSeconds` are set by מצב פרסום חכם on the
-       * campaign card now, through applyGapFloor(), which is the writer every
-       * other screen already uses. A box here would be the second definition
-       * the specification forbids — and, worse, a stale one: this screen's
-       * copy is read at mount, so saving it ten minutes later would revert a
-       * mode picked in between. That is the exact defect the docblock above
-       * this function describes, and the deleted box is how it used to arrive.
+       * `minGapMinutes` and `minGapSeconds` are set by the speed cards at the
+       * top of this screen, through applyGapFloor() — the writer every screen
+       * that ever changed this number already used. They were set on a campaign
+       * card until 18.11.2026, which is the only thing that changed about this
+       * paragraph: the rule did not. A BOX here would be the second definition
+       * the specification forbids — and, worse, a stale one: this screen's copy
+       * is read at mount, so saving it ten minutes later would revert a speed
+       * picked in between, including one picked at the top of this very screen.
+       * That is the exact defect the docblock above this function describes,
+       * and the deleted box is how it used to arrive.
        *
        * The two keys come through from `curLimits` untouched, like every other
        * key this screen has nothing to say about.
@@ -205,6 +209,82 @@ export default function SettingsPage() {
     } finally {
       saving.current = false;
       setBusy(false);
+    }
+  }
+
+  /**
+   * ─── PICK A PUBLISHING SPEED — הגדרות ← מהירות פרסום ──────────────────────
+   *
+   *   "יש להעביר את בחירת מהירות הפרסום מלוח הבקרה אל מסך ההגדרות...
+   *    שינוי המהירות נשמר במסד הנתונים ומשפיע על תזמון עתידי בלי לשכפל משימות
+   *    או לשבש פרסומים שכבר נמצאים בביצוע." — 18.11.2026
+   *
+   * IT WRITES ON THE TAP, NOT ON שמור, and that is not a convenience. save()
+   * above may write exactly three named fields of the `limits` row and may not
+   * touch `browser` at all — the long docblock on it explains why spreading a
+   * mount-time snapshot has twice reverted settings somebody had just changed.
+   * A speed, though, IS both rows: applyPace() splits the mode's gap into
+   * limits.minGapSeconds and browser.groupMinGapSeconds through applyGapFloor.
+   * So joining save() would either break that rule or need a second writer for
+   * the account gap, and this product has had three of those and it went badly.
+   * clearRateLimit() below writes on the tap for the same reason.
+   *
+   * THE SAME applyPace THE CAMPAIGN CARDS CALLED — not a copy of it. It
+   * re-reads every row it touches, so a settings page left open for ten
+   * minutes cannot revert anything, and it fans the chosen gap out to every
+   * round's own `schedule_gap_seconds` column so a round opened later does not
+   * out-vote the mode (plan.ts takes max(account, round)).
+   *
+   * WHAT IT DOES NOT DO, said out loud because the owner will meet it: it
+   * re-stamps nothing. The two card handlers this replaced also called
+   * changeSchedule() on the round whose card was pressed, which re-laid that
+   * round's queue; a settings screen has no pressed round, and the
+   * account-wide re-space is the one thing applyPace itself refuses to do
+   * (it re-anchors from now() and would drag another round's overdue rows onto
+   * today). So rows already in the queue keep the instant written on them and
+   * the engine's own gate — the pair this writes — governs everything from
+   * here on. The card says that in one line.
+   *
+   * A REF, BECAUSE `pacing` IS A RENDER TOO LATE — the same guard, for the
+   * same measured reason, as `saving` above.
+   */
+  const pacing = useRef(false);
+  const [paceBusy, setPaceBusy] = useState(false);
+
+  async function pickPace(id: PaceId) {
+    if (pacing.current) return;
+    pacing.current = true;
+    setPaceBusy(true);
+    try {
+      const { pace, gap, campaigns: synced } = await applyPace(id);
+      /*
+       * RE-READ BOTH ROWS. The notice under the cards prints
+       * accountGapSeconds(limits, browser) — the number applyPace has just
+       * changed in two rows — so without this the screen would state the old
+       * gap under a freshly lit card. One read each, on a tap, not on a poll.
+       */
+      const [freshLimits, freshBrowser] = await Promise.all([getLimits(), getBrowserSettings()]);
+      setLimits(freshLimits);
+      setBrowser(freshBrowser);
+      /* THE SUM is what the engine compares against — minGap plus the group
+         surcharge — so that is the number the toast names, not the one the
+         mode nominally asked for. They differ whenever the surcharge had to
+         absorb part of it. And the number of rounds that were synced is said
+         aloud: a write that reaches rounds nobody pressed is not silent. */
+      toast(
+        /* t(pace.label): the sentence itself is translated from the
+           dictionary, so the mode's own word has to be too — otherwise the
+           toast reads "Скорость "רגיל" включена", which is the
+           half-translated line russian-rendered.test.ts refuses. */
+        `מהירות "${t(pace.label)}" הופעלה — פרסום כל ${accountGapLabel(gap.minGapSeconds + gap.groupMinGapSeconds)}. חל על כל החשבון.` +
+          (synced > 1 ? ` (${synced} סבבים סונכרנו למהירות הזו)` : ''),
+        'info',
+      );
+    } catch (err) {
+      toast(friendlyMessage(err, 'החלפת מהירות הפרסום נכשלה.'), 'error');
+    } finally {
+      pacing.current = false;
+      setPaceBusy(false);
     }
   }
 
@@ -345,6 +425,43 @@ export default function SettingsPage() {
 
           {tab === 'limits' && (
             <>
+              {/*
+                ─── מהירות פרסום ───────────────────────────────────────────
+
+                  "יש להעביר את בחירת מהירות הפרסום מלוח הבקרה אל מסך
+                   ההגדרות... ארבע כרטיסיות עגולות לחלוטין."
+
+                FIRST ON THE TAB, above the daily ceiling, because it is the
+                setting that decides how the day is spent — the ceiling only
+                says when to stop. It is also the one control on this screen
+                that writes on the tap rather than on שמור; see pickPace.
+              */}
+              <Card
+                title={t('מהירות פרסום')}
+                subtitle={t('מרווח בין פרסום לפרסום. חל על כל החשבון ועל כל הסבבים.')}
+              >
+                <SmartPaceCard
+                  pace={limits.pace ?? null}
+                  onChange={(id) => void pickPace(id)}
+                  disabled={paceBusy}
+                  /* What the engine enforces right now, for the line this card
+                     reads aloud while no mode is picked. Same expression as the
+                     notice below, from the same two rows. */
+                  currentGapSeconds={accountGapSeconds(limits, browser, true)}
+                />
+                {/*
+                  WHAT CHANGES AND WHAT DOES NOT, in one line, drawn rather
+                  than implied. "משפיע על תזמון עתידי בלי... לשבש פרסומים שכבר
+                  נמצאים בביצוע" is the behaviour; the owner finding out by
+                  watching a queue that did not contract is not.
+                */}
+                <Notice tone="info">
+                  {t('המרווח שהמערכת שומרת כרגע בין שני פרסומים לקבוצה הוא')}{' '}
+                  <strong>{accountGapLabel(accountGapSeconds(limits, browser, true))}</strong>.{' '}
+                  {t('מהירות חדשה נשמרת מיד וחלה על כל מה שייכתב מכאן והלאה. פרסומים שכבר בתור שומרים על השעה שנכתבה להם — לכיווץ תור קיים יש ״הגדרות תור מתקדמות״ בכרטיס הסבב.')}
+                </Notice>
+              </Card>
+
               <Card title={t('היעד היומי שלכם')} subtitle={t('מספרים שאתם קובעים — לא מכסות רשמיות של פייסבוק')}>
                 <Notice tone="info">
                   {t('לפייסבוק אין מספר פרסומים רשמי ומפורסם לחשבון פרטי, ואף כלי לא יכול להבטיח שמספר מסוים לא יוביל להגבלה. המספרים כאן הם התקרה שאתם מגדירים למערכת, והיא תכבד אותה.')}
@@ -366,20 +483,28 @@ export default function SettingsPage() {
 
                   The box that used to sit above this is gone: "יש להסיר
                   לחלוטין מהממשק את השדה הישן: הפרש בין פרסומים... אין ליצור
-                  הגדרה כפולה." The gap is מצב פרסום חכם's now, on the campaign
-                  card, and this screen must not be a second place to set it.
+                  הגדרה כפולה." The gap belongs to the speed cards at the top of
+                  this screen now, and these three boxes must not be a second
+                  place to set it.
 
-                  IT IS STILL SAID HERE, READ-ONLY, because a number the engine
+                  IT IS STILL SAID, READ-ONLY, because a number the engine
                   enforces and no screen states is how this product has
-                  repeatedly gone wrong — and because this is the screen whose
-                  whole job is the truth about these settings. It names where
-                  it is changed and changes nothing itself.
+                  repeatedly gone wrong — and it is said up there, beside the
+                  control that sets it, rather than twice on one screen.
                 */}
-                <Notice tone="info">
-                  המרווח שהמערכת שומרת כרגע בין שני פרסומים לקבוצה הוא{' '}
-                  <strong>{accountGapLabel(accountGapSeconds(limits, browser, true))}</strong>. הוא נקבע לפי מצב הפרסום שנבחר בכרטיס הקמפיין
-                  (״מצב פרסום חכם״), ושם גם משנים אותו. שמירה מהמסך הזה לא תיגע בו.
-                </Notice>
+                {/*
+                  ─── WHAT WAS HERE: "the gap is set on the campaign card" ───
+
+                  A read-only sentence naming the old mode card on the campaign
+                  card as the place the gap is changed. True until 18.11.2026 and
+                  false the moment the picker moved to the card at the top of
+                  THIS screen — so it is not re-worded here, it is gone: the gap
+                  is now stated beside the control that sets it, which is one
+                  sentence instead of two and cannot drift from it.
+
+                  The three boxes above still do not write it, and שמור still
+                  does not touch it: see save().
+                */}
 
                 {/*
                   ───── WHAT WAS HERE, AND WHY IT IS NOT ─────────────────────

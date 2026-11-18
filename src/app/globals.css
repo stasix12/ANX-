@@ -3771,20 +3771,19 @@ html[dir='ltr'] .anxt-switch[data-on="yes"] .anxt-swknob { transform: translateX
   color: var(--color-brand-400);
 }
 .anxt-pace svg { flex: none; width: 15px; height: 15px; }
-.anxt-pace .anxt-chev { width: 13px; height: 13px; color: var(--color-mist-300); }
-.anxt-pace select {
+/* THE WORDS, which used to be a <select>'s. Same size, same weight, same
+   colour — the pill reads exactly as it did while it was a control, because
+   the row around it is measured in tests at four widths and the readout has to
+   fit the box the dropdown fitted. The .anxt-chev rule went with the dropdown:
+   a chevron is a promise that something opens. */
+.anxt-pace .anxt-pacename {
   min-width: 0;
-  width: 100%;
-  height: 100%;
-  border: 0;
-  background: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-size: clamp(11px, 3.1vw, 12.5px);
   font-weight: 800;
   color: var(--color-mist-100);
-  /* The chevron beside it is the reference's; the browser's own arrow would
-     make two. */
-  appearance: none;
-  -webkit-appearance: none;
 }
 
 .anxt-icon {

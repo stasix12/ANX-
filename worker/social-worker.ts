@@ -2,12 +2,11 @@ import { createHash } from 'node:crypto';
 import { hostname } from 'node:os';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Page } from 'playwright-core';
-import { detectCity } from '@/lib/social/cities';
 import { JOINED_QUERY, mergeDiscovered, normalizeQuery, type DiscoveredGroup, type StoredGroup } from '@/lib/social/discovery';
 import { renderPostText } from '@/lib/social/compose';
 import { planQueue } from '@/lib/social/plan';
 import { catalogLanguage } from '@/lib/social/language';
-import { regionOf } from '@/lib/social/cities';
+import { OTHER_CITY, detectCity, regionOf } from '@/lib/social/cities';
 import { PREP_LEAD_MS, accountGapLabel, accountGapSeconds, clampCommentDelay, commentArmCutoff, evaluateQueueItem } from '@/lib/social/rules';
 import { Admission, laneCountFor } from './admission';
 import { CHORE_NEEDS_MS, choreFits, roomBeforeNextPublish } from './chore-window';
@@ -1231,6 +1230,9 @@ async function tick(state: WorkerState): Promise<void> {
   await nightlyGroupCheck();
   /* Once a week, and it opens no browser window at all — see catalogSync(). */
   await catalogSync();
+  /* And the city repair, which is hourly until there is nothing left to
+     repair and then costs one count. Also no browser window. */
+  await catalogCityPass();
 
   const gate = await spacingGate(db, limits, browser);
   /*
@@ -1996,6 +1998,143 @@ async function catalogFacts(db: Awaited<ReturnType<typeof workerDb>>): Promise<M
   return facts;
 }
 
+/* How often the city repair looks at all — see catalogCityPass. */
+const CATALOG_CITY_EVERY_MS = 60 * 60_000;
+/* How many city-less rows one pass reads. */
+const CATALOG_CITY_PAGE = 1000;
+/**
+ * How many rows one pass may fill in.
+ *
+ * Grouped by city, so this is about statements rather than round trips: a
+ * thousand rows over forty cities is forty updates. The ceiling is here so a
+ * catalog of a hundred thousand cannot turn one weekly tick into an hour of
+ * writes, and what is left is said out loud.
+ */
+const CATALOG_CITY_MAX = 4000;
+
+/**
+ * ─── THE CITY A GROUP'S OWN NAME SAYS ────────────────────────────────────
+ *
+ * "במאגר הארצי להוסיף את כל הערים של כל הארץ כולל צפון מרכז דרום ואילת."
+ *
+ * v49 fills the region from the city — for every row that HAS a city. Most do
+ * not: a catalog row that came from a discovery search carries a name, a link
+ * and a member count, and nothing else. Seeded as they were, 1,354 groups
+ * gave a region filter with a few dozen rows behind it and a city list that
+ * was mostly his own three towns.
+ *
+ * The name is the evidence, and it is good evidence: "דירות להשכרה בתל אביב",
+ * "Квартиры в Хайфе", "לוח מודעות קריית שמונה". detectCity knows all 413
+ * localities, both of the ways the name is really written (the Hebrew
+ * preposition stuck to the front, the Russian case ending) and which names are
+ * too ambiguous to read — see src/lib/social/cities.ts.
+ *
+ * ONE STATEMENT PER CITY, not per row: the rows are grouped by what was
+ * found, so a thousand groups across forty cities is forty updates.
+ *
+ * IT ONLY EVER FILLS AN EMPTY CELL. A city somebody checked, or one that came
+ * off a target row, is never written over by a guess from a name.
+ */
+async function catalogCityPass(): Promise<void> {
+  /*
+   * ─── NOT ON THE WEEKLY CLOCK ─────────────────────────────────────────
+   *
+   * catalogSync carries what this PC knows into the catalog, and once a week
+   * is right for that: it is about groups the owner's searches found, and
+   * those arrive slowly.
+   *
+   * This is different work with a different shape. It is a one-time repair
+   * of rows that are already in the table — 1,354 of them the day the
+   * catalog was seeded — and until it runs, the region filter is empty and
+   * the city list is three towns. Making the owner wait a week for a screen
+   * that is already on his phone is the wrong answer; so it has its own
+   * stamp, it is cheap to ask, and it stops asking the moment there is
+   * nothing left to fill.
+   */
+  const nowMs = Date.now();
+  const seen = await getSetting<{ catalogCityAt?: string }>('maintenance', {});
+  const last = Date.parse(seen.catalogCityAt ?? '');
+  const lastMs = Number.isFinite(last) && last <= nowMs ? last : 0;
+  if (lastMs && nowMs - lastMs < CATALOG_CITY_EVERY_MS) return;
+
+  const db = await workerDb();
+  /* ONE COUNT, and it is how this stays free once the work is done: a head
+     count sends no rows, and on a filled catalog the answer is zero and the
+     pass ends here. */
+  const { count, error } = await db
+    .from('social_group_catalog')
+    .select('external_id', { count: 'exact', head: true })
+    .eq('city', '')
+    .neq('name', '');
+  /* A table that is not there yet (the migration has not been run) is not an
+     error worth a line every hour. */
+  if (error) return;
+  await saveWorkerSetting('maintenance', { ...seen, catalogCityAt: new Date(nowMs).toISOString() });
+  if (!count) return;
+
+  await fillCatalogCities(db);
+}
+
+async function fillCatalogCities(db: Awaited<ReturnType<typeof workerDb>>): Promise<void> {
+  const byCity = new Map<string, string[]>();
+  let read = 0;
+  for (let from = 0; read < CATALOG_CITY_MAX; from += CATALOG_CITY_PAGE) {
+    const { data, error } = await db
+      .from('social_group_catalog')
+      .select('external_id, name')
+      .eq('city', '')
+      .neq('name', '')
+      .order('external_id', { ascending: true })
+      .range(from, from + CATALOG_CITY_PAGE - 1);
+    if (error) {
+      console.error('[worker] ✗ קריאת הקבוצות בלי עיר נכשלה:', error.message);
+      return;
+    }
+    const rows = (data ?? []) as { external_id: string; name: string }[];
+    read += rows.length;
+    for (const r of rows) {
+      const city = detectCity(r.name);
+      /* OTHER_CITY is "I could not tell", not a city. Writing it would fill
+         the column with a value that means nothing and stop this pass from
+         ever looking at the row again. */
+      if (!city || city === OTHER_CITY) continue;
+      const list = byCity.get(city) ?? [];
+      list.push(r.external_id);
+      byCity.set(city, list);
+    }
+    if (rows.length < CATALOG_CITY_PAGE) break;
+  }
+  if (!byCity.size) return;
+
+  let filled = 0;
+  for (const [city, ids] of byCity) {
+    const region = regionOf(city);
+    for (let i = 0; i < ids.length; i += CATALOG_PUBLISH_BATCH) {
+      const slice = ids.slice(i, i + CATALOG_PUBLISH_BATCH);
+      const { error } = await db
+        .from('social_group_catalog')
+        .update({ city, ...(region ? { region } : {}), updated_at: new Date().toISOString() })
+        /* The condition is repeated in the write: another machine may have
+           filled the same row between the read and here, and its answer is
+           no worse than ours. */
+        .eq('city', '')
+        .in('external_id', slice);
+      if (error) {
+        console.error('[worker] ✗ מילוי העיר במאגר נכשל:', error.message);
+        return;
+      }
+      filled += slice.length;
+    }
+  }
+  console.log(`[worker] 🗺 מאגר ארצי: ${filled} קבוצות קיבלו עיר לפי שמן${read >= CATALOG_CITY_MAX ? ' (יש עוד — יימשך בסנכרון הבא)' : ''}.`);
+  await logActivity(
+    'info',
+    'catalog_sync',
+    `${filled} קבוצות במאגר הארצי קיבלו עיר לפי שם הקבוצה${read >= CATALOG_CITY_MAX ? ', והשאר יושלמו בסנכרון הבא' : ''}.`,
+    { filled, scanned: read },
+  );
+}
+
 /**
  * Once every seven days: carry what this PC knows into the national catalog.
  *
@@ -2054,7 +2193,10 @@ async function catalogSync(): Promise<void> {
         image_url: f.image_url,
         members: f.members,
         privacy: f.privacy,
-        city: f.city,
+        /* The city it was filed under, or the one its own NAME says. A
+           catalog row that came from a discovery search carries no city at
+           all, and a catalog nobody can filter by city is not a catalog. */
+        city: f.city || detectCity(f.name || ''),
         category: f.category,
         language: catalogLanguage(f.name),
         /* The region follows from the city, by the one table in

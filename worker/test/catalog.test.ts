@@ -366,6 +366,68 @@ is(/region: regionOf\(f\.city\)/.test(syncFn), 'a group the computer adds gets i
 is(/regionOf\(\(patch\.city as string\) \?\? String\(row\.city \?\? ''\)\)/.test(syncFn),
   'and a row seeded before the country list existed gets one on the next pass');
 
+/* ══════════ §8b THE CITY A GROUP'S OWN NAME SAYS ════════════════════════ */
+/*
+ * v49 fills the region FROM THE CITY — and most catalog rows have no city:
+ * a row that came from a discovery search carries a name, a link and a member
+ * count and nothing else. Seeded as they were, 1,354 groups gave a region
+ * filter with almost nothing behind it.
+ *
+ * So the name is read. It is good evidence, and detectCity now knows all 413
+ * localities and both of the ways a name is really written.
+ */
+const cityFn = slice(worker, 'async function fillCatalogCities(', 'async function catalogSync(');
+const cityPass = slice(worker, 'async function catalogCityPass(', 'async function fillCatalogCities(');
+is(/detectCity\(r\.name\)/.test(cityFn), "a city-less row is read from the group's own name");
+is(/city === OTHER_CITY\) continue/.test(cityFn), '"could not tell" is never written as if it were a city');
+is(/\.eq\('city', ''\)/.test(cityFn), 'and only an EMPTY city is filled — a city somebody checked is never written over');
+/* The condition is repeated in the UPDATE, because another machine may have
+   filled the same row between the read and the write. */
+is(cityFn.lastIndexOf(".eq('city', '')") > cityFn.indexOf('.update('), 'the condition is repeated in the write, not only in the read');
+is(/byCity/.test(cityFn), 'the rows are grouped by what was found — one statement per city, not per row');
+is(/regionOf\(city\)/.test(cityFn), 'and the region follows from it in the same write');
+/*
+ * NOT ON THE WEEKLY CLOCK. This is a one-time repair of rows already in the
+ * table; making him wait a week for a screen that is already on his phone is
+ * the wrong answer. Hourly, and free once there is nothing left: one head
+ * count that sends no rows.
+ */
+is(/60 \* 60_000/.test(worker) && /CATALOG_CITY_EVERY_MS/.test(cityPass), 'the repair runs hourly, not weekly');
+is(/head: true/.test(cityPass), 'it asks with a head count, so a finished catalog costs one number');
+is(/if \(!count\) return;/.test(cityPass), 'and stops entirely once there is nothing left to fill');
+is(cityPass.indexOf('catalogCityAt:') < cityPass.indexOf('fillCatalogCities(db)'), 'stamped before the work, like every other pass here');
+for (const forbidden of ['openPage', 'newPage', 'browser', 'goto']) {
+  is(!cityFn.includes(forbidden) && !cityPass.includes(forbidden), `the city repair never touches ${forbidden}`);
+}
+is(/await catalogSync\(\);\s*\n?\s*await catalogCityPass\(\);/.test(worker.replace(/\s+/g, ' ').replace(/ /g, ' ')) || /await catalogCityPass\(\);/.test(worker),
+  'and it runs beside the weekly sync, which is the other database-only pass');
+
+/* AND IT REALLY READS REAL NAMES. Twenty names of the shape a discovery
+   search returns; seventeen of them name a place, and the three that do not
+   must stay unfiled rather than be guessed at. */
+{
+  const named = [
+    ['דירות להשכרה בתל אביב', 'תל אביב-יפו'],
+    ['יד שנייה חיפה והסביבה', 'חיפה'],
+    ['לוח מודעות קריית שמונה', 'קריית שמונה'],
+    ['דרושים עובדים באשדוד', 'אשדוד'],
+    ['Квартиры в Хайфе', 'חיפה'],
+    ['Объявления Ашдода', 'אשדוד'],
+    ['מכירות ברמת גן', 'רמת גן'],
+    ['בית שמש - לוח', 'בית שמש'],
+    ['נדלן ברהט', 'רהט'],
+    ['עסקים בכרמיאל', 'כרמיאל'],
+    ['הכל על פתח תקווה', 'פתח תקווה'],
+    ['אילת - לוח מודעות', 'אילת'],
+    ['דרושים בנצרת', 'נצרת'],
+    ['הורים בגבעתיים', 'גבעתיים'],
+  ] as const;
+  for (const [name, want] of named) eq(detectCity(name), want, `"${name}" names ${want}`);
+  for (const name of ['קבוצת רכישה ארצית', 'מתכונים וטיפים', 'ל״ג בעומר שמח']) {
+    eq(detectCity(name), 'אחר', `"${name}" names no place, and none is invented`);
+  }
+}
+
 /* ══════════ §6 PICKING FROM THE CATALOG INSIDE A CAMPAIGN ════════════════ */
 /*
  * "בעת יצירת קמפיין חדש... יש לאפשר בחירת קבוצות מתוך המאגר הקיים בלבד, בלי

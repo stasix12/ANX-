@@ -24,8 +24,14 @@ const CITY_PATTERNS: [string, RegExp][] = [
   ['קריית גת', /קרי?ית[\s-]?גת|kiryat[\s-]?gat|кирьят[\s-]?гат/i],
   ['עומר', /(?<![\p{L}])עומר(?![\p{L}])|\bomer\b/iu],
   ['להבים', /להבים|lehavim/i],
-  ['מיתר', /(?<![\p{L}])מיתר(?![\p{L}])|meitar/iu],
-  ['רהט', /(?<![\p{L}])רהט(?![\p{L}])|rahat/iu],
+  /* THE PREPOSITION IS ALLOWED IN FRONT OF THESE TWO — "נדלן ברהט",
+     "דירות במיתר" — which is how the names are really written. See the note
+     on cityPattern() below; the same allowance is why the four hundred
+     generated patterns read real group names at all.
+     עומר above is deliberately NOT given it: "ל״ג בעומר" is a holiday, and
+     every group wishing somebody a happy one would be filed in the town. */
+  ['מיתר', /(?<![\p{L}])[בלמוהשכ]{0,2}מיתר(?![\p{L}])|meitar/iu],
+  ['רהט', /(?<![\p{L}])[בלמוהשכ]{0,2}רהט(?![\p{L}])|rahat/iu],
 ];
 
 /** The fifteen tuned by hand above — never regenerated over. */

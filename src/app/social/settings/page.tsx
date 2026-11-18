@@ -6,9 +6,10 @@ import { Stamp } from '@/components/social/DateTime';
 import { ScreenProbe } from '@/components/social/ScreenProbe';
 import { SocialShell } from '@/components/social/SocialShell';
 import { LangSwitch } from '@/components/social/LangSwitch';
-import { Button, Card, Field, Loading, Notice, SegmentedControl, SkeletonList, inputClass, useToast } from '@/components/social/ui';
+import { Button, Card, Field, Loading, Notice, SegmentedControl, SkeletonList, Toggle, inputClass, useToast } from '@/components/social/ui';
 import { CATALOG_LANGUAGE_LABEL } from '@/lib/social/language';
-import { applyPace, catalogCoverage, clearMetaHold, getBrowserSettings, getControl, getLimits, loadAdminPresence, saveSetting, type CatalogCoverage } from '@/lib/social/client';
+import { COVERAGE_PER_DAY_MAX, COVERAGE_PER_DAY_MIN, coverageProgress } from '@/lib/social/coverage';
+import { applyPace, catalogCoverage, clearMetaHold, getBrowserSettings, getControl, getCoverage, getLimits, loadAdminPresence, saveCoverage, saveSetting, type CatalogCoverage, type CoverageSettings } from '@/lib/social/client';
 import { DEFAULT_BROWSER, DEFAULT_LIMITS, type AdminPresence, type BrowserSettings, type ControlSettings, type LimitsSettings, type PaceId } from '@/lib/social/types';
 import { accountGapLabel, accountGapSeconds } from '@/lib/social/rules';
 import { SmartPaceCard } from '@/components/social/SmartPaceCard';
@@ -79,6 +80,14 @@ export default function SettingsPage() {
    * still not worth asking on a screen nobody opened.
    */
   const [coverage, setCoverage] = useState<CatalogCoverage | null>(null);
+  /*
+   * כיסוי ארצי — the one switch in this product that makes the machine search
+   * Facebook on its own. Read on this tab like everything else here; written
+   * on the tap, because a switch that needs a שמור press afterwards is a
+   * switch people believe they pressed.
+   */
+  const [plan, setPlan] = useState<CoverageSettings | null>(null);
+  const [planBusy, setPlanBusy] = useState(false);
 
   useEffect(() => {
     Promise.all([
@@ -132,6 +141,11 @@ export default function SettingsPage() {
    * presence poll would be a dozen counts every ten seconds for a number
    * that cannot have moved.
    */
+  useEffect(() => {
+    if (tab !== 'limits' || plan) return;
+    void getCoverage().then(setPlan).catch(() => undefined);
+  }, [tab, plan]);
+
   useEffect(() => {
     if (!isAdmin || tab !== 'admin' || coverage) return;
     void catalogCoverage()
@@ -447,6 +461,98 @@ export default function SettingsPage() {
 
           {tab === 'limits' && (
             <>
+              {/*
+                ─── כיסוי ארצי ─────────────────────────────────────────────
+
+                  "מאגר... שמכסה את כל הערים בישראל" · "אז תעשה את הקוד."
+
+                THE ONLY SWITCH IN THIS PRODUCT THAT MAKES THE MACHINE SEARCH
+                FACEBOOK BY ITSELF — so it is off out of the box, it says in
+                plain words what it will do, and it says what it will NOT do.
+                Everything else in the catalog is database work; this one acts
+                on his account, and the card is written for somebody deciding
+                whether to let it.
+
+                The pace is his: six searches a day by default, twenty-four at
+                the ceiling, one at a time with hours between them. There is
+                no faster setting, because the account doing the searching is
+                the one his business publishes from.
+              */}
+              <Card
+                title={t('כיסוי ארצי')}
+                subtitle={t('התוכנה מחפשת בפייסבוק קבוצות לפי עיר ונושא, ומכניסה אותן למאגר הארצי.')}
+              >
+                {!plan ? (
+                  <SkeletonList rows={2} />
+                ) : (
+                  <>
+                    <Toggle
+                      label={t('חיפוש אוטומטי של קבוצות חדשות')}
+                      checked={plan.on}
+                      disabled={planBusy}
+                      onChange={async (on: boolean) => {
+                        setPlanBusy(true);
+                        try {
+                          setPlan(await saveCoverage({ on }));
+                          toast(on ? 'כיסוי ארצי הופעל. החיפוש הראשון ייצא בחלון הפנוי הקרוב.' : 'כיסוי ארצי כובה.');
+                        } catch (err) {
+                          toast(friendlyMessage(err, 'השמירה נכשלה.'), 'error');
+                        } finally {
+                          setPlanBusy(false);
+                        }
+                      }}
+                    />
+                    <Field label={t('כמה חיפושים ביום')} hint={t('חיפוש אחד בכל פעם, עם שעות ביניהם, ורק כשאין פרסום שממתין.')}>
+                      <input
+                        type="number"
+                        inputMode="numeric"
+                        min={COVERAGE_PER_DAY_MIN}
+                        max={COVERAGE_PER_DAY_MAX}
+                        value={plan.perDay}
+                        disabled={planBusy}
+                        onChange={(e) => setPlan({ ...plan, perDay: Number(e.target.value) })}
+                        onBlur={async (e) => {
+                          setPlanBusy(true);
+                          try {
+                            setPlan(await saveCoverage({ perDay: Number(e.target.value) }));
+                          } catch (err) {
+                            toast(friendlyMessage(err, 'השמירה נכשלה.'), 'error');
+                          } finally {
+                            setPlanBusy(false);
+                          }
+                        }}
+                        className={inputClass}
+                      />
+                    </Field>
+                    {/* WHERE THE PLAN HAS GOT TO, in the two numbers that mean
+                        something: cities finished, and steps out of the whole
+                        plan. Both counted from the cursor the worker writes. */}
+                    {(() => {
+                      const p = coverageProgress(plan.done);
+                      return (
+                        <p className="mt-2.5 text-[11px] leading-4 text-mist-500">
+                          {t('נסרקו')}{' '}
+                          <span className="tabular-nums text-mist-300" dir="ltr">{p.citiesDone.toLocaleString('he-IL')}</span>{' '}
+                          {t('ערים מתוך')}{' '}
+                          <span className="tabular-nums text-mist-300" dir="ltr">{p.cities.toLocaleString('he-IL')}</span>
+                          {' · '}
+                          <span className="tabular-nums text-mist-300" dir="ltr">{p.done.toLocaleString('he-IL')}</span>{' '}
+                          {t('חיפושים מתוך')}{' '}
+                          <span className="tabular-nums text-mist-300" dir="ltr">{p.total.toLocaleString('he-IL')}</span>
+                        </p>
+                      );
+                    })()}
+                    <div className="mt-2.5">
+                      <Notice tone="info">
+                        התוכנה מחפשת, קוראת את התוצאות ורושמת אותן. היא לא מצטרפת לשום קבוצה, לא שולחת בקשות הצטרפות, לא כותבת ולא לוחצת
+                        על כלום — בדיוק כמו חיפוש שאתם מקלידים במסך גילוי קבוצות. החיפושים יוצאים אחד בכל פעם, רק בזמן שאין פרסום שממתין,
+                        ומתחילים מהערים שאתם כבר מפרסמים בהן.
+                      </Notice>
+                    </div>
+                  </>
+                )}
+              </Card>
+
               {/*
                 ─── מהירות פרסום ───────────────────────────────────────────
 

@@ -6,6 +6,7 @@ import { JOINED_QUERY, mergeDiscovered, normalizeQuery, type DiscoveredGroup, ty
 import { renderPostText } from '@/lib/social/compose';
 import { planQueue } from '@/lib/social/plan';
 import { catalogLanguage } from '@/lib/social/language';
+import { clampCoveragePerDay, coverageGapMs, detectTopic, nextCoverageStep } from '@/lib/social/coverage';
 import { OTHER_CITY, detectCity, regionOf } from '@/lib/social/cities';
 import { PREP_LEAD_MS, accountGapLabel, accountGapSeconds, clampCommentDelay, commentArmCutoff, evaluateQueueItem } from '@/lib/social/rules';
 import { Admission, laneCountFor } from './admission';
@@ -1233,6 +1234,9 @@ async function tick(state: WorkerState): Promise<void> {
   /* And the city repair, which is hourly until there is nothing left to
      repair and then costs one count. Also no browser window. */
   await catalogCityPass();
+  /* The national coverage — OFF unless he turned it on, and at most one
+     search queued per interval. See coveragePass(). */
+  await coveragePass();
 
   const gate = await spacingGate(db, limits, browser);
   /*
@@ -2035,6 +2039,123 @@ const CATALOG_CITY_MAX = 4000;
  * IT ONLY EVER FILLS AN EMPTY CELL. A city somebody checked, or one that came
  * off a target row, is never written over by a guess from a name.
  */
+/* ───────────────────────── כיסוי ארצי · הכיסוי האוטומטי ───────────────────
+ *
+ * "מאגר... שמכסה את כל הערים בישראל" · "אז תעשה את הקוד."
+ *
+ * ─── IT DOES ONE THING: IT TYPES A SEARCH ────────────────────────────────
+ *
+ * Everything else — opening Facebook, reading the results, writing them down,
+ * the pacing, the burst guard, the activity line — is the path a search the
+ * owner typed already takes. This queues the same `discover` command the
+ * dashboard queues, with a phrase out of src/lib/social/coverage.ts, and that
+ * is the whole of it. No new way to touch Facebook was invented, which is
+ * also why it inherits every protection the old way has.
+ *
+ * ─── OFF UNLESS HE TURNED IT ON ──────────────────────────────────────────
+ *
+ * This is the one feature in the catalog that acts on his Facebook account,
+ * so the default is off and the switch is in הגדרות. A machine that quietly
+ * started searching because it updated itself would be the opposite of what
+ * every rule in this file is for.
+ *
+ * ─── ONE AT A TIME, HOURS APART ──────────────────────────────────────────
+ *
+ * Six searches a day out of the box, twenty-four at the ceiling, and never
+ * two in the same window: the stamp is written before the command is queued,
+ * so a failure costs the interval rather than retrying every five seconds.
+ * The plan is 4,130 phrases and it is MEANT to take months — the order is
+ * what matters, and it starts where he already publishes.
+ */
+const COVERAGE_SETTING = 'coverage';
+
+interface CoverageSettings {
+  on?: boolean;
+  perDay?: number;
+  /** The steps already searched, as `topic|city`. */
+  done?: string[];
+  /** When the last search was queued. */
+  at?: string;
+}
+
+async function coveragePass(): Promise<void> {
+  const nowMs = Date.now();
+  const cfg = await getSetting<CoverageSettings>(COVERAGE_SETTING, {});
+  /* OFF IS THE DEFAULT, and it is checked before anything else is read. */
+  if (!cfg.on) return;
+
+  const last = Date.parse(cfg.at ?? '');
+  const lastMs = Number.isFinite(last) && last <= nowMs ? last : 0;
+  if (lastMs && nowMs - lastMs < coverageGapMs(clampCoveragePerDay(cfg.perDay))) return;
+
+  const db = await workerDb();
+  /*
+   * WHERE HE ALREADY PUBLISHES COMES FIRST. Read fresh each time rather than
+   * stored: a city he added this week should be searched this week.
+   */
+  const { data: targets } = await db
+    .from('social_targets')
+    .select('city')
+    .eq('channel', 'facebook_group')
+    .neq('city', '')
+    .limit(1000);
+  const mine = [...new Set(((targets ?? []) as { city: string }[]).map((t) => t.city).filter(Boolean))];
+
+  const step = nextCoverageStep(cfg.done ?? [], mine);
+  if (!step) {
+    /* THE PLAN IS FINISHED — said once, and then it stops asking. */
+    if (!cfg.at || Date.parse(cfg.at) < nowMs - 7 * 24 * 3600_000) {
+      await saveWorkerSetting(COVERAGE_SETTING, { ...cfg, at: new Date(nowMs).toISOString() });
+      console.log('[worker] 🗺 כיסוי ארצי: כל הערים והנושאים בתוכנית כבר נסרקו.');
+    }
+    return;
+  }
+
+  /*
+   * STAMPED AND MARKED BEFORE THE COMMAND IS QUEUED.
+   *
+   * If the search fails — Facebook asks for a login, the page does not load —
+   * the step is spent and the next one runs in four hours. The alternative is
+   * a phrase that cannot succeed being retried every tick for ever, which is
+   * a loop of page loads against his account, which is the one thing this
+   * whole design is about not doing. A failed phrase is simply searched again
+   * when the plan comes round in a future version; nothing is lost but the
+   * attempt.
+   */
+  await saveWorkerSetting(COVERAGE_SETTING, {
+    ...cfg,
+    done: [...(cfg.done ?? []), step.key],
+    at: new Date(nowMs).toISOString(),
+  });
+
+  const { error } = await db.from('social_worker_commands').insert({
+    worker_id: null,
+    command: 'discover',
+    payload: { query: step.phrase },
+  });
+  if (error) {
+    console.error('[worker] ✗ כיסוי ארצי: לא הצלחנו לתזמן חיפוש:', error.message);
+    return;
+  }
+
+  /*
+   * AND WHAT IT FINDS GOES INTO THE CATALOG WITHOUT WAITING A WEEK: clearing
+   * the weekly stamp makes the next tick carry the new rows across. The pass
+   * itself is a handful of database statements, so bringing it forward costs
+   * nothing and the owner sees the groups the same day.
+   */
+  const maintenance = await getSetting<{ catalogSyncAt?: string }>('maintenance', {});
+  await saveWorkerSetting('maintenance', { ...maintenance, catalogSyncAt: '' });
+
+  console.log(`[worker] 🗺 כיסוי ארצי: מחפש "${step.phrase}" (${step.city}).`);
+  await logActivity(
+    'info',
+    'coverage_search',
+    `כיסוי ארצי: חיפוש "${step.phrase}". מה שיימצא ייכנס למאגר הארצי.`,
+    { city: step.city, topic: step.topic.id },
+  );
+}
+
 async function catalogCityPass(): Promise<void> {
   /*
    * ─── NOT ON THE WEEKLY CLOCK ─────────────────────────────────────────
@@ -2197,13 +2318,16 @@ async function catalogSync(): Promise<void> {
            catalog row that came from a discovery search carries no city at
            all, and a catalog nobody can filter by city is not a catalog. */
         city: f.city || detectCity(f.name || ''),
-        category: f.category,
+        /* The category a group's own NAME says it is — never the phrase that
+           found it, because Facebook's search returns names that carry
+           neither word. See detectTopic. */
+        category: f.category || detectTopic(f.name),
         language: catalogLanguage(f.name),
         /* The region follows from the city, by the one table in
            src/lib/social/cities-data.ts — the same one v49 fills the existing
            rows from. A city nobody recognises leaves it empty rather than
            guessing a region. */
-        region: regionOf(f.city),
+        region: regionOf(f.city || detectCity(f.name || '')),
         last_seen_at: new Date().toISOString(),
       })),
     );
@@ -2241,7 +2365,8 @@ async function catalogSync(): Promise<void> {
        empty column — but his empty is never written over somebody else's
        answer. */
     if (f.city && f.city !== row.city) patch.city = f.city;
-    if (f.category && f.category !== row.category) patch.category = f.category;
+    const category = f.category || detectTopic(f.name || String(row.name ?? ''));
+    if (category && category !== row.category) patch.category = category;
     /* The language is recomputed from the name that is about to be stored,
        so a row the one-time seeding could not classify is corrected here. */
     const language = catalogLanguage(f.name || String(row.name ?? ''));

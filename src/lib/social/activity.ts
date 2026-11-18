@@ -66,6 +66,13 @@ const KIND: Record<string, ActivityKind> = {
    */
   catalog_sync: 'success',
   /*
+   * חיפוש של הכיסוי הארצי. 'success' מאותה סיבה כמו nightly_group_check: זו
+   * האפליקציה עושה את מה שהלקוח הדליק, והשורה שאומרת איזה ביטוי נסרק היא
+   * העדות היחידה שזה קרה — וגם הדרך שלו לראות בדיוק מה התוכנה חיפשה בחשבון
+   * שלו, שורה אחת לכל חיפוש.
+   */
+  coverage_search: 'success',
+  /*
    * הצטרפות אוטומטית לקבוצה. 'success' and not 'system': it is the machine
    * doing the thing the owner pressed, on his own account, and the line naming
    * which group is the only record that it happened. A join that did NOT

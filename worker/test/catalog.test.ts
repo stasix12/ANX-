@@ -362,7 +362,10 @@ is(/last_seen_at/.test(syncFn), 'and only a real change moves "עודכן לאח
 /* THE REGION FOLLOWS THE CITY, by the same table v49 fills the old rows
    from — so a group this PC adds next week is filed the same way as the
    1,354 that were there before. */
-is(/region: regionOf\(f\.city\)/.test(syncFn), 'a group the computer adds gets its region from its city');
+/* The city it was filed under, or the one its name says — and the region
+   follows whichever of the two it ended up with. */
+is(/region: regionOf\(f\.city \|\| detectCity\(f\.name \|\| ''\)\)/.test(syncFn),
+  'a group the computer adds gets its region from its city, including a city read off its name');
 is(/regionOf\(\(patch\.city as string\) \?\? String\(row\.city \?\? ''\)\)/.test(syncFn),
   'and a row seeded before the country list existed gets one on the next pass');
 

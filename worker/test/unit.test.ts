@@ -6111,10 +6111,30 @@ const scenario: { step: string; line: string }[] = [];
     !/checked=\{limits\.blockRepeatToSameTarget/.test(settings),
     'and no toggle reads it to draw itself — the pair is what a switch is',
   );
-  assert.ok(
-    !/<Toggle/.test(settings),
-    'there is no Toggle left on the screen at all, which is the simplest way to say it',
-  );
+  /*
+   * ─── 18.11.2026 · NARROWED, AND ONLY WHERE IT WAS A PROXY ──────────────
+   *
+   * This used to read `!/<Toggle/.test(settings)` — "there is no Toggle on
+   * the screen at all". That was true when it was written, because the
+   * removed control was the only switch the settings screen had, and it is
+   * the kind of pin that is easy to keep until the day it is simply wrong:
+   * כיסוי ארצי put a switch on this screen that has nothing to do with the
+   * publishing limits.
+   *
+   * What it was really protecting is above and is untouched: nothing can set
+   * or read blockRepeatToSameTarget. This keeps the belt-and-braces half in
+   * the shape that still means something — NO switch on this screen is wired
+   * to `limits` at all, so the deleted control cannot come back under another
+   * name, while a switch about something else is allowed to exist.
+   */
+  for (const at of [...settings.matchAll(/<Toggle\b/g)].map((m) => m.index ?? 0)) {
+    const end = settings.indexOf('/>', at);
+    const props = settings.slice(at, end > at ? end : at + 400);
+    assert.ok(
+      !/\blimits\./.test(props),
+      `a switch on the settings screen is wired to limits again — ${props.replace(/\s+/g, ' ').slice(0, 90)}`,
+    );
+  }
   assert.ok(
     !settings.includes('blockRepeatToSameTarget === false'),
     'and nothing on it branches on the off state any more — the warning went with the control it warned about',

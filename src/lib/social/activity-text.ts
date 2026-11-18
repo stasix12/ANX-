@@ -128,6 +128,8 @@ const TITLE: Record<string, string> = {
      המשותף. לא נפתח שום חלון דפדפן בדרך, ולכן השורה הזו אינה מעידה על שום
      פעילות מול פייסבוק. */
   catalog_sync: 'המאגר הארצי סונכרן',
+  /* חיפוש אחד של הכיסוי הארצי. הביטוי עצמו נמצא בשורה שמתחת. */
+  coverage_search: 'כיסוי ארצי — חיפוש קבוצות',
   campaign_paused: 'הסבב הושהה',
   /* CHZARA. Two headlines rather than one with a word swapped: this is the
      line in his history that says his account began republishing by itself,

@@ -3,6 +3,7 @@
 import { supabase } from '@/lib/supabase';
 import { campaignState, type CampaignQueueRow, type CampaignState } from './campaign';
 import { detectCity } from './cities';
+import { COVERAGE_PER_DAY_DEFAULT, clampCoveragePerDay } from './coverage';
 import { cycleTick, type PublishCycle } from './publish-cycle';
 import { addDaysISO, counted, startOfZonedDay, zonedDateISO, zonedHM, zonedToUtc } from './time';
 import { DEFAULT_CAMPAIGN_REPEAT, MAX_GAP_SECONDS, MIN_GAP_SECONDS, MIN_REPEAT_HOURS, gapMinutesFor, dayRelativeHe, repeatWindowSentence, gapChoiceLabel, readRounds, readSchedule, readRepeat, repeatColumns, roundsColumn, roundsWindowFix, weeklyPlanFor, type RoundsVerdict, type CampaignRepeat, type CampaignRound, type CampaignSchedule, type RoundFields, type ScheduleFields } from './campaign-schedule';
@@ -437,6 +438,50 @@ export async function listTargetExternalIds(): Promise<Set<string>> {
     if (rows.length < 1000) break;
   }
   return out;
+}
+
+/**
+ * ─── כיסוי ארצי · THE SWITCH AND WHAT IT HAS DONE ─────────────────────────
+ *
+ * The one part of the catalog that acts on his Facebook account, so it is off
+ * until somebody turns it on and the screen says exactly what it will do.
+ *
+ * `done` is the plan's cursor — one entry per city-and-topic already searched
+ * — and it is read here only to draw an honest progress line. The worker owns
+ * writing it; the screen never edits it, because two writers of a cursor is
+ * how a plan starts over.
+ */
+export interface CoverageSettings {
+  on: boolean;
+  perDay: number;
+  done: string[];
+  at: string;
+}
+
+export const DEFAULT_COVERAGE: CoverageSettings = { on: false, perDay: COVERAGE_PER_DAY_DEFAULT, done: [], at: '' };
+
+export async function getCoverage(): Promise<CoverageSettings> {
+  const row = await getSetting<CoverageSettings>('coverage', DEFAULT_COVERAGE);
+  return { ...row, perDay: clampCoveragePerDay(row.perDay), done: Array.isArray(row.done) ? row.done : [] };
+}
+
+/**
+ * Turn it on or off, or change the pace — WITHOUT touching the cursor.
+ *
+ * Read-modify-write on the row as it is NOW: the worker writes `done` and
+ * `at` on the same row every few hours, and writing back a copy this screen
+ * read a minute ago would hand the plan back its old position and search the
+ * same phrases again.
+ */
+export async function saveCoverage(next: { on?: boolean; perDay?: number }): Promise<CoverageSettings> {
+  const now = await getCoverage();
+  const merged: CoverageSettings = {
+    ...now,
+    ...(next.on === undefined ? {} : { on: next.on }),
+    ...(next.perDay === undefined ? {} : { perDay: clampCoveragePerDay(next.perDay) }),
+  };
+  await saveSetting('coverage', merged);
+  return merged;
 }
 
 /**

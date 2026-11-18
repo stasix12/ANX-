@@ -166,7 +166,25 @@ function files(dir: string, out: string[] = []): string[] {
      * and the dictionary is matched against whole text nodes — a key like
      * "מגדל" would then claim any node that happened to equal it.
      */
-    else if (/\.(ts|tsx)$/.test(e.name) && !/i18n\.ts$/.test(e.name) && !/cities-data\.ts$/.test(e.name)) out.push(p);
+    else if (
+      /\.(ts|tsx)$/.test(e.name)
+      && !/i18n\.ts$/.test(e.name)
+      && !/cities-data\.ts$/.test(e.name)
+      /*
+       * ─── AND THE PHRASES THAT GO INTO FACEBOOK'S SEARCH BOX ─────────────
+       *
+       * coverage.ts is a plan: ten phrases and a list of cities, which the
+       * machine types into Facebook. Translating one would not translate a
+       * screen — it would change what is SEARCHED, and searching "Вторые
+       * руки Беэр-Шева" in Israeli Facebook finds nothing. It is the same
+       * kind of string as POST_CONTENT above, for the same reason: it is
+       * sent, not shown.
+       *
+       * Where one of them IS shown — the category chip on a catalog row —
+       * it goes through keep(), exactly as a city and a group's own name do.
+       */
+      && !/coverage\.ts$/.test(e.name)
+    ) out.push(p);
   }
   return out;
 }

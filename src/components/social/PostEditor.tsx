@@ -865,7 +865,7 @@ export function PostEditor({ postId }: { postId?: string }) {
                 </Notice>
                 <GroupCatalog
                   busy={adopting}
-                  onAdd={async (picked) => {
+                  onAdd={async (picked, source) => {
                     setAdopting(true);
                     try {
                       const r = await adoptCatalogGroups(picked);
@@ -896,7 +896,11 @@ export function PostEditor({ postId }: { postId?: string }) {
                           .join(' · ') || 'לא נוספה אף קבוצה.',
                         r.failed && !r.added ? 'error' : 'success',
                       );
-                      if (r.added || r.existed) setCatalogOpen(false);
+                      /* ONLY ON A DELIBERATE BULK ADD. A row's own
+                         "הוסף לרשימה" is one group out of sixty he is still
+                         picking through; closing the sheet under him there
+                         would end the job after the first tap. */
+                      if (source === 'bulk' && (r.added || r.existed)) setCatalogOpen(false);
                       return r.added + r.existed > 0;
                     } catch (err) {
                       toast(friendlyMessage(err, 'ההוספה נכשלה.'), 'error');

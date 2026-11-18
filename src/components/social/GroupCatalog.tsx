@@ -2,11 +2,21 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { t, keep } from '@/lib/social/i18n';
-import { CATALOG_PAGE, catalogFacets, catalogStats, searchCatalog, type CatalogGroup } from '@/lib/social/client';
+import {
+  CATALOG_PAGE,
+  catalogFacets,
+  catalogStats,
+  listTargetExternalIds,
+  searchCatalog,
+  type CatalogGroup,
+  type CatalogSort,
+} from '@/lib/social/client';
+import { Figure, GroupRow } from './Discovery';
+import type { DiscoveredGroupRow } from '@/lib/social/types';
 import { friendlyMessage } from '@/lib/social/errors';
 import { CATALOG_LANGUAGE_LABEL } from '@/lib/social/language';
-import { SearchIcon, UsersIcon } from '@/components/icons';
-import { Button, Notice, inputClass } from './ui';
+import { SearchIcon } from '@/components/icons';
+import { Button, Notice, inputClass, useConfirm } from './ui';
 
 /**
  * ─────────────────────────────────────────────────────────────────────────────
@@ -49,10 +59,44 @@ import { Button, Notice, inputClass } from './ui';
  * ─────────────────────────────────────────────────────────────────────────────
  */
 
-/** "12,400 חברים" — a group's size, or nothing when it was never read. */
-function membersWords(n: number | null): string {
-  if (typeof n !== 'number' || !Number.isFinite(n)) return '';
-  return `${n.toLocaleString('he-IL')} חברים`;
+/**
+ * How many groups at once turns "add" into a gesture worth confirming.
+ *
+ * Not a cap and not a warning on every press: one row, or a handful picked by
+ * hand, is a decision he is looking at. This is the number at which a
+ * selection stops being that — see the note on the button.
+ */
+const CATALOG_BULK_CONFIRM = 25;
+
+/**
+ * A catalog row in the shape the discovery row draws.
+ *
+ * NOT A LOSSY COPY — every field the row reads is a field the catalog has,
+ * except the three it cannot have and must not invent:
+ *
+ *   · membership — 'unknown'. The catalog says a group EXISTS; it has never
+ *     said anybody is in it, and a badge reading חבר off a shared table would
+ *     be the exact cross-account claim this table was built to avoid.
+ *   · queries — []. The phrases are a property of one business's searches.
+ *   · target_id / hidden — the publishing list and one user's dismissals,
+ *     neither of which lives in a shared catalog.
+ */
+function asDiscovered(g: CatalogGroup): DiscoveredGroupRow {
+  return {
+    id: g.external_id,
+    external_id: g.external_id,
+    name: g.name,
+    url: g.url,
+    image_url: g.image_url,
+    members: g.members,
+    privacy: g.privacy,
+    membership: 'unknown',
+    queries: [],
+    first_seen_at: g.first_seen_at,
+    last_seen_at: g.last_seen_at,
+    target_id: null,
+    hidden: false,
+  };
 }
 
 export function GroupCatalog({
@@ -64,7 +108,15 @@ export function GroupCatalog({
    * never writes: it is a reader, and "a group is selected" is not the same
    * fact as "we may publish there" — the caller keeps that distinction.
    */
-  onAdd?: (groups: CatalogGroup[]) => boolean | void | Promise<boolean | void>;
+  /**
+   * Hand the chosen groups to the screen that owns adding them.
+   *
+   * `source` is how that screen can tell a row's own button from the bar at
+   * the bottom — the campaign sheet closes itself after a deliberate bulk
+   * add, and must NOT close after one row was added out of sixty he is still
+   * picking through.
+   */
+  onAdd?: (groups: CatalogGroup[], source: 'row' | 'bulk') => boolean | void | Promise<boolean | void>;
   busy?: boolean;
 }) {
   const [rows, setRows] = useState<CatalogGroup[]>([]);
@@ -79,6 +131,16 @@ export function GroupCatalog({
   const [more, setMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [chosen, setChosen] = useState<Map<string, CatalogGroup>>(new Map());
+  const [sort, setSort] = useState<CatalogSort>('members');
+  const confirm = useConfirm();
+  /*
+   * WHICH OF THESE HE ALREADY HAS — the "כבר במערכת" mark, read once for the
+   * whole screen rather than per row. Until it lands no row claims anything:
+   * an empty set means every row simply has no badge, never a wrong one.
+   */
+  const [mine, setMine] = useState<Set<string>>(new Set());
+  /** The one row whose "הוסף לרשימה" is in flight. */
+  const [adding, setAdding] = useState('');
 
   /*
    * ONE REQUEST WINS, AND IT IS THE LAST ONE TYPED.
@@ -102,6 +164,7 @@ export function GroupCatalog({
           city,
           language,
           category,
+          sort,
           offset: opts.append ? rows.length : 0,
           limit: CATALOG_PAGE,
         });
@@ -119,7 +182,7 @@ export function GroupCatalog({
         }
       }
     },
-    [query, city, language, category, rows.length],
+    [query, city, language, category, sort, rows.length],
   );
 
   /* The header line and the chips are asked for once — they describe the
@@ -128,6 +191,7 @@ export function GroupCatalog({
   useEffect(() => {
     catalogStats().then(setStats).catch(() => undefined);
     catalogFacets().then(setFacets).catch(() => undefined);
+    listTargetExternalIds().then(setMine).catch(() => undefined);
   }, []);
 
   /*
@@ -138,7 +202,7 @@ export function GroupCatalog({
     const id = setTimeout(() => void load(), query ? 250 : 0);
     return () => clearTimeout(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [query, city, language, category]);
+  }, [query, city, language, category, sort]);
 
   const toggle = (g: CatalogGroup) =>
     setChosen((prev) => {
@@ -163,6 +227,13 @@ export function GroupCatalog({
     });
 
   const chosenList = [...chosen.values()];
+  /*
+   * THE FIGURE IS HIS LIST, NOT THIS PAGE. "כבר אצלי" means how many groups
+   * he publishes to — the same 293 the tab strip counts — and counting the
+   * ticks on the sixty rows that happen to be drawn would be a number that
+   * changed every time he scrolled.
+   */
+  const minePresent = mine.size;
   const shownAll = rows.length >= total;
 
   return (
@@ -188,6 +259,17 @@ export function GroupCatalog({
             <span dir="ltr">{new Date(stats.updatedAt).toLocaleDateString('he-IL')}</span>
           </p>
         )}
+      </div>
+
+      {/* ─── 1b. the three figures, the same tiles גילוי קבוצות draws ─────
+          Same component, same tones, same sizes — "שיהיה כמו עיצוב של גילוי
+          קבוצות". The three numbers are this screen's own: how big the
+          catalog is, how many of it is already his, and what arrived in the
+          last week. Each is counted by the database, never by the page. */}
+      <div className="grid grid-cols-3 gap-2 [&>*]:min-w-0">
+        <Figure tone="brand" value={stats?.total ?? 0} label={t('קבוצות במאגר')} />
+        <Figure tone="good" value={minePresent} label={t('כבר אצלי')} />
+        <Figure tone="warn" value={stats?.unavailable ?? 0} label={t('לא זמינות')} />
       </div>
 
       {/* ─── 2. search ──────────────────────────────────────────────────── */}
@@ -229,6 +311,23 @@ export function GroupCatalog({
           {(facets?.categories ?? []).map((c) => (
             <option key={c} value={c}>{keep(c)}</option>
           ))}
+        </select>
+      </div>
+
+      {/* ─── 3b. the order, as גילוי קבוצות offers it ("מיון") ──────────── */}
+      {/* Three orders, all of them ORDER BY in Postgres over the whole match
+          — sorting the sixty rows on screen would be an order over a page. */}
+      <div className="flex items-center justify-end gap-1.5 text-[12px] font-bold text-mist-500">
+        <span>{t('מיון')}:</span>
+        <select
+          aria-label={t('מיון')}
+          value={sort}
+          onChange={(e) => setSort(e.target.value as CatalogSort)}
+          className="min-h-9 rounded-lg border border-ink-700 bg-ink-900 px-2 text-[12px] font-bold text-mist-200"
+        >
+          <option value="members">{t('הכי גדולות')}</option>
+          <option value="new">{t('נוספו לאחרונה')}</option>
+          <option value="name">{t('לפי שם')}</option>
         </select>
       </div>
 
@@ -277,43 +376,63 @@ export function GroupCatalog({
         </p>
       ) : (
         <ul className="space-y-1.5">
-          {rows.map((g) => {
-            const on = chosen.has(g.external_id);
-            return (
-              <li key={g.external_id}>
-                <button
-                  type="button"
-                  onClick={() => onAdd && toggle(g)}
-                  aria-pressed={onAdd ? on : undefined}
-                  disabled={!onAdd}
-                  className={`flex w-full min-w-0 items-center gap-2.5 rounded-2xl border p-2 text-start transition-colors ${
-                    on ? 'border-brand-500 bg-brand-500/10' : 'border-ink-700 bg-ink-900 hover:border-brand-500/40'
-                  } disabled:cursor-default`}
-                >
-                  {g.image_url ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={g.image_url} alt="" className="h-9 w-9 shrink-0 rounded-lg object-cover" />
-                  ) : (
-                    <span aria-hidden className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-ink-800 text-mist-500">
-                      <UsersIcon className="h-4 w-4" />
-                    </span>
-                  )}
-                  <span className="min-w-0 flex-1">
-                    {/* data-no-translate: a group's name is its own, in whatever
-                        language it was written. */}
-                    <span dir="auto" data-no-translate className="block truncate text-[13px] font-bold text-mist-100">
-                      {g.name}
-                    </span>
-                    <span dir="auto" className="block truncate text-[11px] text-mist-500">
-                      {[membersWords(g.members), g.city, CATALOG_LANGUAGE_LABEL[g.language] ?? '', g.status === 'unavailable' ? t('לא זמינה') : '']
-                        .filter(Boolean)
-                        .join(' · ')}
-                    </span>
-                  </span>
-                </button>
-              </li>
-            );
-          })}
+          {rows.map((g) => (
+            /*
+              ─── THE SAME ROW גילוי קבוצות DRAWS ────────────────────────
+              "במאגר הארצי שיהיה כמו עיצוב של גילוי קבוצות אם אותם אופציות."
+
+              The component itself, not a copy of its markup: picture, name,
+              facts, badges, the checkbox and the one action, at the sizes
+              and spacings that screen was measured at. A second copy would
+              drift from it within a week.
+
+              WHAT IT IS HANDED, AND WHAT IT IS NOT:
+               · membership 'unknown' — the catalog knows that a group
+                 EXISTS, never whether this account is in it, so no row
+                 claims חבר. That is also why the add button has to be
+                 turned on explicitly (offerAdd): the discovery screen's own
+                 rule is "only where Facebook said חבר", and it stays that.
+               · already — from his own list, so a group he has carries
+                 "כבר במערכת" and offers "פתח קבוצה" instead of adding twice.
+               · no onHide — the catalog row is shared with every other user
+                 of the app, and hiding it is not one user's to do.
+            */
+            <li key={g.external_id}>
+              <GroupRow
+                row={asDiscovered(g)}
+                picked={chosen.has(g.external_id)}
+                already={mine.has(g.external_id)}
+                busy={adding === g.external_id || busy}
+                offerAdd={Boolean(onAdd)}
+                /* A group already in his publishing list opens, it does not
+                   "join" — and it takes the quiet skin, as on גילוי קבוצות. */
+                openAsMember={mine.has(g.external_id)}
+                /* THE CATALOG'S OWN FACTS, which the discovery row has no way
+                   to know: the city it is in and the language it is written
+                   in. Without these two the row says only its size and
+                   whether it is public — less than this screen showed before
+                   it moved onto the shared row. */
+                extraFacts={[g.city, CATALOG_LANGUAGE_LABEL[g.language] ?? ''].filter(Boolean)}
+                /* AND THE ONE THING THAT CHANGES WHAT HE DOES WITH IT. A
+                   group the catalog has marked unavailable was drawn exactly
+                   like a live one and offered for adding. */
+                mark={g.status === 'unavailable' ? { tone: 'warn', text: t('לא זמינה') } : null}
+                onToggle={() => onAdd && toggle(g)}
+                onAdopt={async () => {
+                  if (!onAdd) return;
+                  setAdding(g.external_id);
+                  try {
+                    const ok = await onAdd([g], 'row');
+                    /* Marked here as well as re-read by the caller: the badge
+                       has to change on the row he just pressed, now. */
+                    if (ok !== false) setMine((prev) => new Set(prev).add(g.external_id));
+                  } finally {
+                    setAdding('');
+                  }
+                }}
+              />
+            </li>
+          ))}
         </ul>
       )}
 
@@ -341,8 +460,46 @@ export function GroupCatalog({
             <Button
               busy={busy}
               onClick={async () => {
-                const ok = await onAdd(chosenList);
-                if (ok !== false) setChosen(new Map());
+                /*
+                 * ─── THE ONE THING HIS OWN RULE IS ABOUT ────────────────
+                 *
+                 * "זה נותן לי לצרף לרשימה קבוצות שאני עדיין לא חבר בהם" —
+                 * every group added that he is not in becomes a publishing
+                 * target that fails once a day with a sensible-looking
+                 * reason. גילוי קבוצות answers that by only offering the
+                 * button where Facebook's own search said חבר.
+                 *
+                 * The catalog cannot answer it that way: it is a shared list
+                 * of groups that EXIST and it has never known who is in one.
+                 * What it can do is make the size of the gesture visible. One
+                 * row is a decision he is looking at; sixty at once is the
+                 * case that fills his list, so it says the number and what
+                 * happens next before it writes anything.
+                 */
+                if (chosenList.length >= CATALOG_BULK_CONFIRM) {
+                  const ok = await confirm.ask({
+                    title: `להוסיף ${chosenList.length} קבוצות לרשימה שלך?`,
+                    body:
+                      'הן ייכנסו לרשימת הקבוצות, והתוכנה במחשב תבדוק כל אחת בנפרד אם אפשר לפרסם בה. ' +
+                      'קבוצה שאינכם חברים בה, או שאי אפשר לפרסם בה, תסומן ותופיע בלשונית "דורשות טיפול" — אפשר להשהות או למחוק אותה משם.',
+                    confirmLabel: `הוסף ${chosenList.length}`,
+                  });
+                  if (!ok) return;
+                }
+                const ok = await onAdd(chosenList, 'bulk');
+                if (ok !== false) {
+                  setChosen(new Map());
+                  /* MARK THEM HIS, HERE. The caller re-reads his list, but
+                     this component holds its own copy for the badge and the
+                     tile — without this line the rows he just added go on
+                     offering "הוסף לרשימה" and "כבר אצלי" keeps the number it
+                     had before the write. */
+                  setMine((prev) => {
+                    const next = new Set(prev);
+                    for (const g of chosenList) next.add(g.external_id);
+                    return next;
+                  });
+                }
               }}
               className="!min-h-9 px-3 !text-[12px]"
             >
@@ -351,6 +508,10 @@ export function GroupCatalog({
           </span>
         </div>
       )}
+
+      {/* useConfirm hands back the sheet to render — without this line `ask`
+          resolves to nothing visible and the promise never settles. */}
+      {confirm.dialog}
     </section>
   );
 }

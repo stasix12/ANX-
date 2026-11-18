@@ -219,11 +219,26 @@ export interface CatalogGroup {
   last_seen_at: string;
 }
 
+/**
+ * The three orders the catalog can be read in — the same control גילוי קבוצות
+ * carries over its results ("מיון").
+ *
+ *   · 'members' — available first, then the biggest. The default, and the one
+ *     the rank index is built for.
+ *   · 'name'    — alphabetical, for finding a group somebody named to you.
+ *   · 'new'     — what entered the catalog most recently (first_seen_at).
+ *
+ * ALL THREE ARE ORDER BY IN POSTGRES. Sorting a page in the browser would
+ * sort sixty rows out of fourteen hundred and call it an order.
+ */
+export type CatalogSort = 'members' | 'name' | 'new';
+
 export interface CatalogQuery {
   q?: string;
   city?: string;
   language?: string;
   category?: string;
+  sort?: CatalogSort;
   /** Rows already shown — the next page starts here. */
   offset?: number;
   limit?: number;
@@ -277,20 +292,33 @@ export async function searchCatalog(query: CatalogQuery = {}): Promise<CatalogPa
   if (query.language) req = req.eq('language', query.language);
   if (query.category) req = req.eq('category', query.category);
 
-  const res = await req
-    .order('status', { ascending: true })
-    .order('members', { ascending: false, nullsFirst: false })
-    .range(from, from + limit - 1);
-  if (res.error) {
+  /*
+   * AVAILABLE FIRST, WHATEVER THE SORT. A group Facebook no longer answers
+   * for is not what anybody is looking for, in any order — so `status` leads
+   * all three and the chosen order decides within it. 'members' is then
+   * exactly social_group_catalog_rank_idx.
+   */
+  let res = req.order('status', { ascending: true });
+  if (query.sort === 'name') res = res.order('name', { ascending: true });
+  /* first_seen_at, NOT last_seen_at. "נוספו לאחרונה" is when a group entered
+     the catalog; last_seen_at is when its details were last refreshed, which
+     the weekly pass moves on groups that have been there for months. */
+  else if (query.sort === 'new') res = res.order('first_seen_at', { ascending: false, nullsFirst: false });
+  else res = res.order('members', { ascending: false, nullsFirst: false });
+  /* A TIE-BREAK, so paging cannot repeat or skip a row. Two groups with the
+     same size (or the same name) have no defined order between them, and
+     Postgres is free to return them differently on page 1 and page 2. */
+  const page = await res.order('external_id', { ascending: true }).range(from, from + limit - 1);
+  if (page.error) {
     /* A database that has not run the migration says so in Hebrew, naming the
        file — the same answer every other feature here gives, because the
        alternative is a screen that looks empty rather than un-migrated. */
-    if (CATALOG_MISSING.test(res.error.message)) {
+    if (CATALOG_MISSING.test(page.error.message)) {
       throw new Error('מאגר הקבוצות הארצי עוד לא קיים במסד. צריך להריץ את social-latest.sql ב-Supabase פעם אחת.');
     }
-    throw new Error(res.error.message);
+    throw new Error(page.error.message);
   }
-  return { rows: (res.data ?? []) as unknown as CatalogGroup[], total: res.count ?? 0 };
+  return { rows: (page.data ?? []) as unknown as CatalogGroup[], total: page.count ?? 0 };
 }
 
 /**
@@ -332,6 +360,37 @@ export async function catalogStats(): Promise<{ total: number; unavailable: numb
     unavailable: gone.count ?? 0,
     updatedAt: (newest.data as { last_seen_at?: string } | null)?.last_seen_at ?? null,
   };
+}
+
+/**
+ * WHICH OF THESE GROUPS HE ALREADY HAS — the "כבר במערכת" mark.
+ *
+ * ONE QUERY FOR THE WHOLE SCREEN, not one per row. The catalog shows sixty
+ * groups at a time out of thousands; asking "is this one mine" per row is
+ * sixty round trips for a question one `in(...)` answers.
+ *
+ * IDS ONLY. The screen needs to know whether a row is already in his list —
+ * not its name, its city or anything else about it — and a target row carries
+ * things the catalog has no business drawing.
+ */
+export async function listTargetExternalIds(): Promise<Set<string>> {
+  const out = new Set<string>();
+  /* Paged, because PostgREST stops at a thousand rows and his own list has
+     passed two hundred and ninety. */
+  for (let from = 0; ; from += 1000) {
+    const { data, error } = await db()
+      .from('social_targets')
+      .select('external_id')
+      .eq('channel', 'facebook_group')
+      .neq('external_id', '')
+      .order('external_id', { ascending: true })
+      .range(from, from + 999);
+    if (error) throw new Error(error.message);
+    const rows = (data ?? []) as { external_id: string }[];
+    for (const r of rows) if (r.external_id) out.add(r.external_id);
+    if (rows.length < 1000) break;
+  }
+  return out;
 }
 
 /**

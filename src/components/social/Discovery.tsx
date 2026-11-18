@@ -101,6 +101,10 @@ export function GroupRow({
   run = null,
   ended = null,
   fallbackImage = null,
+  offerAdd = false,
+  openAsMember = false,
+  extraFacts = [],
+  mark = null,
   onToggle,
   onAdopt,
   onHide,
@@ -171,9 +175,60 @@ export function GroupRow({
    * front of it: what discovery stored is the newer of the two.
    */
   fallbackImage?: string | null;
+  /**
+   * OFFER THE ADD BUTTON EVEN THOUGH NOBODY SAID HE IS A MEMBER.
+   *
+   * Off by default, which is this screen's rule and stays this screen's rule:
+   * גילוי קבוצות only offers "הוסף לרשימה" where Facebook's own search said
+   * חבר, because "זה נותן לי לצרף לרשימה קבוצות שאני עדיין לא חבר בהם" was a
+   * real complaint and a group he is not in is a publishing target that fails
+   * once a day.
+   *
+   * The national catalog is the one caller that turns it on, and it is a
+   * different question there: the catalog is a shared list of groups that
+   * EXIST, with no claim about anybody's membership — adding one is how a
+   * campaign reaches a city he has never searched. So the row offers both
+   * actions (open the group, and add it), the badge says nothing it cannot
+   * know, and whether this account may really publish there is decided where
+   * it always is: by the machine, per group, when it gets there.
+   */
+  offerAdd?: boolean;
+  /**
+   * DRAW THE OPEN ACTION AS "you are in this one" — "פתח קבוצה", quiet skin.
+   *
+   * OFF BY DEFAULT, and that default is load-bearing: this screen decides it
+   * from `membership` alone, and a REFUSED group (left, or told it cannot
+   * publish) must keep reading "פתח להצטרפות" — discovery-row.test.ts pins
+   * exactly that, because telling him he is in a group Facebook just refused
+   * is the desync he reported. An earlier version of this prop keyed on
+   * `already` instead, which is true for most refused rows and so moved that
+   * sentence on a screen that was not supposed to change at all.
+   *
+   * The catalog passes it for a group that is already in his publishing list,
+   * where "הצטרפות" is the one word that cannot be right.
+   */
+  openAsMember?: boolean;
+  /**
+   * Facts this row's own screen knows that discovery does not.
+   *
+   * The catalog stores a city and a language per group and drew both before
+   * it moved onto this row; without them a catalog row says only its size and
+   * whether it is public, which is less than it knew. Appended, never
+   * replacing: the size and the privacy stay where they are on both screens.
+   */
+  extraFacts?: string[];
+  /**
+   * One extra chip, for something only the caller can know.
+   *
+   * The catalog's is "לא זמינה" — a group the catalog has marked as gone.
+   * Without it an unavailable group is drawn exactly like a live one and
+   * offers to be added to the publishing list.
+   */
+  mark?: { tone: 'warn' | 'brand' | 'good'; text: string } | null;
   onToggle: () => void;
   onAdopt: () => void;
-  onHide: () => void;
+  /** Omitted by the catalog: a shared row is not one user's to hide. */
+  onHide?: () => void;
 }) {
   /*
    * ADDED ONLY WHERE THE SEARCH SAID HE IS A MEMBER. Not "not proven
@@ -192,11 +247,19 @@ export function GroupRow({
    * back on by hand is believed again on the next load.
    */
   const membership: Membership = refused ? 'none' : row.membership;
-  const canAdd = !already && membership === 'member';
+  /* `already` still vetoes it everywhere — a group in the publishing list has
+     nothing to add — and the membership rule is untouched for this screen.
+     See the prop's note for why the catalog is allowed past it. */
+  const canAdd = !already && (offerAdd || membership === 'member');
+  /* What the open action says and how loud it is. `membership` is this
+     screen's answer; `openAsMember` is the catalog's, for a group that is
+     already in the publishing list. Neither of them is `already`. */
+  const asMember = membership === 'member' || openAsMember;
 
   const facts = [
     row.members !== null ? `${membersText(row.members)} חברים` : '',
     PRIVACY_LABEL[row.privacy],
+    ...extraFacts,
   ].filter(Boolean);
 
   /*
@@ -315,6 +378,22 @@ export function GroupRow({
                 {t('אי אפשר לפרסם')}
               </span>
             )}
+            {/* The caller's own chip — see the prop. Before the badges that
+                belong to this screen, because it is the one thing on the row
+                that may change what he does with it. */}
+            {mark && (
+              <span
+                className={`inline-flex items-center rounded-full px-1.5 py-0.5 text-[11px] font-bold ${
+                  mark.tone === 'warn'
+                    ? 'bg-warning-400/10 text-warning-400'
+                    : mark.tone === 'good'
+                      ? 'bg-success-400/10 text-success-400'
+                      : 'bg-brand-400/10 text-brand-300'
+                }`}
+              >
+                {mark.text}
+              </span>
+            )}
             {/* The mark, not a filter. Its one line of explanation is under
                 the heading in ResultsCard, said once for the whole list
                 rather than guessed at from a chip. */}
@@ -424,17 +503,17 @@ export function GroupRow({
               target="_blank"
               rel="noopener noreferrer"
               size="sm"
-              variant={membership === 'member' ? 'secondary' : 'primary'}
+              variant={asMember ? 'secondary' : 'primary'}
               /* The two skins the brief names, chosen by the SAME condition as
                  before. `!` on the border because the secondary variant carries
                  border-ink-700 and both are one-class border-colour utilities in
                  the same layer — the later one wins. Measured in a browser:
                  without it the purple edge never appeared at all. */
               className={`w-full whitespace-nowrap px-1 text-[11px] ${
-                membership === 'member' ? '!border-brand-400/35 text-brand-400' : ''
+                asMember ? '!border-brand-400/35 text-brand-400' : ''
               }`}
             >
-              {membership === 'member' ? 'פתח קבוצה' : 'פתח להצטרפות'}
+              {asMember ? 'פתח קבוצה' : 'פתח להצטרפות'}
             </ButtonLink>
           )}
         </div>
@@ -444,6 +523,7 @@ export function GroupRow({
              same onHide, as a ⋮. In the row's flow and never floating over it:
              floated, it measured 36×23px on top of "פתח להצטרפות" at every
              width, so a thumb aiming at the button hid the group instead. */}
+        {onHide && (
         <button
           type="button"
           aria-label={`הסתר את ${keep(row.name)}`}
@@ -463,6 +543,7 @@ export function GroupRow({
         >
           <MoreIcon aria-hidden className="h-4 w-4" />
         </button>
+        )}
       </div>
     </div>
   );

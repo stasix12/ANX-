@@ -875,9 +875,31 @@ const eq = (a: unknown, b: unknown, msg: string) => {
    * always been protecting — a group that cannot be published to must not be
    * offered for the publishing list — and it now catches one more way in.
    */
+  /*
+   * ─── 18.11.2026 · THE SAME RULE, NOW WITH A SECOND SCREEN ON THIS ROW ──
+   *
+   * GroupRow is drawn by TWO screens since the national catalog: גילוי
+   * קבוצות, where Facebook's own search tells us who he is a member of, and
+   * the catalog, where nothing does — the catalog is a shared list of groups
+   * that EXIST, and picking from it is the whole of the brief's §6.
+   *
+   * So the rule did not move; it got a door with a key. `offerAdd` is the
+   * key, it is OFF unless a caller asks for it, and THIS screen never asks.
+   * Those are the three things checked here, and together they are strictly
+   * more than the single expression this assertion used to match:
+   *
+   *   1. the membership word is still the corrected one (the desync fix);
+   *   2. `already` still vetoes, and without `offerAdd` the condition is
+   *      still "member, and nothing softer";
+   *   3. the prop defaults to false, and the discovery page does not pass it
+   *      — so no row on THIS screen can offer to add a group he is not in.
+   */
+  const discoverPageSrc = readFileSync(new URL('../../src/app/social/discover/page.tsx', import.meta.url), 'utf8');
   is(
     /const membership: Membership = refused \? 'none' : row\.membership;/.test(rowSrc) &&
-      /const canAdd = !already && membership === 'member';/.test(rowSrc),
+      /const canAdd = !already && \(offerAdd \|\| membership === 'member'\);/.test(rowSrc) &&
+      /offerAdd = false/.test(rowSrc) &&
+      !/offerAdd/.test(discoverPageSrc),
     "A ROW ONLY OFFERS \"הוסף לרשימה\" WHERE HE IS A MEMBER AND NOTHING SINCE HAS SAID OTHERWISE — not where the card merely failed to say otherwise",
   );
   is(
@@ -1479,7 +1501,17 @@ const eq = (a: unknown, b: unknown, msg: string) => {
   );
 
   is(/const membership: Membership = refused \? 'none' : row\.membership;/.test(row), 'the badge is drawn from the newer evidence, not from the stored column');
-  is(/const canAdd = !already && membership === 'member';/.test(row), "and the action that means \u201cyou are in this one\u201d follows the same word");
+  /* The same word, through the same door as above: `offerAdd` is the
+     catalog's key and is off unless a caller turns it on, so on THIS screen
+     the condition is still "member, and nothing softer". */
+  is(/const canAdd = !already && \(offerAdd \|\| membership === 'member'\);/.test(row) && /offerAdd = false/.test(row),
+    "and the action that means \u201cyou are in this one\u201d follows the same word");
+  /* AND SO DOES THE OPEN ACTION'S WORDING. It reads `membership`, corrected,
+     plus the catalog's explicit prop — never `already`, which is true for
+     most REFUSED groups and would tell him he is inside a group Facebook has
+     just refused him from. */
+  is(/const asMember = membership === 'member' \|\| openAsMember;/.test(row),
+    'and so does the wording of "פתח קבוצה", which must never key on `already`');
   is(!/row\.membership/.test(row.slice(row.indexOf('const canAdd'))), 'with nothing below it still reading the stored column directly — that is how two button skins were written and never painted');
 
   /* ─── the write side: the stored row stops saying it too ────────────── */

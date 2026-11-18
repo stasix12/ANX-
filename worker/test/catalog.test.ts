@@ -127,6 +127,16 @@ for (const col of ['city', 'language', 'category']) {
   is(new RegExp(`\\.eq\\('${col}'`).test(searchFn), `${col} is filtered in the query`);
 }
 /*
+ * THE ORDER IS THE DATABASE'S TOO, all three of them — "מיון", the control
+ * גילוי קבוצות carries. Sorting the sixty rows on screen would be an order
+ * over a page.
+ */
+for (const sort of ['name', 'new']) {
+  is(new RegExp(`query\\.sort === '${sort}'`).test(searchFn), `the "${sort}" order is decided in the query`);
+}
+is(/\.order\('external_id'/.test(searchFn),
+  'and every order ends in a tie-break, or paging can repeat or skip a row with the same size');
+/*
  * AND THE SCREEN DOES NOT SECOND-GUESS IT. `.filter(` on the rows would be a
  * filter over one page, drawn beside a count of the whole match — the shape
  * of the bug this whole design exists to avoid.
@@ -151,6 +161,79 @@ for (const forbidden of ['startDiscovery', 'requestGroupRefresh', 'social_comman
   is(!screen.includes(forbidden), `the catalog screen does not call ${forbidden}`);
 }
 is(/searchCatalog|catalogStats|catalogFacets/.test(screen), 'it reads the catalog, and that is all it does');
+
+/* ══════════ 6b. THE ROW IS גילוי קבוצות' ROW, NOT A COPY OF IT ═══════════ */
+/*
+ * "במאגר הארצי שיהיה כמו עיצוב של גילוי קבוצות אם אותם אופציות."
+ *
+ * THE COMPONENT, NOT THE MARKUP. A second copy of that card would drift from
+ * it within a week — and the point of the request is that the two screens
+ * look the same, which only a shared component keeps true.
+ */
+is(/import \{ Figure, GroupRow \} from '\.\/Discovery'/.test(screen), 'the catalog draws the discovery row and the discovery figures');
+is(/<GroupRow/.test(screen), 'every result is one of those rows');
+/*
+ * AND IT TELLS THAT ROW ONLY WHAT IT KNOWS. The catalog knows a group
+ * EXISTS; it has never known whether this account is a member, so the row is
+ * handed 'unknown' and no badge claims otherwise.
+ */
+is(/membership: 'unknown'/.test(screen), "no catalog row claims a membership — the shared table cannot know one");
+is(/offerAdd=\{Boolean\(onAdd\)\}/.test(screen), 'the add action is turned on explicitly, because the discovery rule is "only where Facebook said חבר"');
+/* NO ⋮: hiding a row would hide it for every other user of the app. */
+is(!/onHide=/.test(screen), 'the catalog never offers to hide a row from a table it shares with everyone');
+/* The mark comes from his own list, read once for the screen. */
+is(/listTargetExternalIds/.test(screen), '"כבר במערכת" is read from his publishing list');
+is(/already=\{mine\.has\(g\.external_id\)\}/.test(screen), 'and it is that list the badge is drawn from');
+/*
+ * ─── WHAT THE SHARED ROW WOULD OTHERWISE NOT KNOW ───────────────────────
+ *
+ * Moving onto גילוי קבוצות' row dropped three things the catalog stores and
+ * used to draw, and each one is a real loss on screen: the city, the
+ * language, and — the one that changes what he does — that a group is no
+ * longer available. An unavailable group drawn like any other is a group he
+ * adds to his publishing list for nothing.
+ */
+is(/extraFacts=\{\[g\.city/.test(screen), "the row keeps the catalog's own city");
+is(/CATALOG_LANGUAGE_LABEL\[g\.language\]/.test(screen), 'and its language');
+is(/mark=\{g\.status === 'unavailable'/.test(screen), 'and a group marked unavailable says so');
+/*
+ * AND THE OPEN ACTION. A group already in his publishing list opens; it does
+ * not "join". That is passed explicitly rather than derived from `already`
+ * inside the row — see below for why.
+ */
+is(/openAsMember=\{mine\.has\(g\.external_id\)\}/.test(screen), 'a group he already has opens rather than offering to join it');
+/*
+ * THE BULK ADD MARKS THEM HIS. Without this the rows he just added go on
+ * offering "הוסף לרשימה" and the "כבר אצלי" tile keeps its old number — the
+ * screen contradicting a write it just made.
+ */
+const bulk = slice(screen, "onAdd(chosenList, 'bulk')", '</Button>');
+is(/setMine/.test(bulk), 'a bulk add marks those groups as his, at once');
+/* And a row's own button must not close a sheet he is still picking in. */
+is(/source === 'bulk'/.test(editor), "the campaign sheet closes on a deliberate bulk add, never after one row");
+
+/* The discovery screen's own rule is untouched by the new prop. */
+const rowFn = slice(code('src/components/social/Discovery.tsx'), 'export function GroupRow', 'export function WalkThrough');
+is(/offerAdd = false/.test(rowFn), 'the add-anyway prop is OFF by default, so גילוי קבוצות keeps its membership rule');
+is(/!already && \(offerAdd \|\| membership === 'member'\)/.test(rowFn), 'and a group already in the list is never offered for adding, on either screen');
+/*
+ * ─── AND THE ONE THAT ALREADY BIT ONCE ──────────────────────────────────
+ *
+ * The open action's wording must still be decided by `membership` (plus the
+ * catalog's explicit prop) and NEVER by `already`. A group Facebook has
+ * refused is usually still in the publishing list — `already` is true for it
+ * — so keying on `already` moved "פתח להצטרפות" to "פתח קבוצה" on exactly
+ * the rows discovery-row.test.ts exists to protect: telling him he is inside
+ * a group that just refused him is the desync he reported.
+ */
+is(/const asMember = membership === 'member' \|\| openAsMember;/.test(rowFn),
+  'the open action reads membership and the explicit prop — never `already`');
+is(!/already \? 'פתח קבוצה'|membership === 'member' \|\| already/.test(rowFn),
+  'and `already` is nowhere in that decision');
+/* first_seen_at is when it entered the catalog; last_seen_at is when it was
+   last refreshed, which the weekly pass moves on months-old rows. */
+is(/sort === 'new'\) res = res\.order\('first_seen_at'/.test(searchFn),
+  '"נוספו לאחרונה" orders by when the group entered the catalog');
 
 /* The tab strip the brief names, with his three words in his order. */
 const strip = slice(groups, "variant=\"tabs\"", '/>');

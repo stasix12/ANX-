@@ -126,7 +126,21 @@ async function main(): Promise<void> {
     is(header.includes('מאגר ארצי'), 'the header names the catalog');
     is(/20,000|20000/.test(header.replace(/‏/g, '')), `and says how many groups are in it — "${header}"`);
     is(header.includes('עודכן לאחרונה'), 'and when it last changed');
-    is(header.includes('206'), 'including how many are no longer available');
+
+    /*
+     * AND THE THREE TILES גילוי קבוצות DRAWS — "שיהיה כמו עיצוב של גילוי
+     * קבוצות". The same Figure component, so this also checks they are the
+     * same three tiles that screen is measured at: equal heights, one line
+     * each.
+     */
+    const figures = page.locator('[data-group-catalog] [data-figure]');
+    eq(await figures.count(), 3, 'three figure tiles, as on גילוי קבוצות');
+    const figureText = (await figures.allTextContents()).join(' | ').replace(/\s+/g, ' ');
+    is(/20,?000/.test(figureText.replace(/‏/g, '')), `the catalog's size is one of them — "${figureText}"`);
+    is(figureText.includes('כבר אצלי'), 'how many are already his is another');
+    is(figureText.includes('206'), 'and how many are no longer available is the third');
+    const heights = await figures.evaluateAll((els: Element[]) => els.map((e) => Math.round(e.getBoundingClientRect().height)));
+    eq(new Set(heights).size, 1, `the three tiles are exactly the same height (${heights.join(', ')})`);
 
     /* ───────────── 3. THE SEARCH AND THE FILTERS GO TO THE DATABASE ───── */
     const queries = () => page.evaluate(() => window.__queries);
@@ -178,9 +192,99 @@ async function main(): Promise<void> {
       await page.waitForFunction(() => document.querySelectorAll('[data-group-catalog] li').length === 60, null, { timeout: 4000 });
     }
 
+    /* ───────────── 4b. THE ROW IS גילוי קבוצות' ROW ───────────────────── */
+    /*
+     * Same component, so the same parts are on it: a picture, the name with
+     * its own direction, the facts line, a checkbox and ONE action.
+     */
+    const firstRow = rows.nth(0);
+    eq(await firstRow.locator('[role="checkbox"]').count(), 1, 'every row has the discovery checkbox');
+    eq(await firstRow.locator('[data-group-name]').count(), 1, 'and the discovery name element');
+    eq(await firstRow.locator('[data-no-translate]').count(), 1, 'which is not translated');
+    /*
+     * NO ⋮ — "הסתר" writes on a row shared with every other user of the app,
+     * so the catalog does not offer it. This is the property, not a style.
+     */
+    eq(await rows.locator('[aria-label^="הסתר"]').count(), 0, 'no row offers to hide a group from a shared catalog');
+    /*
+     * NO ROW CLAIMS MEMBERSHIP. The catalog knows a group exists; it has
+     * never known who is in it, and a חבר badge read off a shared table
+     * would be a claim about another account.
+     */
+    /*
+     * `\b` IS NOT A WORD BOUNDARY IN HEBREW. The first version of this line
+     * was /\bחבר\b/, which cannot match at all — \b is defined against
+     * [A-Za-z0-9_], so every Hebrew letter is a non-word character and the
+     * assertion passed on any screen whatsoever. Matched on the separators
+     * this row really uses instead (space or the · between facts), so
+     * "חברים" in the size line is not mistaken for the membership badge.
+     */
+    const allRowText = (await rows.allTextContents()).join(' | ').replace(/\s+/g, ' ');
+    is(/חברים/.test(allRowText), 'the rows really do carry the facts line (so the next check is not vacuous)');
+    is(!/(^|[ |·])חבר([ |·]|$)/.test(allRowText), 'and no row says חבר — the catalog cannot know that');
+    is(!/לא הצטרפת|ביקשת/.test(allRowText), 'nor any other membership word');
+
+    /* THE CATALOG'S OWN FACTS ARE STILL ON THE ROW. Moving onto the shared
+       row dropped the city and the language once — a catalog row that says
+       only its size and "ציבורית" knows less than the catalog does. */
+    const factsLine = (await rows.nth(0).textContent())?.replace(/\s+/g, ' ') ?? '';
+    is(/חברים/.test(factsLine), `the row says how big the group is — "${factsLine}"`);
+    is(/ציבורית|פרטית/.test(factsLine), 'and whether it is public, as on גילוי קבוצות');
+    const cityRow = rows.filter({ hasText: 'באר שבע' });
+    is((await cityRow.count()) > 0, 'the city the catalog stores is drawn on the row');
+    const langRow = rows.filter({ hasText: 'רוסית' });
+    is((await langRow.count()) > 0, 'and so is the language');
+
+    /* AND A GROUP THE CATALOG HAS MARKED GONE SAYS SO. Without it an
+       unavailable group is drawn exactly like a live one and offered for the
+       publishing list. The stub marks every 97th row unavailable; they sort
+       last, so this asks the database for them. */
+    await page.selectOption('[data-group-catalog] select[aria-label="מיון"]', 'name');
+    await page.waitForFunction(() => window.__queries.some((q) => q.sort === 'name'), null, { timeout: 4000 });
+    await page.selectOption('[data-group-catalog] select[aria-label="מיון"]', 'members');
+    await page.waitForTimeout(150);
+    /* The stub marks every 97th group unavailable, and they sort last — so
+       this asks for one by name rather than hoping it is on the first page. */
+    await page.fill('[data-group-catalog] input[type="search"]', 'Объявления 97');
+    await page.waitForFunction(() => window.__queries.some((q) => q.q === 'Объявления 97'), null, { timeout: 4000 });
+    await page.waitForFunction(
+      () => [...document.querySelectorAll('[data-group-catalog] li')]
+        .some((li) => (li.querySelector('[data-group-name]')?.textContent ?? '').trim() === 'Объявления 97'),
+      null,
+      { timeout: 4000 },
+    );
+    const goneRow = rows.filter({ has: page.locator('[data-group-name]', { hasText: /^Объявления 97$/ }) });
+    is((await goneRow.textContent())?.includes('לא זמינה'),
+      'a group the catalog has marked unavailable says so on its row, instead of looking like any other');
+    await page.fill('[data-group-catalog] input[type="search"]', '');
+    await page.waitForFunction(() => document.querySelectorAll('[data-group-catalog] li').length === 60, null, { timeout: 4000 });
+    /* The two groups the stub says are already in his publishing list carry
+       "כבר במערכת" and offer "פתח קבוצה" instead of adding them twice. */
+    const mineRow = rows.filter({ hasText: 'כבר במערכת' });
+    eq(await mineRow.count(), 2, 'the groups already in his list are marked, and only those');
+    is((await mineRow.first().textContent())?.includes('פתח קבוצה'), 'and such a row offers to open the group, not to add it again');
+    is(!(await mineRow.first().textContent())?.includes('הוסף לרשימה'), 'never to add it a second time');
+
+    /* ───────────── 4c. ONE ROW, ADDED FROM ITS OWN BUTTON ─────────────── */
+    const addable = rows.filter({ hasNotText: 'כבר במערכת' }).first();
+    const addableName = ((await addable.locator('[data-group-name]').textContent()) ?? '').trim();
+    await addable.getByRole('button', { name: 'הוסף לרשימה' }).click();
+    await page.waitForFunction(() => window.__added.length === 1, null, { timeout: 4000 });
+    eq((await page.evaluate(() => window.__added[0].length)), 1, 'the row button hands over exactly that one group');
+    /* And the row says so at once, rather than waiting for a reload. */
+    await page.waitForFunction(
+      (name) => [...document.querySelectorAll('[data-group-catalog] li')]
+        .some((li) => (li.querySelector('[data-group-name]')?.textContent ?? '').trim() === name
+          && (li.textContent ?? '').includes('כבר במערכת')),
+      addableName,
+      { timeout: 4000 },
+    );
+    is(true, 'and the row it was pressed on says "כבר במערכת" immediately');
+    await page.evaluate(() => { window.__added = []; });
+
     /* ───────────── 5. SELECTION, AND IT SURVIVES EVERYTHING ───────────── */
-    await rows.nth(0).locator('button').click();
-    await rows.nth(1).locator('button').click();
+    await rows.nth(0).locator('[role="checkbox"]').click();
+    await rows.nth(1).locator('[role="checkbox"]').click();
     const bar = page.locator('[data-group-catalog] .sticky');
     is((await bar.textContent())?.includes('2'), 'two groups selected, and the bar says two');
 
@@ -198,19 +302,73 @@ async function main(): Promise<void> {
     await page.waitForFunction(() => document.querySelectorAll('[data-group-catalog] li').length === 60, null, { timeout: 4000 });
 
     /* "בחירת כל התוצאות המסוננות" — and it says what it takes. */
-    await page.locator('[data-group-catalog] button', { hasText: 'בחר את המוצגות' }).click();
+    await page.locator('[data-group-catalog] button', { hasText: 'בחר את המוצגות' }).first().click();
     is((await bar.textContent())?.includes('60'), 'select-all-shown takes the whole page that is drawn');
+
+    /*
+     * ─── SIXTY AT ONCE IS A DIFFERENT GESTURE FROM ONE ──────────────────
+     *
+     * "זה נותן לי לצרף לרשימה קבוצות שאני עדיין לא חבר בהם" — the rule
+     * גילוי קבוצות keeps by only offering the button where Facebook said
+     * חבר. The catalog cannot know that, so it makes the SIZE visible: a
+     * selection of 25 or more says how many and what happens next before it
+     * writes anything.
+     */
+    await page.locator('[data-group-catalog] .sticky button', { hasText: 'הוסף לקבוצות שלי' }).click();
+    await page.waitForSelector('text=/להוסיף \\d+ קבוצות לרשימה שלך\\?/', { timeout: 4000 });
+    is(true, 'a bulk add of sixty asks first, and says how many');
+    const ask = (await page.locator('[role="dialog"], .fixed').allTextContents()).join(' ');
+    is(/דורשות טיפול/.test(ask), 'and says where a group he cannot publish in will end up');
+    eq(await page.evaluate(() => window.__added.length), 0, 'and nothing was written while it asked');
+    await page.locator('button', { hasText: 'ביטול' }).first().click();
+    await page.waitForTimeout(150);
+    eq(await page.evaluate(() => window.__added.length), 0, 'cancelling really cancels');
+    is((await bar.textContent())?.includes('60'), 'and the selection is still there afterwards');
 
     /* THE HAND-OFF, AND WHAT HAPPENS WHEN IT FAILS. */
     await page.evaluate(() => { window.__addFails = true; });
-    await page.locator('[data-group-catalog] button', { hasText: 'הוסף לקבוצות שלי' }).click();
+    await page.locator('[data-group-catalog] .sticky button', { hasText: 'הוסף לקבוצות שלי' }).click();
+    await page.locator('button', { hasText: /^הוסף \d+$/ }).first().click();
     await page.waitForFunction(() => window.__added.length === 1, null, { timeout: 4000 });
     eq((await page.evaluate(() => window.__added[0].length)), 60, 'the groups handed over are the ones that were selected');
     is((await bar.textContent())?.includes('60'), 'a failed hand-off KEEPS the selection — sixty groups are not re-picked by hand');
     await page.evaluate(() => { window.__addFails = false; });
-    await page.locator('[data-group-catalog] button', { hasText: 'הוסף לקבוצות שלי' }).click();
+    await page.locator('[data-group-catalog] .sticky button', { hasText: 'הוסף לקבוצות שלי' }).click();
+    await page.locator('button', { hasText: /^הוסף \d+$/ }).first().click();
     await page.waitForFunction(() => document.querySelectorAll('[data-group-catalog] .sticky').length === 0, null, { timeout: 4000 });
     is(true, 'and a successful one clears it');
+
+    /* ───────────── 5b. THE ORDER, AND IT IS THE DATABASE'S ───────────── */
+    /*
+     * "מיון" is the control גילוי קבוצות has over its results, and the whole
+     * question is WHERE the sorting happens: the page holds sixty of twenty
+     * thousand rows, so an order applied in the browser is an order over the
+     * page. Each choice must leave in the query.
+     */
+    const sizeFirst = ((await rows.nth(0).locator('[data-group-name]').textContent()) ?? '').trim();
+    await page.selectOption('[data-group-catalog] select[aria-label="מיון"]', 'name');
+    await page.waitForFunction(() => window.__queries.some((q) => q.sort === 'name'), null, { timeout: 4000 });
+    await page.waitForFunction(
+      (was) => ((document.querySelector('[data-group-catalog] li [data-group-name]')?.textContent ?? '').trim()) !== was,
+      sizeFirst,
+      { timeout: 4000 },
+    );
+    const nameFirst = ((await rows.nth(0).locator('[data-group-name]').textContent()) ?? '').trim();
+    is(nameFirst !== sizeFirst, `sorting by name really changed the list (${sizeFirst} → ${nameFirst})`);
+    /* AND IT STARTED OVER. A new order with the old offset would hand him
+       page two of an order he never saw page one of. */
+    const afterSort = (await queries()).filter((q) => q.sort === 'name');
+    eq(afterSort[0].offset ?? 0, 0, 'a new order asks for the first page, not for the old offset');
+    await page.selectOption('[data-group-catalog] select[aria-label="מיון"]', 'new');
+    await page.waitForFunction(() => window.__queries.some((q) => q.sort === 'new'), null, { timeout: 4000 });
+    is(true, '"נוספו לאחרונה" is sent to the database too');
+    await page.selectOption('[data-group-catalog] select[aria-label="מיון"]', 'members');
+    await page.waitForFunction(
+      (was) => ((document.querySelector('[data-group-catalog] li [data-group-name]')?.textContent ?? '').trim()) === was,
+      sizeFirst,
+      { timeout: 4000 },
+    );
+    is(true, 'and going back to the default restores exactly the list it opened on');
 
     /* ───────────── 6. EVERYTHING DRAWN MEANS NO BUTTON ────────────────── */
     await page.selectOption('[data-group-catalog] select[aria-label="קטגוריה"]', 'יד שנייה');

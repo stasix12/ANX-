@@ -15,6 +15,32 @@
  */
 export const CATALOG_PAGE = 60;
 
+/**
+ * Which groups the publishing list already holds — the "כבר במערכת" mark.
+ *
+ * Two of the twenty thousand, chosen by id so the test can point at exactly
+ * those rows and at a row that is NOT one of them.
+ */
+/*
+ * THE TWO BIGGEST, not 'cat-1' and 'cat-2'.
+ *
+ * The catalog's default order is the biggest first, so a mark put on two
+ * arbitrary ids lands on rows that are fourteen thousand places down and the
+ * test asserts against something nobody can see. These two are on the first
+ * page by construction, whatever the member formula below becomes.
+ */
+export const ALREADY_MINE: string[] = [];
+export async function listTargetExternalIds(): Promise<Set<string>> {
+  if (!ALREADY_MINE.length) {
+    const biggest = Array.from({ length: TOTAL }, (_, i) => group(i + 1))
+      .sort((a, b) => (b.members ?? -1) - (a.members ?? -1) || a.external_id.localeCompare(b.external_id))
+      .slice(0, 2)
+      .map((g) => g.external_id);
+    ALREADY_MINE.push(...biggest);
+  }
+  return new Set(ALREADY_MINE);
+}
+
 export interface CatalogGroup {
   external_id: string;
   name: string;
@@ -30,11 +56,14 @@ export interface CatalogGroup {
   last_seen_at: string;
 }
 
+export type CatalogSort = 'members' | 'name' | 'new';
+
 export interface CatalogQuery {
   q?: string;
   city?: string;
   language?: string;
   category?: string;
+  sort?: CatalogSort;
   offset?: number;
   limit?: number;
 }
@@ -96,6 +125,15 @@ export async function searchCatalog(query: CatalogQuery = {}): Promise<CatalogPa
     if (query.category && g.category !== query.category) continue;
     all.push(g);
   }
+  /* The stand-in for Postgres' ORDER BY: available first, then the chosen
+     order, then the id as a tie-break — exactly what searchCatalog asks for. */
+  const rank = (g: CatalogGroup) => (g.status === 'unavailable' ? 1 : 0);
+  all.sort((a, b) => {
+    if (rank(a) !== rank(b)) return rank(a) - rank(b);
+    if (query.sort === 'name') return a.name.localeCompare(b.name, 'he') || a.external_id.localeCompare(b.external_id);
+    if (query.sort === 'new') return b.last_seen_at.localeCompare(a.last_seen_at) || a.external_id.localeCompare(b.external_id);
+    return (b.members ?? -1) - (a.members ?? -1) || a.external_id.localeCompare(b.external_id);
+  });
   const from = query.offset ?? 0;
   const limit = query.limit ?? CATALOG_PAGE;
   return { rows: all.slice(from, from + limit), total: all.length };

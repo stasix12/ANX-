@@ -6,6 +6,7 @@ import { detectCity } from '@/lib/social/cities';
 import { JOINED_QUERY, mergeDiscovered, normalizeQuery, type DiscoveredGroup, type StoredGroup } from '@/lib/social/discovery';
 import { renderPostText } from '@/lib/social/compose';
 import { planQueue } from '@/lib/social/plan';
+import { catalogLanguage } from '@/lib/social/language';
 import { PREP_LEAD_MS, accountGapLabel, accountGapSeconds, clampCommentDelay, commentArmCutoff, evaluateQueueItem } from '@/lib/social/rules';
 import { Admission, laneCountFor } from './admission';
 import { CHORE_NEEDS_MS, choreFits, roomBeforeNextPublish } from './chore-window';
@@ -1227,6 +1228,8 @@ async function tick(state: WorkerState): Promise<void> {
      read and, at most once a night, one update — the looking is a chore and
      is paced by the chore window like everything else. */
   await nightlyGroupCheck();
+  /* Once a week, and it opens no browser window at all — see catalogSync(). */
+  await catalogSync();
 
   const gate = await spacingGate(db, limits, browser);
   /*
@@ -1847,6 +1850,278 @@ async function nightlyGroupCheck(): Promise<void> {
     'nightly_group_check',
     `בדיקה יומית: ${n} קבוצות ייבדקו בהדרגה כדי לוודא שעדיין אפשר לפרסם בהן. זה נעשה לאט, בין פרסומים.`,
     { groups: n },
+  );
+}
+
+/* ─────────────────────── המאגר הארצי · סנכרון שבועי ───────────────────────
+ *
+ * "המערכת תבצע סנכרון אוטומטי אחת ל-7 ימים." · "לא צריך ענן, הכל דרך המחשב."
+ *
+ * ─── IT OPENS NO FACEBOOK PAGE. NOT ONE ──────────────────────────────────
+ *
+ * This is the whole design, and it is why this function sits here beside the
+ * nightly check rather than in the `chores` table: every chore in that table
+ * opens a browser window and is paced against the publishing gap, because a
+ * window is what gets an account looked at. This is two SELECTs and at most a
+ * handful of writes against Postgres. It cannot cost the owner's account
+ * anything, so it does not have to be bought from the publishing budget.
+ *
+ * ─── SO WHERE DO THE GROUPS COME FROM ────────────────────────────────────
+ *
+ * From what this PC already knows, and nothing else:
+ *
+ *   · social_discovery_groups — every group a search has ever turned up. The
+ *     discovery screen already fills it, already paced, already the owner's
+ *     own action.
+ *   · social_targets — the groups he publishes to, which carry the best data
+ *     in the system: a city somebody checked and a category he filed himself.
+ *
+ * Both are per-business. The catalog is not: one row per group for every user
+ * of the app ("מאגר אחד משותף לכל המשתמשים"), which is what makes it worth
+ * having — a group a cleaning business in Arad found is a group a locksmith in
+ * Be'er Sheva can publish to tomorrow without searching for it. What stays
+ * private is on the other side of the line and is not touched here: whose
+ * groups they are, who is a member, which campaign posted what.
+ *
+ * ─── AND IT IS NOT A SCANNER IN DISGUISE ─────────────────────────────────
+ *
+ * There is no new Facebook mechanism here and none was invented: no API that
+ * lists a country's groups exists, and this product does not pretend
+ * otherwise ("אין להמציא יכולות שאינן קיימות"). The catalog grows at exactly
+ * the rate the owner's own discovery searches grow it, and the weekly pass is
+ * what carries those findings over into the shared table.
+ */
+const CATALOG_SYNC_EVERY_MS = 7 * 24 * 60 * 60_000;
+/** Rows per statement. An `in(...)` list is a URL, and a URL has a length. */
+const CATALOG_PUBLISH_BATCH = 200;
+/** Rows read from each source table in one pass — PostgREST stops at 1000. */
+const CATALOG_READ_PAGE = 500;
+/**
+ * How many rows one weekly pass may change.
+ *
+ * Inserts are batched, so the ceiling is about statements rather than rows;
+ * UPDATES are one row each (every row has a different name) and are the
+ * expensive half. A pass that would exceed this stops and says what it left,
+ * because a silent cap reads as "everything is in the catalog" when it is
+ * not.
+ */
+const CATALOG_SYNC_MAX_UPDATES = 150;
+
+/** What the catalog stores about a group, as this PC knows it. */
+interface CatalogFact {
+  external_id: string;
+  name: string;
+  url: string;
+  image_url: string;
+  members: number | null;
+  privacy: string;
+  city: string;
+  category: string;
+}
+
+/**
+ * Every group this PC knows, newest knowledge last so it wins.
+ *
+ * The order is deliberate: discovery rows first, the owner's own targets
+ * after, because a target carries a city somebody verified and a category he
+ * chose by hand — strictly better than anything a search result has.
+ */
+async function catalogFacts(db: Awaited<ReturnType<typeof workerDb>>): Promise<Map<string, CatalogFact>> {
+  const facts = new Map<string, CatalogFact>();
+
+  /* ── discovered groups ──────────────────────────────────────────────── */
+  for (let from = 0; ; from += CATALOG_READ_PAGE) {
+    const { data, error } = await db
+      .from('social_discovery_groups')
+      .select('external_id, name, url, image_url, members, privacy')
+      .neq('external_id', '')
+      .order('last_seen_at', { ascending: false, nullsFirst: false })
+      .range(from, from + CATALOG_READ_PAGE - 1);
+    if (error) {
+      console.error('[worker] ✗ קריאת הקבוצות שהתגלו למאגר הארצי נכשלה:', error.message);
+      break;
+    }
+    const rows = (data ?? []) as Partial<CatalogFact>[];
+    for (const r of rows) {
+      if (!r.external_id || !r.url) continue;
+      /* Newest sighting first, so an id already in hand is the better one. */
+      if (facts.has(r.external_id)) continue;
+      facts.set(r.external_id, {
+        external_id: r.external_id,
+        name: r.name ?? '',
+        url: r.url,
+        image_url: r.image_url ?? '',
+        members: typeof r.members === 'number' ? r.members : null,
+        privacy: r.privacy ?? 'unknown',
+        city: '',
+        category: '',
+      });
+    }
+    if (rows.length < CATALOG_READ_PAGE) break;
+  }
+
+  /* ── and the groups he actually publishes to ────────────────────────── */
+  for (let from = 0; ; from += CATALOG_READ_PAGE) {
+    const { data, error } = await db
+      .from('social_targets')
+      .select('external_id, name, url, image_url, city, category')
+      .eq('channel', 'facebook_group')
+      .neq('external_id', '')
+      .order('created_at', { ascending: true })
+      .range(from, from + CATALOG_READ_PAGE - 1);
+    if (error) {
+      console.error('[worker] ✗ קריאת הקבוצות שלי למאגר הארצי נכשלה:', error.message);
+      break;
+    }
+    const rows = (data ?? []) as Partial<CatalogFact>[];
+    for (const r of rows) {
+      if (!r.external_id || !r.url) continue;
+      const had = facts.get(r.external_id);
+      facts.set(r.external_id, {
+        external_id: r.external_id,
+        name: r.name || had?.name || '',
+        url: r.url,
+        image_url: r.image_url || had?.image_url || '',
+        /* A target row has no member count; the discovery row might. */
+        members: had?.members ?? null,
+        privacy: had?.privacy ?? 'unknown',
+        city: r.city ?? '',
+        category: r.category ?? '',
+      });
+    }
+    if (rows.length < CATALOG_READ_PAGE) break;
+  }
+
+  return facts;
+}
+
+/**
+ * Once every seven days: carry what this PC knows into the national catalog.
+ *
+ * @returns nothing. It is silent when there is nothing to carry.
+ */
+async function catalogSync(): Promise<void> {
+  const nowMs = Date.now();
+  const seen = await getSetting<{ catalogSyncAt?: string }>('maintenance', {});
+  const last = Date.parse(seen.catalogSyncAt ?? '');
+  /* A stamp in the FUTURE is treated as never, exactly as nightlyDue() does
+     it and for the same reason: a wrong clock must not switch the sync off
+     until the date catches up. */
+  const lastMs = Number.isFinite(last) && last <= nowMs ? last : 0;
+  if (lastMs && nowMs - lastMs < CATALOG_SYNC_EVERY_MS) return;
+
+  const db = await workerDb();
+  /*
+   * STAMPED BEFORE THE WORK, like the nightly check above. If the writes
+   * below fail — a missing table on a database that has not run v48, a
+   * permissions error — the next attempt is in a week rather than in five
+   * seconds, for ever.
+   */
+  await saveWorkerSetting('maintenance', { ...seen, catalogSyncAt: new Date(nowMs).toISOString() });
+
+  const facts = await catalogFacts(db);
+  if (!facts.size) return;
+
+  const ids = [...facts.keys()];
+  /* What the catalog already holds, read in the same batches the writes use. */
+  const held = new Map<string, Record<string, unknown>>();
+  for (let i = 0; i < ids.length; i += CATALOG_PUBLISH_BATCH) {
+    const slice = ids.slice(i, i + CATALOG_PUBLISH_BATCH);
+    const { data, error } = await db
+      .from('social_group_catalog')
+      .select('external_id, name, image_url, members, privacy, city, category, language')
+      .in('external_id', slice);
+    if (error) {
+      /* The one error worth a sentence: the table is not there yet. Said
+         once a week, not once a tick. */
+      console.error('[worker] ✗ קריאת המאגר הארצי נכשלה:', error.message);
+      return;
+    }
+    for (const row of (data ?? []) as { external_id: string }[]) held.set(row.external_id, row);
+  }
+
+  /* ── the ones the catalog has never seen ────────────────────────────── */
+  const fresh = ids.filter((id) => !held.has(id)).map((id) => facts.get(id) as CatalogFact);
+  let added = 0;
+  for (let i = 0; i < fresh.length; i += CATALOG_PUBLISH_BATCH) {
+    const slice = fresh.slice(i, i + CATALOG_PUBLISH_BATCH);
+    const { error } = await db.from('social_group_catalog').insert(
+      slice.map((f) => ({
+        external_id: f.external_id,
+        name: f.name,
+        url: f.url,
+        image_url: f.image_url,
+        members: f.members,
+        privacy: f.privacy,
+        city: f.city,
+        category: f.category,
+        language: catalogLanguage(f.name),
+        last_seen_at: new Date().toISOString(),
+      })),
+    );
+    if (error) {
+      console.error('[worker] ✗ הוספה למאגר הארצי נכשלה:', error.message);
+      break;
+    }
+    added += slice.length;
+  }
+
+  /* ── and the ones whose details moved ───────────────────────────────── */
+  /*
+   * ONLY WHAT REALLY CHANGED, field by field.
+   *
+   * An UPDATE per group per week over thousands of rows would be thousands
+   * of round trips for nothing — a group's name changes once a year. And
+   * `last_seen_at` is written only with a real change, which is what makes
+   * the "עודכן לאחרונה" line on the screen mean something: the last time the
+   * catalog actually learned something, not the last time a loop ran.
+   */
+  let changed = 0;
+  let left = 0;
+  for (const id of ids) {
+    const row = held.get(id);
+    if (!row) continue;
+    const f = facts.get(id) as CatalogFact;
+    const patch: Record<string, unknown> = {};
+    /* A name is only ever replaced by a non-empty one: an empty name in a
+       discovery row is "not read yet", not "this group has no name". */
+    if (f.name && f.name !== row.name) patch.name = f.name;
+    if (f.image_url && f.image_url !== row.image_url) patch.image_url = f.image_url;
+    if (typeof f.members === 'number' && f.members !== row.members) patch.members = f.members;
+    if (f.privacy !== 'unknown' && f.privacy !== row.privacy) patch.privacy = f.privacy;
+    /* A city or a category the owner filled in is better evidence than an
+       empty column — but his empty is never written over somebody else's
+       answer. */
+    if (f.city && f.city !== row.city) patch.city = f.city;
+    if (f.category && f.category !== row.category) patch.category = f.category;
+    /* The language is recomputed from the name that is about to be stored,
+       so a row the one-time seeding could not classify is corrected here. */
+    const language = catalogLanguage(f.name || String(row.name ?? ''));
+    if (language && language !== row.language) patch.language = language;
+    if (!Object.keys(patch).length) continue;
+    if (changed >= CATALOG_SYNC_MAX_UPDATES) {
+      left += 1;
+      continue;
+    }
+    patch.last_seen_at = new Date().toISOString();
+    patch.updated_at = new Date().toISOString();
+    const { error } = await db.from('social_group_catalog').update(patch).eq('external_id', id);
+    if (error) {
+      console.error('[worker] ✗ עדכון המאגר הארצי נכשל:', error.message);
+      break;
+    }
+    changed += 1;
+  }
+
+  if (!added && !changed) return;
+  console.log(`[worker] 🗂 מאגר ארצי: ${added} קבוצות נוספו, ${changed} עודכנו${left ? `, ${left} יחכו לשבוע הבא` : ''}.`);
+  await logActivity(
+    'info',
+    'catalog_sync',
+    `מאגר הקבוצות הארצי סונכרן: ${added} קבוצות נוספו ו-${changed} עודכנו מתוך מה שהמחשב הזה כבר מכיר.${
+      left ? ` ${left} קבוצות נוספות יעודכנו בסנכרון הבא.` : ''
+    }`,
+    { added, changed, left },
   );
 }
 

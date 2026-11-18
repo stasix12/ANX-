@@ -59,3 +59,42 @@ export function needsRussianCategory<T extends Filed>(groups: T[]): T[] {
 export function russianNamed<T extends Filed>(groups: T[]): T[] {
   return groups.filter((g) => isRussianName(g.name));
 }
+
+/**
+ * ─── WHICH LANGUAGE A CATALOG GROUP IS WRITTEN IN ──────────────────────────
+ *
+ * "לכל קבוצה יישמרו... שפה" — the national catalog files every group under a
+ * language so a campaign can ask for "Russian-speaking groups in Be'er Sheva"
+ * without anybody having read the groups one by one.
+ *
+ * READ OFF THE NAME, AND THE SAME TWO-LETTER RULE AS ABOVE. One Cyrillic
+ * character in a Hebrew name is a keyboard slip, not a language; the same is
+ * true of one Arabic character. So a run of two is the whole rule here too,
+ * and isRussianName() IS the Russian branch rather than a second copy of it.
+ *
+ * THE ORDER IS NOT ALPHABETICAL AND IT MATTERS. A name like "Беэр-Шева — באר
+ * שבע" carries both scripts, and the catalog has one language column: the
+ * minority language is the useful answer, because it is what tells a campaign
+ * this group is worth a Russian post. Hebrew is the country's default and is
+ * decided last.
+ *
+ * RETURNS '' RATHER THAN GUESSING. A group named "Arad Community" is Latin
+ * script and this product has no English category; an empty language means
+ * "not known", shows no chip, and leaves the row out of a language filter
+ * instead of filing it under a language nobody verified.
+ *
+ * ⚠ THE SEEDING SQL (supabase/social-schema-v48.sql) MUST AGREE WITH THIS.
+ * It fills the column once, from the rows that already exist, with the same
+ * three ranges and the same two-character rule — and
+ * worker/test/catalog.test.ts runs both over the same names and fails if they
+ * ever disagree.
+ */
+export type CatalogLanguage = 'ru' | 'ar' | 'he' | '';
+
+export function catalogLanguage(name: string | null | undefined): CatalogLanguage {
+  const text = name ?? '';
+  if (isRussianName(text)) return 'ru';
+  if (/\p{Script=Arabic}{2}/u.test(text)) return 'ar';
+  if (/\p{Script=Hebrew}{2}/u.test(text)) return 'he';
+  return '';
+}

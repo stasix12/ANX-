@@ -183,6 +183,169 @@ export async function clearMetaHold(): Promise<void> {
 
 /* -------------------------------------------------------------- targets */
 
+/* ═══════════════════════════════════════════════════════════════════════════
+ * מאגר הקבוצות הארצי — THE READS
+ *
+ *   "כאשר משתמש פותח את מסך הקבוצות, המערכת חייבת להציג מיד את הקבוצות שכבר
+ *    קיימות במסד הנתונים. אין לבצע חיפוש חיצוני בכל כניסה למסך...
+ *    יעד הביצועים: הצגת תוצאות ראשוניות בתוך שנייה."
+ *   — 18.11.2026
+ *
+ * WHY THESE ARE NOT listTargets(). That one selects '*' with no limit, hands
+ * the whole array to the screen, and lets the screen filter it in JavaScript.
+ * On a catalog it fails twice over: PostgREST stops at a thousand rows without
+ * saying so, and every count drawn beside the list is then computed from a
+ * truncated array — authoritative-looking numbers about a list that is not all
+ * of it.
+ *
+ * So the filtering, the ordering, the paging AND the count all happen in
+ * Postgres, against the indexes v48 creates. What crosses the wire is one page
+ * and one number.
+ * ═══════════════════════════════════════════════════════════════════════════ */
+
+export interface CatalogGroup {
+  external_id: string;
+  name: string;
+  url: string;
+  image_url: string;
+  members: number | null;
+  privacy: 'public' | 'private' | 'unknown';
+  city: string;
+  region: string;
+  language: string;
+  category: string;
+  status: 'active' | 'unavailable';
+  first_seen_at: string;
+  last_seen_at: string;
+}
+
+export interface CatalogQuery {
+  q?: string;
+  city?: string;
+  language?: string;
+  category?: string;
+  /** Rows already shown — the next page starts here. */
+  offset?: number;
+  limit?: number;
+}
+
+/** One page of a catalog list, and the TRUE size of the set it came from. */
+export interface CatalogPage {
+  rows: CatalogGroup[];
+  /** Every row matching the filters, counted by Postgres — not rows.length. */
+  total: number;
+}
+
+/** PostgREST's page size here. Sixty is what the groups screen already draws. */
+export const CATALOG_PAGE = 60;
+
+/*
+ * A SEARCH PHRASE IS NOT A PATTERN. `%` and `_` are wildcards to LIKE, and a
+ * comma or a parenthesis ends a PostgREST filter expression — a group called
+ * "ניקיון (דרום)" would otherwise produce a 400 rather than a result. So the
+ * phrase is escaped for both languages before it is sent.
+ */
+function likeSafe(text: string): string {
+  return text.trim().replace(/[\\%_]/g, (c) => `\\${c}`).replace(/[,()]/g, ' ');
+}
+
+/**
+ * One page of the national catalog, filtered and counted BY THE DATABASE.
+ *
+ * ORDER: available first, then the biggest. A catalog opens on the groups
+ * worth publishing in, and `members desc nulls last` keeps the ones whose size
+ * we never learned out of the top without pretending they are small.
+ * social_group_catalog_rank_idx is exactly this order.
+ */
+export async function searchCatalog(query: CatalogQuery = {}): Promise<CatalogPage> {
+  const limit = Math.max(1, Math.min(200, query.limit ?? CATALOG_PAGE));
+  const from = Math.max(0, query.offset ?? 0);
+
+  let req = db()
+    .from('social_group_catalog')
+    .select(
+      'external_id, name, url, image_url, members, privacy, city, region, language, category, status, first_seen_at, last_seen_at',
+      /* The count is the whole point: "הצגת מספר הקבוצות האמיתי". `exact`
+         and not `estimated` — an estimate beside a filter the owner just
+         typed is a number he cannot reconcile with what he sees. */
+      { count: 'exact' },
+    );
+
+  const phrase = likeSafe(query.q ?? '');
+  if (phrase) req = req.ilike('name', `%${phrase}%`);
+  if (query.city) req = req.eq('city', query.city);
+  if (query.language) req = req.eq('language', query.language);
+  if (query.category) req = req.eq('category', query.category);
+
+  const res = await req
+    .order('status', { ascending: true })
+    .order('members', { ascending: false, nullsFirst: false })
+    .range(from, from + limit - 1);
+  if (res.error) {
+    /* A database that has not run the migration says so in Hebrew, naming the
+       file — the same answer every other feature here gives, because the
+       alternative is a screen that looks empty rather than un-migrated. */
+    if (/social_group_catalog|relation|does not exist/i.test(res.error.message)) {
+      throw new Error('מאגר הקבוצות הארצי עוד לא קיים במסד. צריך להריץ את social-latest.sql ב-Supabase פעם אחת.');
+    }
+    throw new Error(res.error.message);
+  }
+  return { rows: (res.data ?? []) as unknown as CatalogGroup[], total: res.count ?? 0 };
+}
+
+/**
+ * What the header line says: how many groups the catalog holds and when it was
+ * last touched. Two counts and one instant, all from the database — a head
+ * count never sends a row over the wire.
+ */
+export async function catalogStats(): Promise<{ total: number; unavailable: number; updatedAt: string | null }> {
+  const all = await db().from('social_group_catalog').select('external_id', { count: 'exact', head: true });
+  if (all.error) {
+    if (/social_group_catalog|relation|does not exist/i.test(all.error.message)) return { total: 0, unavailable: 0, updatedAt: null };
+    throw new Error(all.error.message);
+  }
+  const gone = await db()
+    .from('social_group_catalog')
+    .select('external_id', { count: 'exact', head: true })
+    .eq('status', 'unavailable');
+  const newest = await db()
+    .from('social_group_catalog')
+    .select('last_seen_at')
+    .order('last_seen_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  return {
+    total: all.count ?? 0,
+    unavailable: gone.count ?? 0,
+    updatedAt: (newest.data as { last_seen_at?: string } | null)?.last_seen_at ?? null,
+  };
+}
+
+/**
+ * The values the filter chips offer — only ones the catalog actually holds.
+ *
+ * READ FROM THE CATALOG rather than from a constant, because a list of cities
+ * the owner cannot find a single group in is a filter that produces an empty
+ * screen and looks broken. A city appears here when a group there exists.
+ *
+ * Capped: PostgREST would stop at a thousand rows anyway, and a chip row with
+ * a thousand entries is not a chip row. The cap is stated so a caller can say
+ * so rather than quietly drawing a short list as if it were all of them.
+ */
+export async function catalogFacets(): Promise<{ cities: string[]; languages: string[]; categories: string[]; capped: boolean }> {
+  const rows = unwrap<{ city: string; language: string; category: string }[]>(
+    await db().from('social_group_catalog').select('city, language, category').limit(1000),
+  );
+  const pick = (get: (r: { city: string; language: string; category: string }) => string) =>
+    [...new Set(rows.map(get).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'he'));
+  return {
+    cities: pick((r) => r.city),
+    languages: pick((r) => r.language),
+    categories: pick((r) => r.category),
+    capped: rows.length >= 1000,
+  };
+}
+
 /**
  * Groups and pages this account can publish to, with one piece of repair work
  * attached — and the repair is now done ONCE.
@@ -627,6 +790,98 @@ export async function adoptDiscovered(row: Pick<DiscoveredGroupRow, 'id' | 'url'
     .eq('id', row.id)
     .then(undefined, () => undefined);
   return target;
+}
+
+/**
+ * "הוסף לקבוצות שלי" — a selection out of the national catalog into the
+ * publishing list, in one statement.
+ *
+ * ─── WHY NOT addGroup IN A LOOP ───────────────────────────────────────────
+ *
+ * Because a selection here is sixty groups, and sixty sequential round trips
+ * to Supabase is the better part of a minute of a spinner. The rows below are
+ * built with exactly the field set addGroup writes — there is a test that
+ * fails if the two ever drift (worker/test/catalog.test.ts) — and go up as a
+ * single insert.
+ *
+ * ─── WHAT IS ALREADY THERE IS NOT AN ERROR ────────────────────────────────
+ *
+ * The owner picks from a catalog of thousands; some of them are groups he
+ * added years ago. "הקבוצה הזו כבר קיימת" per row would turn a normal action
+ * into a wall of red. So the ids he already has are read first, skipped, and
+ * COUNTED — the screen says "12 נוספו · 3 כבר היו" and that is the whole
+ * story.
+ *
+ * ─── AND A COLLISION STILL CANNOT LOSE THE OTHERS ─────────────────────────
+ *
+ * The read-then-insert above is not a lock: the worker can adopt the same
+ * group between the two statements, and then the partial unique index
+ * (tenant, channel, external_id) rejects the INSERT — all of it, including
+ * the fifty-nine rows that were fine. So a failed batch falls back to one
+ * insert per row, where a collision costs only its own row.
+ *
+ * ─── SELECTING IS NOT PERMISSION TO PUBLISH ───────────────────────────────
+ *
+ * "בחירת קבוצה אינה מקנה הרשאה לפרסום" — these rows land with
+ * permission_status 'browser' and can_api_publish false, which is what every
+ * group in this product has: publishing is still the local browser, in groups
+ * this account is really a member of, and the worker still finds out per
+ * group whether it can post. Nothing here grants anything.
+ */
+export async function adoptCatalogGroups(
+  rows: Pick<CatalogGroup, 'external_id' | 'url' | 'name' | 'city' | 'category'>[],
+): Promise<{ added: number; existed: number; failed: number }> {
+  const wanted = rows.filter((r) => r.external_id && r.url);
+  if (!wanted.length) return { added: 0, existed: 0, failed: 0 };
+
+  /* One query, not one per row. `.in()` on sixty ids is one URL and one
+     index scan on the same unique index the insert will be checked against. */
+  const { data: have } = await db()
+    .from('social_targets')
+    .select('external_id')
+    .eq('channel', 'facebook_group')
+    .in('external_id', wanted.map((r) => r.external_id));
+  const mine = new Set((have ?? []).map((r: { external_id: string }) => r.external_id));
+
+  const fresh = wanted.filter((r) => !mine.has(r.external_id));
+  if (!fresh.length) return { added: 0, existed: wanted.length, failed: 0 };
+
+  /* The SAME shape addGroup inserts. Kept in one place here, used by both
+     paths below, so the batch and the fallback cannot differ. */
+  const rowOf = (r: (typeof fresh)[number]) => ({
+    channel: 'facebook_group',
+    external_id: r.external_id,
+    name: r.name || r.external_id,
+    url: r.url,
+    /* The catalog's own city when it has one — it was read off the group's
+       page, which is better evidence than a guess from the name. */
+    city: r.city || detectCity(r.name || ''),
+    ...(r.category ? { category: r.category } : {}),
+    notes: '',
+    permission_status: 'browser',
+    can_api_publish: false,
+    enabled: true,
+  });
+
+  const { error } = await db().from('social_targets').insert(fresh.map(rowOf));
+  if (!error) return { added: fresh.length, existed: wanted.length - fresh.length, failed: 0 };
+
+  /* The batch was rejected — almost always because something else adopted one
+     of these in the last second. Per row, so the rest still land. */
+  let added = 0;
+  let existed = wanted.length - fresh.length;
+  let failed = 0;
+  for (const r of fresh) {
+    const one = await db().from('social_targets').insert(rowOf(r));
+    /* A COLLISION AND A REFUSAL ARE NOT THE SAME SENTENCE. Counting every
+       rejected row as "already in the list" would turn a permissions problem
+       into a reassuring number; the duplicate code (23505) is the only one
+       that means "someone else has it". */
+    if (!one.error) added += 1;
+    else if (one.error.code === '23505') existed += 1;
+    else failed += 1;
+  }
+  return { added, existed, failed };
 }
 
 export async function requestGroupRefresh(ids?: string[], opts?: { picture?: boolean }): Promise<void> {

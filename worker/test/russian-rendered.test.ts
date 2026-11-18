@@ -276,6 +276,12 @@ const NO_TRANSLATE_SITES = [
   'src/components/social/ContentCard.tsx:1',
   'src/components/social/Discovery.tsx:4',
   'src/components/social/GroupCard.tsx:1',
+  /* One site: a catalog row's group name. The catalog holds the groups of a
+     whole country — among them names written in Russian and in Arabic — and
+     a name identifies a group on Facebook, so it is shown as it was written.
+     The caption under it (members, city, language) is NOT marked and is
+     translated like every other caption. */
+  'src/components/social/GroupCatalog.tsx:1',
   'src/components/social/LiveCampaignHero.tsx:1',
   'src/components/social/LiveFlow.tsx:2',
   'src/components/social/MediaUploader.tsx:1',

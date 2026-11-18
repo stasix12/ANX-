@@ -607,9 +607,10 @@ export function SegmentedControl<T extends string>({
               className={`inline-flex min-h-11 basis-0 grow items-center justify-center gap-1.5 whitespace-nowrap rounded-xl text-[13px] transition-colors ${
                 active
                   /* FLAT, NOT A GRADIENT — the campaigns screen's reference
-                     draws this chip as one solid blue, and `variant="tabs"` is
-                     on that screen and nowhere else (grep: one call site), so
-                     dropping the sheen here redraws nothing else. */
+                     draws this chip as one solid blue. It was the only call
+                     site when the sheen was dropped; the groups screen's
+                     "מאגר ארצי | הקבוצות שלי | דורשות טיפול" strip is the
+                     second, and it wants the same solid chip. */
                   ? 'bg-brand-500 font-extrabold text-on-brand'
                   /* mist-300, not mist-200: there is no --color-mist-200 in
                      any theme in this product, so Tailwind resolved it to the

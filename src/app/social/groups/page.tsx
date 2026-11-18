@@ -5,6 +5,7 @@ import { t, keep } from '@/lib/social/i18n';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { GroupCard } from '@/components/social/GroupCard';
+import { GroupCatalog } from '@/components/social/GroupCatalog';
 import { SocialShell } from '@/components/social/SocialShell';
 import { TargetAvatar } from '@/components/social/TargetAvatar';
 import {
@@ -30,6 +31,7 @@ import {
 } from '@/components/social/ui';
 import {
   addGroup,
+  adoptCatalogGroups,
   bulkDeleteTargets,
   bulkUpdateTargets,
   deleteTarget,
@@ -247,6 +249,41 @@ export default function GroupsPage() {
     setPicking(false);
     setSelected([]);
   }, []);
+
+  /*
+   * ───── מאגר ארצי | הקבוצות שלי | דורשות טיפול ──────────────────────────
+   *
+   * "המאגר ישולב בתוך מסך הקבוצות הקיים... לשוניות: מאגר ארצי | הקבוצות שלי
+   *  | דורשות טיפול."
+   *
+   * ONE PIECE OF STATE, NOT THREE. `tab` only ever says whether the national
+   * catalog is on screen; which of the other two is lit is READ OFF the
+   * status filter, because "דורשות טיפול" is not a fourth list — it is the
+   * "לא ניתן לפרסם" filter this screen already has, with the count the card
+   * above already computes. Deriving it instead of storing it is why the
+   * highlighted tab cannot disagree with the list under it: pressing "הצג
+   * אותן" in the card, or the chip in the status row, lights the tab too.
+   *
+   * AND "הקבוצות שלי" STAYS THE SCREEN HE OPENS. The brief's §3 is about
+   * what the catalog must do when it is shown — instantly, from the database,
+   * with no scan — not about replacing his own list as the landing view. His
+   * 125 groups are the daily screen; the catalog is one tap away.
+   */
+  const [tab, setTab] = useState<'catalog' | 'list'>('list');
+  const tabShown = tab === 'catalog' ? 'catalog' : status === 'blocked' ? 'care' : 'mine';
+  const pickTab = useCallback(
+    (next: 'catalog' | 'mine' | 'care') => {
+      /* A selection belongs to the list it was made in. Carrying twelve
+         picked groups into another tab leaves a bar acting on rows that are
+         no longer on screen — the same reason leaving selection mode clears
+         it. */
+      exitPicking();
+      setTab(next === 'catalog' ? 'catalog' : 'list');
+      if (next === 'care') setStatus('blocked');
+      else if (next === 'mine' && status === 'blocked') setStatus('all');
+    },
+    [exitPicking, status],
+  );
 
   const cityOf = useCallback((g: SocialTarget) => g.city || detectCity(g.name), []);
   const all = useMemo(() => groups ?? [], [groups]);
@@ -535,6 +572,75 @@ export default function GroupsPage() {
             <code dir="ltr">start-worker.cmd</code> והשאירו את החלון פתוח.
           </Notice>
         )}
+
+        <SegmentedControl
+          variant="tabs"
+          label={t('תצוגת קבוצות')}
+          value={tabShown}
+          onChange={pickTab}
+          options={[
+            /* No count on this one: the catalog's own header line carries it,
+               from the database, and a second copy here would be a second
+               number to keep true. */
+            { value: 'catalog' as const, label: t('מאגר ארצי') },
+            { value: 'mine' as const, label: t('הקבוצות שלי'), count: groups ? statusCounts.all : undefined },
+            /* Omitted rather than zeroed, for the reason the chip row gives:
+               "דורשות טיפול 0" is a worry with nothing behind it. */
+            {
+              value: 'care' as const,
+              label: t('דורשות טיפול'),
+              count: groups && statusCounts.blocked > 0 ? statusCounts.blocked : undefined,
+            },
+          ]}
+        />
+
+        {/*
+          THE NATIONAL CATALOG — a reader, and nothing else.
+          Opening this tab runs one indexed SELECT. No command is queued, no
+          browser wakes up, nothing is scanned. See GroupCatalog.tsx.
+        */}
+        {tab === 'catalog' && (
+          <GroupCatalog
+            busy={busy === 'adopt'}
+            /*
+             * NOT act(), and that is the point: act() swallows the failure
+             * into a toast, so it can never tell the catalog whether to keep
+             * the owner's selection. This returns the answer.
+             */
+            onAdd={async (picked) => {
+              setBusy('adopt');
+              setError(null);
+              try {
+                const r = await adoptCatalogGroups(picked);
+                /* THE SENTENCE IS WHAT HAPPENED, not a cheerful round number:
+                   what was added, what he already had, and — kept apart —
+                   what was refused. */
+                toast(
+                  [
+                    r.added ? `${r.added} קבוצות נוספו` : '',
+                    r.existed ? `${r.existed} כבר היו ברשימה` : '',
+                    r.failed ? `${r.failed} נכשלו` : '',
+                  ]
+                    .filter(Boolean)
+                    .join(' · ') || 'לא נוספה אף קבוצה.',
+                  r.failed && !r.added ? 'error' : 'success',
+                );
+                await load();
+                /* Nothing landed and nothing was already there — so the
+                   selection stays on screen to try again with. */
+                return r.added + r.existed > 0;
+              } catch (err) {
+                toast(friendlyMessage(err, 'ההוספה נכשלה.'), 'error');
+                return false;
+              } finally {
+                setBusy(null);
+              }
+            }}
+          />
+        )}
+
+        {tab !== 'catalog' && (
+          <>
 
         {/*
           גילוי קבוצות — THE WAY IN, and it is here rather than in the header.
@@ -1020,6 +1126,8 @@ export default function GroupsPage() {
               מוצגות {page.length} מתוך {visible.length}. הסינון והבחירה עובדים על כולן.
             </p>
           </div>
+        )}
+          </>
         )}
       </div>
 

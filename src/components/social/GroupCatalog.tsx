@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { t, keep } from '@/lib/social/i18n';
 import { CATALOG_PAGE, catalogFacets, catalogStats, searchCatalog, type CatalogGroup } from '@/lib/social/client';
 import { friendlyMessage } from '@/lib/social/errors';
+import { CATALOG_LANGUAGE_LABEL } from '@/lib/social/language';
 import { SearchIcon, UsersIcon } from '@/components/icons';
 import { Button, Notice, inputClass } from './ui';
 
@@ -47,13 +48,6 @@ import { Button, Notice, inputClass } from './ui';
  * — "בחירת קבוצות מרובות" means across the whole session, not within a page.
  * ─────────────────────────────────────────────────────────────────────────────
  */
-
-/** The languages the catalog stores, in the words a person uses for them. */
-const LANGUAGE_LABEL: Record<string, string> = {
-  ru: 'רוסית',
-  he: 'עברית',
-  ar: 'ערבית',
-};
 
 /** "12,400 חברים" — a group's size, or nothing when it was never read. */
 function membersWords(n: number | null): string {
@@ -227,7 +221,7 @@ export function GroupCatalog({
         <select aria-label={t('שפה')} value={language} onChange={(e) => setLanguage(e.target.value)} className={inputClass}>
           <option value="">{t('כל השפות')}</option>
           {(facets?.languages ?? []).map((l) => (
-            <option key={l} value={l}>{LANGUAGE_LABEL[l] ?? l}</option>
+            <option key={l} value={l}>{CATALOG_LANGUAGE_LABEL[l] ?? l}</option>
           ))}
         </select>
         <select aria-label={t('קטגוריה')} value={category} onChange={(e) => setCategory(e.target.value)} className={inputClass}>
@@ -311,7 +305,7 @@ export function GroupCatalog({
                       {g.name}
                     </span>
                     <span dir="auto" className="block truncate text-[11px] text-mist-500">
-                      {[membersWords(g.members), g.city, LANGUAGE_LABEL[g.language] ?? '', g.status === 'unavailable' ? t('לא זמינה') : '']
+                      {[membersWords(g.members), g.city, CATALOG_LANGUAGE_LABEL[g.language] ?? '', g.status === 'unavailable' ? t('לא זמינה') : '']
                         .filter(Boolean)
                         .join(' · ')}
                     </span>

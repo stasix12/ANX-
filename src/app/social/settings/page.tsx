@@ -6,8 +6,9 @@ import { Stamp } from '@/components/social/DateTime';
 import { ScreenProbe } from '@/components/social/ScreenProbe';
 import { SocialShell } from '@/components/social/SocialShell';
 import { LangSwitch } from '@/components/social/LangSwitch';
-import { Button, Card, Field, Loading, Notice, SegmentedControl, inputClass, useToast } from '@/components/social/ui';
-import { applyPace, clearMetaHold, getBrowserSettings, getControl, getLimits, loadAdminPresence, saveSetting } from '@/lib/social/client';
+import { Button, Card, Field, Loading, Notice, SegmentedControl, SkeletonList, inputClass, useToast } from '@/components/social/ui';
+import { CATALOG_LANGUAGE_LABEL } from '@/lib/social/language';
+import { applyPace, catalogCoverage, clearMetaHold, getBrowserSettings, getControl, getLimits, loadAdminPresence, saveSetting, type CatalogCoverage } from '@/lib/social/client';
 import { DEFAULT_BROWSER, DEFAULT_LIMITS, type AdminPresence, type BrowserSettings, type ControlSettings, type LimitsSettings, type PaceId } from '@/lib/social/types';
 import { accountGapLabel, accountGapSeconds } from '@/lib/social/rules';
 import { SmartPaceCard } from '@/components/social/SmartPaceCard';
@@ -70,6 +71,14 @@ export default function SettingsPage() {
    * like `admin: false`, because a panel about who is connected may not guess.
    */
   const [presence, setPresence] = useState<AdminPresence | null>(null);
+  /*
+   * המאגר הארצי, במספרים — "לוח בקרה (למנהל בלבד)".
+   *
+   * Read only when the admin tab is actually open, and only for an admin:
+   * it is about a dozen head counts, which is nothing for a database and
+   * still not worth asking on a screen nobody opened.
+   */
+  const [coverage, setCoverage] = useState<CatalogCoverage | null>(null);
 
   useEffect(() => {
     Promise.all([
@@ -116,6 +125,19 @@ export default function SettingsPage() {
     }, PRESENCE_POLL_MS);
     return () => clearInterval(id);
   }, [isAdmin, tab]);
+
+  /*
+   * ONCE, NOT ON THE TEN-SECOND POLL. "Who is connected" changes while you
+   * watch it; a catalog of groups changes once a week. Putting it on the
+   * presence poll would be a dozen counts every ten seconds for a number
+   * that cannot have moved.
+   */
+  useEffect(() => {
+    if (!isAdmin || tab !== 'admin' || coverage) return;
+    void catalogCoverage()
+      .then(setCoverage)
+      .catch(() => undefined);
+  }, [isAdmin, tab, coverage]);
 
   /**
    * Save what this form edits, onto the rows as they are NOW.
@@ -656,6 +678,88 @@ export default function SettingsPage() {
 
           {tab === 'admin' && isAdmin && presence && (
             <>
+              {/*
+                ─── המאגר הארצי, במספרים ──────────────────────────────────
+                "לוח בקרה (למנהל בלבד): מספר קבוצות במאגר, התפלגות לפי
+                 עיר/קטגוריה, קבוצות שנמצאו לאחרונה, קבוצות שהפכו ללא
+                 זמינות, תאריך סנכרון אחרון."
+
+                THE COVERAGE, NOT ONLY THE TOTAL. A total says the table is
+                filling. What says whether the catalog WORKS is how many of
+                its groups are filed: a group with no city cannot be found by
+                the city filter and a group with no language cannot be chosen
+                for a Russian campaign. So each number is drawn beside the
+                total it is a part of, and nothing is a percentage of
+                something the panel does not also show.
+              */}
+              <Card
+                title={t('המאגר הארצי')}
+                subtitle={
+                  coverage
+                    ? `עודכן לאחרונה: ${coverage.updatedAt ? new Date(coverage.updatedAt).toLocaleDateString('he-IL') : 'מעולם'}`
+                    : t('נטען…')
+                }
+              >
+                {!coverage ? (
+                  <SkeletonList rows={2} />
+                ) : coverage.total === 0 ? (
+                  <Notice tone="info">
+                    {t('המאגר ריק. הוא מתמלא מהקבוצות שהמחשבים מגלים, בסנכרון שרץ אחת לשבוע — ואם הטבלה עוד לא קיימת במסד, צריך להריץ את social-latest.sql פעם אחת.')}
+                  </Notice>
+                ) : (
+                  <>
+                    <div className="mt-1 grid grid-cols-2 gap-2 sm:grid-cols-4 [&>*]:min-w-0">
+                      {[
+                        ['קבוצות במאגר', coverage.total],
+                        ['נוספו בשבוע האחרון', coverage.addedThisWeek],
+                        ['לא זמינות', coverage.unavailable],
+                        ['עם עיר', coverage.withCity],
+                      ].map(([label, value]) => (
+                        <div key={String(label)} className="rounded-xl border border-ink-700 px-3 py-2">
+                          <p className="text-[11px] font-bold leading-4 text-mist-500">{t(String(label))}</p>
+                          <p className="text-lg font-black tabular-nums text-mist-100" dir="ltr">
+                            {Number(value).toLocaleString('he-IL')}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                    <dl className="mt-2.5 grid grid-cols-[auto_1fr] [&>*]:min-w-0 gap-x-2 gap-y-0.5 text-[11px] leading-4">
+                      <dt className="text-mist-500">{t('לפי שפה')}</dt>
+                      <dd dir="auto" className="min-w-0 text-mist-300">
+                        {coverage.byLanguage.length
+                          ? coverage.byLanguage
+                              .map((l) => `${CATALOG_LANGUAGE_LABEL[l.language] ?? l.language}: ${l.groups.toLocaleString('he-IL')}`)
+                              .join(' · ')
+                          : '— עוד אין שפה על אף קבוצה'}
+                      </dd>
+                      <dt className="text-mist-500">{t('ערים גדולות')}</dt>
+                      <dd dir="auto" className="min-w-0 text-mist-300">
+                        {coverage.topCities.length
+                          ? coverage.topCities.map((c) => `${c.city}: ${c.groups.toLocaleString('he-IL')}`).join(' · ')
+                          : '— עוד אין עיר על אף קבוצה'}
+                      </dd>
+                      <dt className="text-mist-500">{t('מסווגות לקטגוריה')}</dt>
+                      <dd className="min-w-0 text-mist-300 tabular-nums" dir="ltr">
+                        {coverage.withCategory.toLocaleString('he-IL')}
+                      </dd>
+                      <dt className="text-mist-500">{t('עם שפה')}</dt>
+                      <dd className="min-w-0 text-mist-300 tabular-nums" dir="ltr">
+                        {coverage.withLanguage.toLocaleString('he-IL')}
+                      </dd>
+                    </dl>
+                    {/*
+                      SAID OUT LOUD, because a panel of counts invites the
+                      wrong conclusion: the catalog grows from what the
+                      customers' own machines discover, so a quiet week is a
+                      week nobody searched — not a fault.
+                    */}
+                    <p className="mt-2.5 text-[11px] leading-4 text-mist-500">
+                      {t('המאגר משותף לכל המשתמשים וגדל ממה שהמחשבים מגלים בחיפושים. הסנכרון רץ אחת לשבוע בכל מחשב, בלי לפתוח שום חלון דפדפן. מי חבר בקבוצה ומי מפרסם אליה אינו נשמר כאן בכלל.')}
+                    </p>
+                  </>
+                )}
+              </Card>
+
               <Card
                 title={t('מי מחובר עכשיו')}
                 subtitle={`${presence.workers.filter((w) => w.online).length} מחוברים מתוך ${presence.workers.length} מחשבים · מתרענן לבד כל 10 שניות`}

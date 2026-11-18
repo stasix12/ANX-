@@ -1392,7 +1392,7 @@
  *    עצמו, ותקציב העבודה עבר ללולאה — שם הוא נספר על סבבים שבאמת היה להם
  *    מה לחמש, ולא על סבבים שרק הסתכלו עליהם.
  */
-export const WORKER_VERSION = '4.91.0';
+export const WORKER_VERSION = '4.92.0';
 
 /**
  * A FINGERPRINT OF EVERYTHING THE INSTALLER CARRIES.
@@ -2345,4 +2345,4 @@ export const WORKER_VERSION = '4.91.0';
  * שניהם עברו ל-shownSchedule/fromShown, כמו כל שאר העורכים והקריאות. אף
  * מנגנון לא זז. זה מסך בלבד ולא רץ במחשב שלו.
  */
-export const WORKER_FINGERPRINT = '4c0094524912957d';
+export const WORKER_FINGERPRINT = '18172a6e9dd6ee53';

@@ -124,6 +124,10 @@ const TITLE: Record<string, string> = {
   /* Written when the nightly check finds discovery rows still badged "חבר"
      for groups the publishing list has already switched off as left. */
   membership_synced: 'סימון החברות בקבוצות סונכרן',
+  /* הסנכרון השבועי של המאגר הארצי — מה שהמחשב הזה כבר מכיר עובר למאגר
+     המשותף. לא נפתח שום חלון דפדפן בדרך, ולכן השורה הזו אינה מעידה על שום
+     פעילות מול פייסבוק. */
+  catalog_sync: 'המאגר הארצי סונכרן',
   campaign_paused: 'הסבב הושהה',
   /* CHZARA. Two headlines rather than one with a word swapped: this is the
      line in his history that says his account began republishing by itself,

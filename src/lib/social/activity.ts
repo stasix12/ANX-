@@ -59,6 +59,13 @@ const KIND: Record<string, ActivityKind> = {
    */
   membership_synced: 'success',
   /*
+   * הסנכרון השבועי של המאגר הארצי. 'success' מאותה סיבה כמו
+   * nightly_group_check: זו האפליקציה עושה את מה שהתבקשה, והשורה שאומרת כמה
+   * קבוצות נוספו וכמה עודכנו היא העדות היחידה שזה קרה. היא נכתבת רק כשבאמת
+   * נוספה או עודכנה קבוצה — שבוע שבו המחשב לא גילה שום דבר חדש לא כותב כלום.
+   */
+  catalog_sync: 'success',
+  /*
    * הצטרפות אוטומטית לקבוצה. 'success' and not 'system': it is the machine
    * doing the thing the owner pressed, on his own account, and the line naming
    * which group is the only record that it happened. A join that did NOT

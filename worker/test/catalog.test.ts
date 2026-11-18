@@ -70,6 +70,8 @@ const client = code('src/lib/social/client.ts');
 const screen = code('src/components/social/GroupCatalog.tsx');
 const groups = code('src/app/social/groups/page.tsx');
 const worker = code('worker/social-worker.ts');
+const editor = code('src/components/social/PostEditor.tsx');
+const settings = code('src/app/social/settings/page.tsx');
 
 /* The three functions this file is about, sliced out so a pin cannot wander
    into the next function and pass on its code. */
@@ -188,6 +190,19 @@ is(/can_api_publish: false/.test(adoptFn), 'no API publishing is claimed for a c
 /* "בחירת קבוצה אינה מקנה הרשאה לפרסום" — nothing here writes `enabled` on a
    campaign, a membership, or a permission; it adds a target row and stops. */
 is(!/membership|permission:|approved/.test(adoptFn), 'selecting a group grants nothing');
+/*
+ * THE LINK IS PARSED, NOT TRUSTED — and this pin exists because the first
+ * version of adoptCatalogGroups inserted the catalog's url verbatim while
+ * addGroup has always normalized it. The catalog is filled from discovery
+ * rows and from other people's targets, so it can hold a share link whose
+ * group id is not known yet; inserted raw, that is a target the worker cannot
+ * publish to. The field-name comparison above passed straight over it.
+ */
+is(/parseGroupUrl\(.*\)\s*\?\?\s*parseGroupShareUrl\(/.test(adoptFn), 'the catalog link goes through the same parser addGroup uses');
+is(/parsed\.url/.test(adoptFn), 'and the NORMALIZED link is what is stored');
+is(/parsed\.externalId/.test(adoptFn), 'with the id that came out of the link, not the catalog column alone');
+is(/unparsed/.test(adoptFn), 'a link that does not parse is counted, not adopted');
+
 /* A duplicate is a sentence, not an error — and a refusal is NOT a duplicate. */
 is(/23505/.test(adoptFn), 'only Postgres’ duplicate code is counted as "already in the list"');
 is(/failed/.test(adoptFn), 'anything else is reported as a failure, not hidden in a reassuring number');
@@ -220,6 +235,69 @@ is(!/search|discover\(/.test(syncFn), 'it starts no search of its own');
 /* NO SILENT CAP: a bounded pass says what it left for next week. */
 is(/CATALOG_SYNC_MAX_UPDATES/.test(syncFn) && /left/.test(syncFn), 'a bounded pass reports what it did not reach');
 is(/last_seen_at/.test(syncFn), 'and only a real change moves "עודכן לאחרונה"');
+
+/* ══════════ §6 PICKING FROM THE CATALOG INSIDE A CAMPAIGN ════════════════ */
+/*
+ * "בעת יצירת קמפיין חדש... יש לאפשר בחירת קבוצות מתוך המאגר הקיים בלבד, בלי
+ *  צורך בסריקה חדשה."
+ */
+const sheet = slice(editor, 'Sheet open={catalogOpen}', '</Sheet>');
+is(/GroupCatalog/.test(sheet), 'the campaign editor picks groups from the catalog component itself');
+/* NO SCAN — the same property the screen section proves, now at the campaign
+   creation point, which is where the brief puts the clause. */
+for (const forbidden of ['startDiscovery', 'requestGroupRefresh', 'queueCommand']) {
+  is(!sheet.includes(forbidden), `picking inside a campaign does not call ${forbidden}`);
+}
+is(/adoptCatalogGroups/.test(sheet), 'what it does is add the groups to his own list');
+is(/listTargets\(\)/.test(sheet), 'and then re-read that list rather than patch it');
+/*
+ * SELECTION IS NOT PERMISSION, in the words on the screen and in the code:
+ * the rows are added through the same writer "+ הוסף" uses, and nothing here
+ * writes a permission, a membership or an approval.
+ */
+is(sheet.includes('לא מקנה הרשאה לפרסם'), 'the sheet says that choosing a group is not permission to publish in it');
+for (const forbidden of ['permission_status', 'can_api_publish', 'membership', 'approval:']) {
+  is(!sheet.includes(forbidden), `the sheet never writes ${forbidden}`);
+}
+/* The groups he picked are ticked for this post — including ones already in
+   his list, which is an answer about the list and not about what he meant. */
+is(/setSelectedTargets\(\(prev\) => \[\.\.\.new Set\(\[\.\.\.prev, \.\.\.r\.ids\]\)\]\)/.test(sheet),
+  'the adopted groups are added to the selection without dropping what was already chosen');
+is(/ids: string\[\]/.test(adoptFn) || /ids/.test(adoptFn), 'and the writer returns the ids that makes that possible');
+/* TEST MODE CAPS THE SELECTION AT ONE GROUP, and a bulk pick must not slip
+   past that cap from a different screen. */
+is(/testMode/.test(sheet), 'test mode is honoured by the catalog hand-off too');
+
+/* ══════════ §8 THE ADMIN PANEL, AND ONLY FOR AN ADMIN ════════════════════ */
+/*
+ * "לוח בקרה (למנהל בלבד): מספר קבוצות במאגר, התפלגות לפי עיר/אזור/קטגוריה,
+ *  קבוצות שנמצאו לאחרונה, קבוצות שהפכו ללא זמינות, תאריך סנכרון אחרון."
+ */
+const coverageFn = slice(client, 'export async function catalogCoverage', 'export async function catalogFacets');
+is(/head: true/.test(client), 'the panel asks for counts, not for rows');
+is(!/\.limit\(1000\)/.test(coverageFn), 'and it never tallies a page of a thousand rows in the browser');
+for (const field of ['withCity', 'withLanguage', 'withCategory', 'addedThisWeek', 'unavailable', 'topCities', 'byLanguage']) {
+  is(coverageFn.includes(field), `the coverage answers "${field}"`);
+}
+/* THE GATE. The panel is drawn inside the admin tab, which the settings
+   screen only shows when the server said this user is a platform admin —
+   `presence.admin`, decided by an environment allowlist that fails closed
+   (see admin-panel.test.ts). The read is not even issued otherwise. */
+is(/if \(!isAdmin \|\| tab !== 'admin' \|\| coverage\) return;/.test(settings),
+  'the coverage is not even read unless an admin opened the admin tab');
+const adminTab = slice(settings, "tab === 'admin' && isAdmin && presence", 'מי מחובר עכשיו');
+is(/catalogCoverage|coverage/.test(adminTab), 'and the panel itself is inside the admin-only branch');
+/* NOT ON THE TEN-SECOND POLL: presence changes while you watch, a catalog of
+   groups changes once a week. */
+/* The property is what is INSIDE the ten-second interval, not what happens to
+   sit near it in the file — the first version of this pin failed because the
+   two effects are written one after the other. */
+const poll = slice(settings, 'const id = setInterval(', 'clearInterval(id)');
+is(poll.includes('loadAdminPresence'), 'the ten-second poll asks who is connected');
+is(!poll.includes('catalogCoverage'), 'and never re-counts the catalog, which changes once a week');
+/* AND IT SAYS WHAT IS NOT IN THE TABLE, which is the private half. */
+is(settings.includes('מי חבר בקבוצה ומי מפרסם אליה אינו נשמר כאן בכלל'),
+  'the panel states that membership and who publishes where are not in the catalog');
 
 /* ══════════════════════ THE DATABASE ITSELF ══════════════════════════════ */
 

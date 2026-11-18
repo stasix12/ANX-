@@ -1,19 +1,20 @@
 'use client';
 
 import Link from 'next/link';
-import { keep } from '@/lib/social/i18n';
+import { keep, t } from '@/lib/social/i18n';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { CheckIcon, SparklesIcon, TrashIcon } from '@/components/icons';
 import { LiveBoard } from '@/components/social/LiveBoard';
 import { StartFromLibrary } from '@/components/social/StartFromLibrary';
 import { MediaUploader } from '@/components/social/MediaUploader';
+import { GroupCatalog } from '@/components/social/GroupCatalog';
 import { TargetPicker } from '@/components/social/TargetPicker';
 import { PostPreview } from '@/components/social/PostPreview';
 import { PreLaunchReview } from '@/components/social/PreLaunchReview';
 import { SchedulePicker, planFor, targetsLabel, type ScheduleDraft, scheduleDraftToInput } from '@/components/social/SchedulePicker';
 import { SocialShell } from '@/components/social/SocialShell';
-import { Button, Card, Field, Loading, Notice, inputClass, useConfirm, useToast } from '@/components/social/ui';
+import { Button, Card, Field, Loading, Notice, Sheet, inputClass, useConfirm, useToast } from '@/components/social/ui';
 import {
   archivePost,
   callSocialApi,
@@ -28,6 +29,7 @@ import {
   listCampaigns,
   listQueue,
   listSchedules,
+  adoptCatalogGroups,
   listTargets,
   listVariants,
   refreshQueuedText,
@@ -121,6 +123,24 @@ export function PostEditor({ postId }: { postId?: string }) {
   const [variants, setVariants] = useState<VariantDraft[]>([]);
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [targets, setTargets] = useState<SocialTarget[]>([]);
+  /*
+   * ─── בחירת קבוצות מהמאגר הארצי, בתוך יצירת הקמפיין ─────────────────────
+   *
+   * "בעת יצירת קמפיין חדש... יש לאפשר בחירת קבוצות מתוך המאגר הקיים בלבד,
+   *  בלי צורך בסריקה חדשה."
+   *
+   * THE SHEET IS A READER. It holds the same GroupCatalog the groups screen
+   * holds, which queues no command and opens no browser — picking here is one
+   * SELECT against an indexed table, which is the whole point of the clause.
+   *
+   * AND PICKING IS STILL NOT PERMISSION. What the hand-off does is add the
+   * groups to HIS list of groups (the same row "+ הוסף" writes, through the
+   * same parser) and tick them for this post. Whether this account may really
+   * publish in each one is decided where it has always been decided: by the
+   * machine, per group, when it gets there.
+   */
+  const [catalogOpen, setCatalogOpen] = useState(false);
+  const [adopting, setAdopting] = useState(false);
   const [schedules, setSchedules] = useState<Schedule[]>([]);
   const [business, setBusiness] = useState<BusinessSettings>(DEFAULT_BUSINESS);
   const [browser, setBrowser] = useState<BrowserSettings>(DEFAULT_BROWSER);
@@ -801,9 +821,18 @@ export function PostEditor({ postId }: { postId?: string }) {
             id="post-targets"
             title={`יעדי פרסום${selectedObjects.length ? ` · ${counted(selectedObjects.length, 'יעד אחד נבחר', 'יעדים נבחרו', 'שני יעדים נבחרו')}` : ''}`}
             action={
-              <Link href="/social/groups" className="inline-flex min-h-11 items-center text-sm font-bold text-brand-400">
-                ניהול קבוצות
-              </Link>
+              <span className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setCatalogOpen(true)}
+                  className="inline-flex min-h-11 items-center text-sm font-bold text-brand-400"
+                >
+                  {t('מהמאגר הארצי')}
+                </button>
+                <Link href="/social/groups" className="inline-flex min-h-11 items-center text-sm font-bold text-mist-300">
+                  ניהול קבוצות
+                </Link>
+              </span>
             }
           >
             {targets.length > 0 && selectedObjects.length === 0 && (
@@ -827,6 +856,58 @@ export function PostEditor({ postId }: { postId?: string }) {
                 note={browser.testMode ? `מצב בדיקה: קבוצה אחת בלבד, עם אישור ידני לפני הפרסום. כדי לכבות: ${TEST_MODE_PATH}.` : undefined}
               />
             )}
+
+            <Sheet open={catalogOpen} onClose={() => setCatalogOpen(false)} title={t('מאגר ארצי')} size="lg">
+              <div className="space-y-3">
+                <Notice tone="info">
+                  בחירה כאן מוסיפה את הקבוצות לרשימת הקבוצות שלכם ומסמנת אותן לפוסט הזה. היא לא מקנה הרשאה לפרסם — התוכנה
+                  במחשב בודקת כל קבוצה בנפרד, וקבוצה שאי אפשר לפרסם בה תסומן ככזו.
+                </Notice>
+                <GroupCatalog
+                  busy={adopting}
+                  onAdd={async (picked) => {
+                    setAdopting(true);
+                    try {
+                      const r = await adoptCatalogGroups(picked);
+                      /* The list is re-read rather than patched: a group that
+                         was already there comes back with the name, city and
+                         picture it already had. */
+                      const fresh = await listTargets();
+                      setTargets(fresh);
+                      /*
+                       * TICKED FOR THIS POST — including the ones that were
+                       * already in his list. He picked them in the catalog;
+                       * "already there" is an answer about the list, not
+                       * about what he meant.
+                       *
+                       * In test mode the picker allows one group, so the
+                       * selection is not widened behind that cap.
+                       */
+                      if (!browser.testMode) {
+                        setSelectedTargets((prev) => [...new Set([...prev, ...r.ids])]);
+                      }
+                      toast(
+                        [
+                          r.added ? `${r.added} קבוצות נוספו` : '',
+                          r.existed ? `${r.existed} כבר היו ברשימה` : '',
+                          r.failed ? `${r.failed} נכשלו` : '',
+                        ]
+                          .filter(Boolean)
+                          .join(' · ') || 'לא נוספה אף קבוצה.',
+                        r.failed && !r.added ? 'error' : 'success',
+                      );
+                      if (r.added || r.existed) setCatalogOpen(false);
+                      return r.added + r.existed > 0;
+                    } catch (err) {
+                      toast(friendlyMessage(err, 'ההוספה נכשלה.'), 'error');
+                      return false;
+                    } finally {
+                      setAdopting(false);
+                    }
+                  }}
+                />
+              </div>
+            </Sheet>
             {approvedCount > 1 && (
               <div className="mt-4 flex flex-wrap items-center gap-3 rounded-xl border border-ink-700 px-3 py-2.5">
                 <span className="text-sm font-bold text-mist-100">חלוקת גרסאות:</span>

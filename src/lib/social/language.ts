@@ -98,3 +98,16 @@ export function catalogLanguage(name: string | null | undefined): CatalogLanguag
   if (/\p{Script=Hebrew}{2}/u.test(text)) return 'he';
   return '';
 }
+
+/**
+ * The catalog's languages in the words a person uses for them.
+ *
+ * HERE RATHER THAN IN THE COMPONENT, because two screens draw them now — the
+ * "מאגר ארצי" tab and the admin panel's breakdown — and two copies of a label
+ * map is how one screen ends up saying "ru".
+ */
+export const CATALOG_LANGUAGE_LABEL: Record<string, string> = {
+  ru: 'רוסית',
+  he: 'עברית',
+  ar: 'ערבית',
+};

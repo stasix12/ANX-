@@ -285,7 +285,7 @@ export async function searchCatalog(query: CatalogQuery = {}): Promise<CatalogPa
     /* A database that has not run the migration says so in Hebrew, naming the
        file — the same answer every other feature here gives, because the
        alternative is a screen that looks empty rather than un-migrated. */
-    if (/social_group_catalog|relation|does not exist/i.test(res.error.message)) {
+    if (CATALOG_MISSING.test(res.error.message)) {
       throw new Error('מאגר הקבוצות הארצי עוד לא קיים במסד. צריך להריץ את social-latest.sql ב-Supabase פעם אחת.');
     }
     throw new Error(res.error.message);
@@ -298,10 +298,23 @@ export async function searchCatalog(query: CatalogQuery = {}): Promise<CatalogPa
  * last touched. Two counts and one instant, all from the database — a head
  * count never sends a row over the wire.
  */
+/** How many cities the admin panel lists before it stops. */
+const CATALOG_PANEL_CITIES = 10;
+
+/**
+ * "the catalog table is not there yet" — one pattern, because two copies of
+ * it drift and the second one then throws a red error on a database that is
+ * simply one migration behind.
+ */
+const CATALOG_MISSING = /social_group_catalog|relation|does not exist/i;
+
+/** One head count against the catalog: Postgres counts, nothing is sent. */
+const catalogQuery = () => db().from('social_group_catalog').select('external_id', { count: 'exact', head: true });
+
 export async function catalogStats(): Promise<{ total: number; unavailable: number; updatedAt: string | null }> {
   const all = await db().from('social_group_catalog').select('external_id', { count: 'exact', head: true });
   if (all.error) {
-    if (/social_group_catalog|relation|does not exist/i.test(all.error.message)) return { total: 0, unavailable: 0, updatedAt: null };
+    if (CATALOG_MISSING.test(all.error.message)) return { total: 0, unavailable: 0, updatedAt: null };
     throw new Error(all.error.message);
   }
   const gone = await db()
@@ -318,6 +331,89 @@ export async function catalogStats(): Promise<{ total: number; unavailable: numb
     total: all.count ?? 0,
     unavailable: gone.count ?? 0,
     updatedAt: (newest.data as { last_seen_at?: string } | null)?.last_seen_at ?? null,
+  };
+}
+
+/**
+ * ─── המאגר הארצי · לוח המנהל ──────────────────────────────────────────────
+ *
+ * "לוח בקרה (למנהל בלבד): מספר קבוצות במאגר, התפלגות לפי עיר/אזור/קטגוריה,
+ *  קבוצות שנמצאו לאחרונה, קבוצות שהפכו ללא זמינות, תאריך סנכרון אחרון."
+ *
+ * HEAD COUNTS, NOT ROWS. Every number here is `count: 'exact', head: true` —
+ * Postgres counts and sends a number, not a page of groups. The whole panel
+ * is about a dozen counts, which is why it can ask honest questions
+ * ("how many have no city at all") instead of estimating from a sample.
+ *
+ * WHY THE COVERAGE NUMBERS AND NOT JUST THE TOTAL. The total says the table
+ * is filling; it does not say whether the catalog is USEFUL. A group with no
+ * city cannot be found by the city filter, and one with no language cannot be
+ * chosen for a Russian campaign — so "how many are filed" is the measure of
+ * the thing, and it is the number that tells us whether the weekly pass is
+ * doing its job.
+ *
+ * NOT GATED HERE. The gate is the admin panel it is drawn in (the settings
+ * screen asks loadAdminPresence first), and it is honest about what it is:
+ * the catalog is shared and readable by every signed-in user, so none of
+ * these numbers is somebody's private data. There is nothing here about WHO
+ * publishes where, which is the part that is private and stays in
+ * social_targets.
+ */
+export interface CatalogCoverage {
+  total: number;
+  unavailable: number;
+  withCity: number;
+  withLanguage: number;
+  withCategory: number;
+  byLanguage: { language: string; groups: number }[];
+  topCities: { city: string; groups: number }[];
+  addedThisWeek: number;
+  updatedAt: string | null;
+}
+
+export async function catalogCoverage(): Promise<CatalogCoverage> {
+  const head = async (apply: (q: ReturnType<typeof catalogQuery>) => ReturnType<typeof catalogQuery>): Promise<number> => {
+    const res = await apply(catalogQuery());
+    if (res.error) {
+      if (CATALOG_MISSING.test(res.error.message)) return 0;
+      throw new Error(res.error.message);
+    }
+    return res.count ?? 0;
+  };
+
+  const stats = await catalogStats();
+  const [withCity, withLanguage, withCategory, addedThisWeek] = await Promise.all([
+    head((q) => q.neq('city', '')),
+    head((q) => q.neq('language', '')),
+    head((q) => q.neq('category', '')),
+    head((q) => q.gte('first_seen_at', new Date(Date.now() - 7 * 86_400_000).toISOString())),
+  ]);
+
+  /*
+   * THE BREAKDOWNS ARE COUNTS TOO, one per value, from the values the catalog
+   * really holds — never a GROUP BY faked by paging a thousand rows into the
+   * browser and tallying them there. The city list is capped at the ten
+   * biggest because that is a panel, and the cap is visible in the number
+   * beside it rather than silent.
+   */
+  const facets = await catalogFacets();
+  const byLanguage = await Promise.all(
+    facets.languages.map(async (language) => ({ language, groups: await head((q) => q.eq('language', language)) })),
+  );
+  const cityCounts = await Promise.all(
+    facets.cities.slice(0, CATALOG_PANEL_CITIES).map(async (city) => ({ city, groups: await head((q) => q.eq('city', city)) })),
+  );
+
+  return {
+    total: stats.total,
+    unavailable: stats.unavailable,
+    withCity,
+    withLanguage,
+    withCategory,
+    byLanguage: byLanguage.sort((a, b) => b.groups - a.groups),
+    topCities: cityCounts.sort((a, b) => b.groups - a.groups),
+    addedThisWeek,
+    updatedAt: stats.updatedAt,
   };
 }
 
@@ -827,61 +923,104 @@ export async function adoptDiscovered(row: Pick<DiscoveredGroupRow, 'id' | 'url'
  * group in this product has: publishing is still the local browser, in groups
  * this account is really a member of, and the worker still finds out per
  * group whether it can post. Nothing here grants anything.
+ *
+ * ─── AND THE LINK IS PARSED, NOT TRUSTED ──────────────────────────────────
+ *
+ * This is the bug that was in the first version of this function, caught by
+ * re-reading it rather than by a test: it inserted the catalog's `url`
+ * verbatim. addGroup has never done that — it runs the link through
+ * parseGroupUrl / parseGroupShareUrl and stores the NORMALIZED form and the
+ * id that came out of it. The catalog is filled from discovery rows and from
+ * other people's target rows, so it can hold a share link
+ * (facebook.com/share/g/…) whose group id is not known yet. Inserted raw,
+ * that becomes a target the worker cannot publish to and nobody can see why.
+ *
+ * So the link decides: a row whose url does not parse is not adopted at all
+ * and is counted as a failure, and a share link is adopted exactly as the
+ * "+ הוסף" field adopts one — pending, for the worker to follow.
+ *
+ * @returns what happened, and `ids` — the target rows for every group he
+ *          picked, the ones that were already there included, so the screen
+ *          that opened this can select them.
  */
 export async function adoptCatalogGroups(
   rows: Pick<CatalogGroup, 'external_id' | 'url' | 'name' | 'city' | 'category'>[],
-): Promise<{ added: number; existed: number; failed: number }> {
-  const wanted = rows.filter((r) => r.external_id && r.url);
-  if (!wanted.length) return { added: 0, existed: 0, failed: 0 };
+): Promise<{ added: number; existed: number; failed: number; ids: string[] }> {
+  /* THE ID COMES OUT OF THE LINK, as it does in addGroup — never from the
+     catalog column alone. If the two ever disagreed, the link is the thing
+     the worker will actually open. */
+  const wanted = rows
+    .map((r) => ({ row: r, parsed: parseGroupUrl(r.url) ?? parseGroupShareUrl(r.url) }))
+    .filter((x): x is { row: (typeof rows)[number]; parsed: { url: string; externalId: string } } => Boolean(x.parsed));
+  const unparsed = rows.length - wanted.length;
+  if (!wanted.length) return { added: 0, existed: 0, failed: unparsed, ids: [] };
 
   /* One query, not one per row. `.in()` on sixty ids is one URL and one
      index scan on the same unique index the insert will be checked against. */
   const { data: have } = await db()
     .from('social_targets')
-    .select('external_id')
+    .select('id, external_id')
     .eq('channel', 'facebook_group')
-    .in('external_id', wanted.map((r) => r.external_id));
-  const mine = new Set((have ?? []).map((r: { external_id: string }) => r.external_id));
+    .in('external_id', wanted.map((x) => x.parsed.externalId));
+  const mine = new Map((have ?? []).map((r: { id: string; external_id: string }) => [r.external_id, r.id]));
 
-  const fresh = wanted.filter((r) => !mine.has(r.external_id));
-  if (!fresh.length) return { added: 0, existed: wanted.length, failed: 0 };
+  const fresh = wanted.filter((x) => !mine.has(x.parsed.externalId));
+  const ids = [...mine.values()];
+  if (!fresh.length) return { added: 0, existed: wanted.length, failed: unparsed, ids };
 
   /* The SAME shape addGroup inserts. Kept in one place here, used by both
      paths below, so the batch and the fallback cannot differ. */
-  const rowOf = (r: (typeof fresh)[number]) => ({
+  const rowOf = ({ row, parsed }: (typeof fresh)[number]) => ({
     channel: 'facebook_group',
-    external_id: r.external_id,
-    name: r.name || r.external_id,
-    url: r.url,
+    external_id: parsed.externalId,
+    name: row.name || parsed.externalId,
+    url: parsed.url,
     /* The catalog's own city when it has one — it was read off the group's
        page, which is better evidence than a guess from the name. */
-    city: r.city || detectCity(r.name || ''),
-    ...(r.category ? { category: r.category } : {}),
+    city: row.city || detectCity(row.name || ''),
+    ...(row.category ? { category: row.category } : {}),
     notes: '',
     permission_status: 'browser',
     can_api_publish: false,
     enabled: true,
   });
 
-  const { error } = await db().from('social_targets').insert(fresh.map(rowOf));
-  if (!error) return { added: fresh.length, existed: wanted.length - fresh.length, failed: 0 };
+  const { data: inserted, error } = await db().from('social_targets').insert(fresh.map(rowOf)).select('id');
+  if (!error) {
+    for (const r of (inserted ?? []) as { id: string }[]) ids.push(r.id);
+    return { added: fresh.length, existed: wanted.length - fresh.length, failed: unparsed, ids };
+  }
 
   /* The batch was rejected — almost always because something else adopted one
      of these in the last second. Per row, so the rest still land. */
   let added = 0;
   let existed = wanted.length - fresh.length;
-  let failed = 0;
-  for (const r of fresh) {
-    const one = await db().from('social_targets').insert(rowOf(r));
+  let failed = unparsed;
+  for (const x of fresh) {
+    const one = await db().from('social_targets').insert(rowOf(x)).select('id');
     /* A COLLISION AND A REFUSAL ARE NOT THE SAME SENTENCE. Counting every
        rejected row as "already in the list" would turn a permissions problem
        into a reassuring number; the duplicate code (23505) is the only one
        that means "someone else has it". */
-    if (!one.error) added += 1;
-    else if (one.error.code === '23505') existed += 1;
-    else failed += 1;
+    if (!one.error) {
+      added += 1;
+      for (const r of (one.data ?? []) as { id: string }[]) ids.push(r.id);
+    } else if (one.error.code === '23505') {
+      existed += 1;
+      /* It is in the list now, just not ours to have inserted — so the
+         screen still gets its id and can select it. */
+      const { data: late } = await db()
+        .from('social_targets')
+        .select('id')
+        .eq('channel', 'facebook_group')
+        .eq('external_id', x.parsed.externalId)
+        .maybeSingle();
+      if (late?.id) ids.push(late.id);
+    } else {
+      failed += 1;
+    }
   }
-  return { added, existed, failed };
+  return { added, existed, failed, ids };
 }
 
 export async function requestGroupRefresh(ids?: string[], opts?: { picture?: boolean }): Promise<void> {

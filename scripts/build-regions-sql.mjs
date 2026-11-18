@@ -31,15 +31,42 @@ const pairs = [...body.matchAll(/^\s*'((?:[^'\\]|\\.)*)':\s*'([^']+)',$/gm)].map
 if (pairs.length < 300) throw new Error(`only ${pairs.length} localities parsed — the data file's shape changed`);
 
 const quote = (s) => `'${s.replace(/'/g, "''")}'`;
-const lines = [
-  'update public.social_group_catalog c',
-  '   set region = v.region',
-  '  from (values',
-  ...pairs.map(([he, region], i) => `    (${quote(he)}, ${quote(region)})${i === pairs.length - 1 ? '' : ','}`),
-  '  ) as v(city, region)',
-  ' where c.city = v.city',
-  '   and c.region is distinct from v.region;',
-];
+
+/*
+ * ONE STATEMENT PER REGION, WRAPPED — not one VALUES row per locality.
+ *
+ * Both say the same thing to Postgres. This one is a quarter of the lines,
+ * and the file is something the owner pastes into the Supabase SQL editor by
+ * hand: four hundred lines of two-column tuples is a wall he has to scroll
+ * past to see what it does.
+ */
+const WRAP = 92;
+const byRegion = new Map();
+for (const [he, region] of pairs) {
+  if (!byRegion.has(region)) byRegion.set(region, []);
+  byRegion.get(region).push(he);
+}
+
+const lines = [];
+for (const [region, cities] of byRegion) {
+  lines.push(`update public.social_group_catalog set region = ${quote(region)}`);
+  lines.push(' where region is distinct from ' + quote(region) + ' and city in (');
+  let row = '  ';
+  cities.sort((a, b) => a.localeCompare(b, 'he'));
+  cities.forEach((city, i) => {
+    const piece = quote(city) + (i === cities.length - 1 ? '' : ',');
+    if ((row + ' ' + piece).length > WRAP) {
+      lines.push(row);
+      row = '  ' + piece;
+    } else {
+      row = row === '  ' ? '  ' + piece : row + ' ' + piece;
+    }
+  });
+  if (row.trim()) lines.push(row);
+  lines.push(');');
+  lines.push('');
+}
+lines.pop();
 
 const file = path.join(root, 'supabase/social-schema-v49.sql');
 const sql = readFileSync(file, 'utf8');

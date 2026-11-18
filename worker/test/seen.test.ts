@@ -86,8 +86,12 @@ const page = readFileSync(new URL('../../src/app/social/page.tsx', import.meta.u
 /* ───────────────── and the facts, which did not move ───────────────────── */
 {
   is(
-    page.includes('summary.needsHuman ? `${summary.needsHuman} דורשים אתכם`'),
+    page.includes('`${summary.needsHuman} דורשים אתכם`'),
     'the rows waiting on a person still carry their count on the "ממתינים היום" tile — the warning went, the fact did not',
+  );
+  is(
+    page.includes("`${data.counts.paused} ${agree(data.counts.paused, 'תקוע', 'תקועים')}`"),
+    'and the stuck rows are named there too — the orange bar was the only place they were ever counted',
   );
   /*
    * AND THE COUNT IS STILL A WAY IN. This is the half I got wrong the first
@@ -100,12 +104,22 @@ const page = readFileSync(new URL('../../src/app/social/page.tsx', import.meta.u
    * tap agree, which is more than the bar ever managed.
    */
   is(
-    page.includes("summary.needsHuman && !(summary.automaticWaiting > data.waitingToday) ? '/social/history?status=needs_attention'"),
+    page.includes("summary.needsHuman\n                    ? '/social/history?status=needs_attention'"),
     'and the column opens those rows when its sub-line is about them',
   );
   is(
-    page.includes("data.counts.paused ? '/social/history?status=paused'"),
+    page.includes("data.counts.paused\n                      ? '/social/history?status=paused'"),
     'and the stuck rows, which no worker ever claims, keep their own way in as well',
+  );
+  /* ON THE WAITING COLUMN, NOT THE FAILURES ONE. The first attempt hung the
+     stuck rows off "נכשלו היום", and progress-contradiction.test.ts refused
+     it: that column is pinned to open TODAY's failures, because it once
+     printed an all-time count beside "0 פורסמו היום" and the owner read the
+     38 as this morning's. A tile that sometimes opens something else is the
+     same fault wearing a different hat. */
+  is(
+    page.includes("href: '/social/history?status=failed&range=1'"),
+    'and the failures column still opens today\u2019s failures, unconditionally',
   );
 
   const history = readFileSync(new URL('../../src/app/social/history/page.tsx', import.meta.url), 'utf8');

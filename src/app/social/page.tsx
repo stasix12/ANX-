@@ -1959,7 +1959,20 @@ export default function SocialDashboard() {
                   value: data.waitingToday,
                   /* What the number does not hold, named — unless the reset is
                      on screen, which takes this row (StatStrip). */
-                  sub: summary.automaticWaiting > data.waitingToday ? `ועוד ${summary.automaticWaiting - data.waitingToday} אחרי חצות` : summary.needsHuman ? `${summary.needsHuman} דורשים אתכם` : undefined,
+                  /*
+                   * THE SUB-LINE NAMES WHICHEVER OF THE THREE IS TRUE, and
+                   * the two that a person has to move come first. "תקועים"
+                   * joined it with the orange bar's removal: they are the
+                   * rows in a status no worker ever claims, and the bar was
+                   * the only place they were ever named.
+                   */
+                  sub: summary.needsHuman
+                    ? `${summary.needsHuman} דורשים אתכם`
+                    : data.counts.paused
+                      ? `${data.counts.paused} ${agree(data.counts.paused, 'תקוע', 'תקועים')}`
+                      : summary.automaticWaiting > data.waitingToday
+                        ? `ועוד ${summary.automaticWaiting - data.waitingToday} אחרי חצות`
+                        : undefined,
                   /*
                    * THE TAP LANDS WHERE THE WORDS POINT, and it has to: the
                    * orange bar that used to be the only way into these rows
@@ -1973,7 +1986,11 @@ export default function SocialDashboard() {
                    * about tomorrow's queue and the column opens the queue,
                    * which is what it has always done.
                    */
-                  href: summary.needsHuman && !(summary.automaticWaiting > data.waitingToday) ? '/social/history?status=needs_attention' : '/social/history?status=scheduled',
+                  href: summary.needsHuman
+                    ? '/social/history?status=needs_attention'
+                    : data.counts.paused
+                      ? '/social/history?status=paused'
+                      : '/social/history?status=scheduled',
                   /* THE RESET LIVES ON THE NUMBER IT RESETS. "אפס הכל", not
                      "אפס": cancelAllScheduled() matches on status with no date
                      bound at all, so beside a column that says "להיום" a chip
@@ -2004,19 +2021,8 @@ export default function SocialDashboard() {
                   value: data.failedToday,
                   /* The reference's own chip, in his words. */
                   chipLabel: data.failedToday ? 'טיפול נדרש' : undefined,
-                  /*
-                   * AND THE STUCK ROWS KEEP THEIR WAY IN TOO. They had one —
-                   * the second orange bar — and they are the rows no worker
-                   * ever claims, so a person is the only thing that moves
-                   * them. The skipped line keeps the column when there is
-                   * nothing stuck, which is the common case.
-                   */
-                  sub: data.counts.paused
-                    ? `${data.counts.paused} ${agree(data.counts.paused, 'תקוע', 'תקועים')}`
-                    : data.skippedToday
-                      ? `ועוד ${data.skippedToday} ${agree(data.skippedToday, 'דולג', 'דולגו')}`
-                      : undefined,
-                  href: data.counts.paused ? '/social/history?status=paused' : '/social/history?status=failed&range=1',
+                  sub: data.skippedToday ? `ועוד ${data.skippedToday} ${agree(data.skippedToday, 'דולג', 'דולגו')}` : undefined,
+                  href: '/social/history?status=failed&range=1',
                 },
                 {
                   key: 'comments',

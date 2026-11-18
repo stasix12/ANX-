@@ -3075,7 +3075,7 @@ const scenario: { step: string; line: string }[] = [];
    * sub-line, which is what keeps a publication waiting for a person from
    * disappearing off this row entirely.
    */
-  pin('dashboard needs-you count', dash, 'summary.needsHuman ? `${summary.needsHuman} דורשים אתכם`');
+  pin('dashboard needs-you count', dash, '`${summary.needsHuman} דורשים אתכם`');
   /*
    * AND THE TILE IS NOW THE ONLY PLACE IT IS SAID — "תמחק את ההתראות
    * הכתומות האלה זה סתם מלחיץ".
@@ -3091,7 +3091,7 @@ const scenario: { step: string; line: string }[] = [];
    * The sub-line pinned above is what carries the fact now, which is why that
    * pin matters more than it did.
    */
-  pin('dashboard needs-you is the tile only', dash, 'summary.needsHuman ? `${summary.needsHuman} דורשים אתכם`');
+  pin('dashboard needs-you is the tile only', dash, '`${summary.needsHuman} דורשים אתכם`');
   /*
    * The cap is never printed as a total — and the rule got STRONGER when this
    * card became a window on the next 24 hours rather than the whole queue.

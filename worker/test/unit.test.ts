@@ -3077,23 +3077,21 @@ const scenario: { step: string; line: string }[] = [];
    */
   pin('dashboard needs-you count', dash, 'summary.needsHuman ? `${summary.needsHuman} דורשים אתכם`');
   /*
-   * And it still decides the banner above the row, which is louder than the
-   * tile ever was — now through `waitingForYou`, which is the same figure
-   * minus the rows this device has already been TOLD about
-   * (lib/social/seen.ts).
+   * AND THE TILE IS NOW THE ONLY PLACE IT IS SAID — "תמחק את ההתראות
+   * הכתומות האלה זה סתם מלחיץ".
    *
-   * THE RULE IS UNCHANGED WHILE THE MECHANISM BEHIND IT HAS MOVED: the
-   * dashboard does not get to re-derive WHO is waiting. It did that by
-   * comparing a capped list of ids against summary.needsHuman, and at 347
-   * waiting rows the cap disabled the dismissal entirely; the count now comes
-   * from waitingForYouSince(), which filters the one classification in
-   * status.ts by a stored watermark. So the needle points at the call rather
-   * than at the comparison, and worker/test/seen.test.ts holds the dismissal
-   * itself honest — including that the read uses NEEDS_HUMAN_STATUSES and
-   * nothing of its own.
+   * There used to be a banner above this row as well, louder than the tile
+   * ever was, counting the same rows minus the ones this device had been
+   * told about (lib/social/seen.ts) and dismissible for exactly that reason.
+   * Rows waiting on a person stop nothing — the banner's own body said so —
+   * so it raised an amber system state, an amber dot on every screen and a
+   * bar across the dashboard over work that was waiting patiently.
+   *
+   * The banner, the watermark and the per-poll count that fed it are gone.
+   * The sub-line pinned above is what carries the fact now, which is why that
+   * pin matters more than it did.
    */
-  pin('dashboard needs-you banner', dash, 'waitingForYouSince(readSeenUntil())');
-  pin('dashboard needs-you fallback', dash, 'data.waitingNewest <= seenUntil) ? data.waitingUnseen : 0');
+  pin('dashboard needs-you is the tile only', dash, 'summary.needsHuman ? `${summary.needsHuman} דורשים אתכם`');
   /*
    * The cap is never printed as a total — and the rule got STRONGER when this
    * card became a window on the next 24 hours rather than the whole queue.

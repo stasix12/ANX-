@@ -2114,55 +2114,6 @@ export async function listQueue(
   return unwrap<QueueRow[]>(await q);
 }
 
-/**
- * HOW MANY PUBLICATIONS ARE WAITING ON A PERSON THAT HE HAS NOT BEEN TOLD
- * ABOUT YET — and the instant that answers them.
- *
- * ─── WHY THIS REPLACED A LIST OF IDS ──────────────────────────────────────
- *
- * The dashboard's orange bar is dismissable: "ברגע שיש התראה כזאת בכתום
- * שרשום שיש פוסטים שמחכים לכם, אני רוצה אחרי שפעם אחת אני לוחץ על זה וזה
- * נעלם אחר כך." The first build of that did it by ID — fetch the waiting
- * rows, remember which ones were shown, count the rest — with a cap of 200
- * and a rule that the bar may not be dismissed at all while the cap is
- * reached, so that one tap could never hide rows nobody had seen.
- *
- * MEASURED ON HIS ACCOUNT, 13.11.2026: 347 rows in `needs_attention`. Over
- * the cap, so for weeks the bar has been counting all 347, un-dismissable,
- * every thirty seconds — the exact thing the dismissal was built to end. The
- * cap could be raised, and then it would break again at the new number; there
- * are 4 more of these rows a day.
- *
- * SO WHAT IS REMEMBERED IS AN INSTANT, NOT A SET. "I have been told about
- * everything that was waiting as of this moment." Rows that arrive afterwards
- * are newer than it and raise the bar again with their own count, which is the
- * half of the ID mechanism that mattered — and it costs one number per device
- * instead of a list that grows without bound.
- *
- * `newest` is the watermark to store, and it is a DATABASE instant, read off
- * the newest row being counted, rather than the browser's own clock: a PC
- * whose clock is ten minutes fast would otherwise dismiss ten minutes of rows
- * it never showed. It is null exactly when nothing is waiting.
- *
- * ONE QUERY. PostgREST's exact count is of everything matching the filter,
- * independent of the one row the limit returns.
- */
-export async function waitingForYouSince(since: string | null): Promise<{ unseen: number; newest: string | null }> {
-  let q = db()
-    .from('social_queue')
-    .select('updated_at', { count: 'exact' })
-    .in('status', NEEDS_HUMAN_STATUSES)
-    .order('updated_at', { ascending: false })
-    .limit(1);
-  /* `updated_at` is stamped by the database on every write
-     (social_queue_set_updated_at), so a row that goes back to waiting after
-     being handled is newer than any watermark and says so again. */
-  if (since) q = q.gt('updated_at', since);
-  const res = await q;
-  if (res.error) throw friendlyError(res.error);
-  const rows = (res.data ?? []) as { updated_at: string | null }[];
-  return { unseen: res.count ?? 0, newest: rows[0]?.updated_at ?? null };
-}
 
 export async function getQueueItem(id: string): Promise<QueueRow | null> {
   return unwrap<QueueRow | null>(await db().from('social_queue').select(QUEUE_SELECT).eq('id', id).maybeSingle());

@@ -36,7 +36,6 @@ import {
   listQueue,
   listTargets,
   countWaitingWithin,
-  waitingForYouSince,
   listWorkers,
   pauseCampaign,
   queueCampaignComment,
@@ -65,7 +64,6 @@ import { MIN_REPEAT_HOURS, readRepeat, readSchedule, scheduleColumns, type Campa
 import { accountGapLabel } from '@/lib/social/rules';
 import { OVERDUE_AFTER_SECONDS } from '@/lib/social/countdown';
 import { AUTOMATIC_WAITING_STATUSES, EMPTY_QUEUE_SUMMARY, IN_FLIGHT_STATUSES, TERMINAL_STATUSES, type QueueSummary } from '@/lib/social/status';
-import { readSeenUntil, writeSeenUntil } from '@/lib/social/seen';
 import { SNAPSHOT, readSnapshot, writeSnapshot } from '@/lib/social/snapshot';
 import { addDaysISO, agree, counted, formatTimeHe, ltr, startOfZonedDay, startOfZonedWeek, zonedDateISO, zonedToUtc } from '@/lib/social/time';
 import { projectQueue, spacingFrom } from '@/lib/social/projection';
@@ -185,19 +183,6 @@ interface DashboardData {
    * zero and must not be printed as one.
    */
   activeTargets: number | null;
-  /**
-   * How many rows waiting on a PERSON this device has NOT been told about —
-   * the number the orange bar prints. See lib/social/seen.ts: what is
-   * remembered is an instant, so this is already "minus what was dismissed"
-   * and works at any number of rows.
-   */
-  waitingUnseen: number;
-  /**
-   * The newest such row's own `updated_at`, which is the watermark pressing
-   * "הצג" stores. Null exactly when nothing is waiting. A database instant,
-   * never this browser's clock.
-   */
-  waitingNewest: string | null;
 
   manual: QueueRow[];
   log: ActivityEntry[];
@@ -417,7 +402,7 @@ export default function SocialDashboard() {
        * IS on screen, it still reads every tick.
        */
       const needTargets = !setupDone.current;
-      const [campaigns, states, queue, today, failures, weekPublished, weekComments, limits, control, targets, manual, waitingForYou, log, upcoming, inFlightRows, doneToday, workers, comments, commentsWaiting, totals, commentsToday, commentsDone, commentsAttention, browser, lastPublished, waitingToday, cycle] = await Promise.all([
+      const [campaigns, states, queue, today, failures, weekPublished, weekComments, limits, control, targets, manual, log, upcoming, inFlightRows, doneToday, workers, comments, commentsWaiting, totals, commentsToday, commentsDone, commentsAttention, browser, lastPublished, waitingToday, cycle] = await Promise.all([
         campaignsPromise,
         statesPromise,
         queueSummary(),
@@ -436,12 +421,6 @@ export default function SocialDashboard() {
         getControl(),
         needTargets ? listTargets() : Promise.resolve(null),
         listQueue({ status: ['manual_pending'], limit: 20 }),
-        /* One column, no joins, and the exact count is independent of the one
-           row the limit carries back — see waitingForYouSince in client.ts.
-           It knows HOW MANY are waiting and the instant to store, not WHICH
-           rows: that is the trade seen.ts documents. The cheapest read in
-           this batch either way. */
-        waitingForYouSince(readSeenUntil()),
         listActivity(30),
         // Ascending, because the limit is applied after the sort: read
         // newest-first, these 40 would be the FURTHEST-OUT rows in the queue
@@ -547,8 +526,6 @@ export default function SocialDashboard() {
         waitingToday,
         control,
         activeTargets: targets ? targets.filter((t) => t.enabled).length : null,
-        waitingUnseen: waitingForYou.unseen,
-        waitingNewest: waitingForYou.newest,
         manual,
         log,
         campaigns,
@@ -688,46 +665,22 @@ export default function SocialDashboard() {
   const pending = summary.cancellable;
 
   /*
-   * "N פרסומים ממתינים לכם" — AND WHETHER HE HAS ALREADY BEEN SHOWN THEM.
+   * ─── THE DISMISSIBLE ORANGE BAR IS GONE, AND SO IS ITS WATERMARK ───────
    *
-   * These rows move only when a person moves them, so the bar about them used
-   * to be permanent: looked at, understood, left alone deliberately, and still
-   * repeated on every load. `waitingUnseen` is the count of the ones this
-   * device has NOT been told about — the read itself is filtered by the stored
-   * watermark — so pressing "הצג" once answers it, and a row that arrives
-   * afterwards raises it again with its own number. lib/social/seen.ts holds
-   * the why, including what the previous ID-based version could not do: at 347
-   * waiting rows it was over its 200-row cap, which disabled the dismissal
-   * entirely and left the bar un-answerable for weeks.
-   */
-  const [seenUntil, setSeenUntil] = useState<string | null>(null);
-  useEffect(() => {
-    setSeenUntil(readSeenUntil());
-  }, []);
-  /*
-   * THE DISMISSAL HAS TO BITE BEFORE THE NEXT POLL, and the comparison that
-   * does it is the same one the next poll will make in the database.
+   * "תמחק את ההתראות הכתומות האלה זה סתם מלחיץ."
    *
-   * `waitingUnseen` was counted against the watermark as it stood when this
-   * load began, so it cannot know about a tap that happened afterwards. What
-   * the screen can see is that the watermark now covers the newest row that
-   * WAS counted — and if it covers the newest, it covers all of them, because
-   * the count and the instant come from the same ordered read. One poll later
-   * the read itself returns 0 and this line stops mattering; a row that
-   * arrives in between is newer than the watermark and re-raises the bar with
-   * its own number.
+   * "N פרסומים ממתינים לכם" was a bar about rows that move only when a person
+   * moves them — and that stop nothing while they wait, as its own body said.
+   * It was given a dismissal (lib/social/seen.ts) precisely because it was
+   * permanent and un-answerable; with the bar itself gone there is nothing
+   * left to dismiss, so the watermark, the localStorage read and the per-poll
+   * count that fed them went with it.
+   *
+   * THE ROWS DID NOT GO ANYWHERE. `summary.needsHuman` still prints
+   * "N דורשים אתכם" under the "ממתינים היום" tile below, and the history
+   * screen's 'ידניים' filter still opens exactly those three statuses. What
+   * was removed is a warning, not a fact.
    */
-  const waitingForYou = data && !(seenUntil && data.waitingNewest && data.waitingNewest <= seenUntil) ? data.waitingUnseen : 0;
-
-  /* Pressing "הצג" means "I know about these" — and what is stored is the
-     newest waiting row's own database instant, so nothing that arrives after
-     this tap is hidden by it. */
-  const markWaitingSeen = useCallback(() => {
-    const at = data?.waitingNewest;
-    if (!at) return;
-    writeSeenUntil(at);
-    setSeenUntil(at);
-  }, [data]);
 
   /**
    * Clears the queue. One implementation behind two entry points: beside
@@ -1479,15 +1432,34 @@ export default function SocialDashboard() {
          * "המערכת פעילה" over a queue that could not advance, right up until
          * the first row was two minutes late.
          */
+        /*
+         * ─── AND ONLY WHEN NOTHING WILL MOVE UNTIL HE ACTS ───────────────
+         *
+         * "תמחק את ההתראות הכתומות האלה זה סתם מלחיץ."
+         *
+         * This ladder had five causes and the comment above it says plainly
+         * that two of them stop nothing: rows parked for a person and rows in
+         * a status no worker claims. The banner for the first even SAID so in
+         * its own body — "הם לא עוצרים את התזמון — שאר הפרסומים ממשיכים לצאת
+         * בזמן" — under an amber headline reading "נדרשת התערבות", on a screen
+         * whose system dot had gone amber for the same reason. An alarm that
+         * explains it is not an alarm is one a person learns to ignore, and
+         * then the three below it are ignored with it.
+         *
+         * WHAT IS LEFT IS EXACTLY THE THREE THAT COST HIM A DAY: the PC is
+         * off with work queued, a publication is already past due with nobody
+         * to take it, or Chrome is sitting on a Facebook login. Nothing
+         * publishes until he does something about any of them.
+         *
+         * NOTHING IS HIDDEN BY THIS. The parked rows keep their own tile on
+         * this screen ("ממתינים היום", with its count and its link), the
+         * history screen keeps its 'ידניים' filter, and a row that needs a
+         * person still says so on the row. What goes is the colour, the dot
+         * and the bar — not a single fact.
+         */
         (!data.workerOnline && summary.queued > 0) ||
         stalledSince ||
-        /* The ones he has not been shown yet — not every one that exists.
-           Dismissing the bar has to take the state with it, or the header
-           keeps its amber dot and the panel keeps a headline reading "נדרשת
-           פעולה שלכם" with nothing under it saying which. */
-        waitingForYou > 0 ||
-        data.workerNeedsAuth ||
-        data.counts.paused > 0
+        data.workerNeedsAuth
         ? 'needs_intervention'
         : summary.queued === 0 && data.upcoming.length === 0
           ? 'empty'
@@ -1753,39 +1725,23 @@ export default function SocialDashboard() {
               actionLabel: 'מה לעשות',
               href: '/social#pc',
             }
-          : waitingForYou > 0
-            ? {
-                title: counted(waitingForYou, 'פרסום אחד ממתין לכם', 'פרסומים ממתינים לכם'),
-                /*
-                 * AND IT SAYS THAT THEY HOLD NOTHING UP, because they do not
-                 * and he asked: "מה שלא הצליח לפרסם לא להתעסב". rules.ts
-                 * releases rows by status and a row waiting on a person is
-                 * not one it looks at — the rest of the queue publishes past
-                 * them. The old body named the likeliest cause ("פייסבוק
-                 * ביקשה אימות"), and on his own 347 rows that cause is not
-                 * the common one: 284 of them are a publish window that did
-                 * not close and 60 are a rate limit. One sentence cannot
-                 * diagnose them, so it says what is true of all of them and
-                 * leaves the diagnosis to the row.
-                 */
-                body: 'פרסומים שנעצרו באמצע וממתינים להחלטה שלכם. הם לא עוצרים את התזמון — שאר הפרסומים ממשיכים לצאת בזמן. "הצג" פותח את הרשימה, וההתראה תחזור רק אם יצטרף פרסום חדש.',
-                actionLabel: 'הצג',
-                /* ?status=needs_attention lands on the history screen's
-                   'ידניים' group, which is NEEDS_HUMAN_STATUSES entire — the
-                   same three statuses counted here. The list it opens is
-                   therefore exactly the rows being marked as shown. */
-                href: '/social/history?status=needs_attention',
-                /* Always answerable now: what the tap stores is a watermark,
-                   not a list, so it cannot run out of room. See seen.ts for
-                   what that trades away and why he asked for it. */
-                onAction: markWaitingSeen,
-              }
-            : {
-                title: counted(data.counts.paused, 'פרסום אחד תקוע', 'פרסומים תקועים'),
-                body: 'הם נמצאים בסטטוס שאף worker לא אוסף, כך שהם לא יצאו לבד. פתחו אותם ותזמנו מחדש.',
-                actionLabel: 'הצג',
-                href: '/social/history?status=paused',
-              };
+          : /*
+             * AND THERE IS NO FOURTH BRANCH ANY MORE.
+             *
+             * Two used to live here — "N פרסומים ממתינים לכם" and "N פרסומים
+             * תקועים" — and neither stops the queue. They raised an amber
+             * system state, an amber dot on every screen's identity bar and a
+             * bar across the dashboard, for work that was waiting patiently.
+             * See the ladder above for what replaced them and for what did
+             * NOT move: both sets of rows keep their tile, their count and
+             * their link.
+             *
+             * `null` rather than a quieter sentence: the three above are the
+             * ones where the screen has something urgent to say, and a fourth
+             * written in grey would only teach the eye to skip the bar.
+             */
+            null;
+
 
   return (
     <SocialShell

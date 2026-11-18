@@ -530,16 +530,39 @@ export default function SettingsPage() {
                     {(() => {
                       const p = coverageProgress(plan.done);
                       return (
-                        <p className="mt-2.5 text-[11px] leading-4 text-mist-500">
-                          {t('נסרקו')}{' '}
-                          <span className="tabular-nums text-mist-300" dir="ltr">{p.citiesDone.toLocaleString('he-IL')}</span>{' '}
-                          {t('ערים מתוך')}{' '}
-                          <span className="tabular-nums text-mist-300" dir="ltr">{p.cities.toLocaleString('he-IL')}</span>
-                          {' · '}
-                          <span className="tabular-nums text-mist-300" dir="ltr">{p.done.toLocaleString('he-IL')}</span>{' '}
-                          {t('חיפושים מתוך')}{' '}
-                          <span className="tabular-nums text-mist-300" dir="ltr">{p.total.toLocaleString('he-IL')}</span>
-                        </p>
+                        <>
+                          {/*
+                            THE FIRST ROUND IS THE ONE HE ASKED FOR — the bare
+                            name of every city in the country — so it is the
+                            number on top. Counting only cities whose eleven
+                            phrases have ALL run would read zero for the whole
+                            week in which the country is being read once.
+                          */}
+                          <p className="mt-2.5 text-[11px] leading-4 text-mist-500">
+                            {t('נסרקו')}{' '}
+                            <span className="tabular-nums text-mist-300" dir="ltr">{p.citiesTouched.toLocaleString('he-IL')}</span>{' '}
+                            {t('ערים מתוך')}{' '}
+                            <span className="tabular-nums text-mist-300" dir="ltr">{p.cities.toLocaleString('he-IL')}</span>
+                            {p.citiesDone > 0 && (
+                              <>
+                                {' · '}
+                                <span className="tabular-nums text-mist-300" dir="ltr">{p.citiesDone.toLocaleString('he-IL')}</span>{' '}
+                                {t('מהן לעומק')}
+                              </>
+                            )}
+                            {' · '}
+                            <span className="tabular-nums text-mist-300" dir="ltr">{p.done.toLocaleString('he-IL')}</span>{' '}
+                            {t('חיפושים מתוך')}{' '}
+                            <span className="tabular-nums text-mist-300" dir="ltr">{p.total.toLocaleString('he-IL')}</span>
+                          </p>
+                          {/* WHAT IT IS DOING RIGHT NOW, in his words: the
+                              country first, the depth after. */}
+                          <p className="mt-1 text-[11px] leading-4 text-mist-500">
+                            {p.citiesTouched < p.cities
+                              ? t('כרגע: שם העיר לבדו, עיר אחר עיר, לכל הארץ. זה החיפוש הרחב ביותר לכל עיר.')
+                              : t('כל הערים נסרקו פעם אחת. כרגע: עשרת החיפושים הצרים לכל עיר, לפי הסדר.')}
+                          </p>
+                        </>
                       );
                     })()}
                     <div className="mt-2.5">

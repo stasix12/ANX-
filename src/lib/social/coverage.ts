@@ -137,18 +137,45 @@ export function coverageCities(mine: readonly string[] = []): string[] {
 /**
  * The next phrase to search, or null when the plan is finished.
  *
- * CITY-MAJOR: all ten phrases for one city, then the next city. A city that
- * has been searched is a city whose groups are IN the catalog and can be
- * published to — ten cities covered ten ways beats a hundred cities covered
- * once.
+ * ─── THE WHOLE COUNTRY FIRST, THEN THE DEPTH ─────────────────────────────
+ *
+ *   "אני רוצה שבשבוע הקרוב תסרוק את כל הקבוצות של הערים בפייסבוק בישראל."
+ *
+ * TWO ROUNDS, and the order between them is the entire answer to that.
+ *
+ *   Round 1 — the bare name of EVERY city, 413 searches. It is the broadest
+ *   page each city has: "חיפה" returns its second-hand groups, its jobs
+ *   groups and its neighbourhood groups at once. At the ceiling this round
+ *   finishes in under a week, and when it does, every city in the country has
+ *   been read.
+ *
+ *   Round 2 — the ten narrower phrases, city by city, as before.
+ *
+ * It used to be city-major from the start: all eleven phrases for Arad, then
+ * all eleven for Be'er Sheva. A week of that is thirty cities covered deeply
+ * and three hundred and eighty untouched — the opposite of what he asked for.
+ * The other order, 4,543 searches in a week, is one every two minutes, which
+ * is the rate that gets the account his business publishes from restricted.
+ * So the plan changes and the pace does not.
  */
 export function nextCoverageStep(
   done: readonly string[],
   mine: readonly string[] = [],
 ): { city: string; topic: CoverageTopic; phrase: string; key: string } | null {
   const finished = new Set(done);
-  for (const city of coverageCities(mine)) {
-    for (const topic of COVERAGE_TOPICS) {
+  const cities = coverageCities(mine);
+  const [broad, ...narrow] = COVERAGE_TOPICS;
+
+  /* Round 1: the country, once. */
+  for (const city of cities) {
+    const key = coverageKey(city, broad.id);
+    if (finished.has(key)) continue;
+    return { city, topic: broad, phrase: coveragePhrase(city, broad), key };
+  }
+
+  /* Round 2: the depth, city by city. */
+  for (const city of cities) {
+    for (const topic of narrow) {
       const key = coverageKey(city, topic.id);
       if (finished.has(key)) continue;
       return { city, topic, phrase: coveragePhrase(city, topic), key };
@@ -173,14 +200,23 @@ export function coverageTotal(mine: readonly string[] = []): number {
 export const COVERAGE_PER_DAY_DEFAULT = 6;
 export const COVERAGE_PER_DAY_MIN = 3;
 /*
- * 24 → 48 on 18.11, at his explicit request ("לא משנה כמה שעות זה ייקח"), and
- * it is the last number in this file that is a judgement rather than a
- * measurement. One search every half hour is still one page load every half
- * hour from a machine that is signed in all day anyway; the burst guard in
- * the worker (IDLE_WINDOW_LIMIT) is what actually stops a storm, and it is
- * untouched. The DEFAULT is still six.
+ * 24 → 48 → 72 on 18.11, at his explicit request, and it is the last number
+ * in this file that is a judgement rather than a measurement.
+ *
+ * 72 a day is one search every twenty minutes, which finishes round 1 — the
+ * bare name of all 413 cities — in five and a half days. That is what "scan
+ * all the country's city groups this week" really costs, and it is why the
+ * ORDER changed rather than the rate: the week he asked for buys the whole
+ * country at this pace, while buying it at the pace the naive reading implies
+ * (4,543 searches in seven days, one every two minutes) buys a restricted
+ * account instead.
+ *
+ * A page load every twenty minutes from a machine that is signed in all day
+ * anyway is still a page load every twenty minutes. The burst guard in the
+ * worker (IDLE_WINDOW_LIMIT) is what actually stops a storm and is untouched,
+ * and the DEFAULT is still six.
  */
-export const COVERAGE_PER_DAY_MAX = 48;
+export const COVERAGE_PER_DAY_MAX = 72;
 
 export function clampCoveragePerDay(n: number | null | undefined): number {
   const v = Math.round(Number(n));
@@ -220,15 +256,33 @@ export function coverageProgress(done: readonly string[], mine: readonly string[
   done: number;
   total: number;
   cities: number;
+  /** Cities whose broad page has been read — round 1. */
+  citiesTouched: number;
+  /** Cities whose eleven phrases have all run — round 2. */
   citiesDone: number;
 } {
   const cities = coverageCities(mine);
   const finished = new Set(done);
+  /*
+   * TWO NUMBERS, BECAUSE THE PLAN HAS TWO ROUNDS. Counting only the cities
+   * that are FINISHED would show zero for the whole of round 1 — the week in
+   * which every city in the country is read once — and a progress line that
+   * says zero while the machine works all week is a progress line nobody
+   * believes again.
+   */
+  let citiesTouched = 0;
   let citiesDone = 0;
   for (const city of cities) {
+    if (finished.has(coverageKey(city, COVERAGE_TOPICS[0].id))) citiesTouched += 1;
     if (COVERAGE_TOPICS.every((t) => finished.has(coverageKey(city, t.id)))) citiesDone += 1;
   }
-  return { done: finished.size, total: cities.length * COVERAGE_TOPICS.length, cities: cities.length, citiesDone };
+  return {
+    done: finished.size,
+    total: cities.length * COVERAGE_TOPICS.length,
+    cities: cities.length,
+    citiesTouched,
+    citiesDone,
+  };
 }
 
 /** The region a plan step belongs to — for a progress line that reads well. */

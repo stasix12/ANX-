@@ -107,20 +107,54 @@ for (const c of cities) is(regionOf(c) !== '', `${c} is a real locality with a r
 /* A city he typed by hand that is not a locality is not searched. */
 is(!coverageCities(['אחר', 'סתם משהו']).includes('אחר'), '"אחר" is not a city and is never searched');
 
-/* CITY-MAJOR: a city that has been searched is a city whose groups are in the
-   catalog. Ten cities covered ten ways beats a hundred covered once. */
+/*
+ * ─── THE WHOLE COUNTRY FIRST, THEN THE DEPTH ─────────────────────────────
+ *
+ * "אני רוצה שבשבוע הקרוב תסרוק את כל הקבוצות של הערים בפייסבוק בישראל."
+ *
+ * Round 1 is the bare name of EVERY city — 413 searches, under a week at the
+ * ceiling, and when it ends every city in the country has been read. Round 2
+ * is the ten narrow phrases. The old order was city-major from the start,
+ * which spends a week on thirty cities and leaves three hundred and eighty
+ * untouched; the order that would cover everything in a week is one search
+ * every two minutes, which is the rate that gets the account restricted.
+ */
 const first = nextCoverageStep([], mine);
 eq(first?.city, 'ערד', 'the first search is in the first city');
 eq(first?.phrase, 'ערד', 'and it is the city on its own — the broadest page it has');
+/* ONE city's broad page done → the NEXT CITY's broad page, not this city's
+   narrow ones. That is the whole change. */
+eq(nextCoverageStep([coverageKey('ערד', COVERAGE_TOPICS[0].id)], mine)?.phrase, 'באר שבע',
+  'the second search is the next city, not the same city again');
+/* Walk the whole of round 1 and prove it is every city, once, broad. */
+{
+  const done: string[] = [];
+  const phrases: string[] = [];
+  for (let i = 0; i < cities.length; i += 1) {
+    const step = nextCoverageStep(done, mine);
+    if (!step) break;
+    done.push(step.key);
+    phrases.push(step.phrase);
+  }
+  eq(phrases.length, cities.length, 'round 1 is exactly one search per city');
+  eq([...new Set(phrases)].length, cities.length, 'each city once, none twice');
+  eq(phrases.filter((p) => p.includes(' ')).length, phrases.filter((p) => cities.includes(p)).length - phrases.filter((p) => cities.includes(p) && !p.includes(' ')).length,
+    'and every one of them is a bare city name');
+  const progress = coverageProgress(done, mine);
+  eq(progress.citiesTouched, cities.length, 'so every city in the country has been read once');
+  eq(progress.citiesDone, 0, 'and none of them is finished yet, which the screen says separately');
+  /* AND ONLY THEN the depth begins, at the first city. */
+  const next = nextCoverageStep(done, mine);
+  eq(next?.city, 'ערד', 'round 2 starts back at the first city');
+  eq(next?.phrase, `${COVERAGE_TOPICS[1].word} ערד`, 'with its first narrow phrase');
+}
 const aradDone = COVERAGE_TOPICS.map((t) => coverageKey('ערד', t.id));
-eq(nextCoverageStep(aradDone, mine)?.city, 'באר שבע', 'the next city starts only once this one is finished');
-eq(nextCoverageStep([...aradDone, coverageKey('באר שבע', COVERAGE_TOPICS[0].id)], mine)?.phrase,
-  `${COVERAGE_TOPICS[1].word} באר שבע`, 'and a step already done is never repeated');
 
 eq(coverageTotal(mine), cities.length * COVERAGE_TOPICS.length, 'the plan is every city times every phrase');
-const progress = coverageProgress(aradDone, mine);
-eq(progress.citiesDone, 1, 'a city counts as covered only when all ten of its phrases have run');
-eq(progress.done, COVERAGE_TOPICS.length, 'and the step count is the cursor itself');
+const aradProgress = coverageProgress(aradDone, mine);
+eq(aradProgress.citiesDone, 1, 'a city counts as covered only when all eleven of its phrases have run');
+eq(aradProgress.citiesTouched, 1, 'and as touched once its broad page has been read');
+eq(aradProgress.done, COVERAGE_TOPICS.length, 'and the step count is the cursor itself');
 /* THE PLAN ENDS. A cursor that can never finish is a machine that searches
    for ever. */
 const everything = cities.flatMap((c) => COVERAGE_TOPICS.map((t) => coverageKey(c, t.id)));
@@ -175,12 +209,14 @@ is(!/done:/.test(save), 'and the screen never writes the cursor, which the worke
 /* ═══════════════ §4 ONE AT A TIME, AND A CEILING ════════════════════════ */
 
 eq(COVERAGE_PER_DAY_DEFAULT, 6, 'six searches a day out of the box');
-eq(COVERAGE_PER_DAY_MAX, 48, 'forty-eight at the ceiling — one every half hour, and no setting above it');
+eq(COVERAGE_PER_DAY_MAX, 72, 'seventy-two at the ceiling — one every twenty minutes, and no setting above it');
+/* WHICH IS WHAT THE WEEK HE ASKED FOR REALLY COSTS: 413 cities at 72 a day. */
+is(cities.length / COVERAGE_PER_DAY_MAX < 7, `round 1 finishes in ${(cities.length / COVERAGE_PER_DAY_MAX).toFixed(1)} days at the ceiling`);
 eq(clampCoveragePerDay(500), COVERAGE_PER_DAY_MAX, 'a number from anywhere is clamped to it');
 eq(clampCoveragePerDay(0), COVERAGE_PER_DAY_MIN, 'and to the floor');
 eq(clampCoveragePerDay(undefined), COVERAGE_PER_DAY_DEFAULT, 'and an absent setting is the default, not zero');
 eq(coverageGapMs(6), 4 * 60 * 60_000, 'six a day is one every four hours');
-eq(coverageGapMs(48), 30 * 60_000, 'and the ceiling is one every half hour');
+eq(coverageGapMs(72), 20 * 60_000, 'and the ceiling is one every twenty minutes');
 is(/coverageGapMs\(clampCoveragePerDay\(cfg\.perDay\)\)/.test(pass), 'the worker paces itself by that same gap, clamped');
 is(/insert\(\{/.test(pass) && (pass.match(/insert\(/g) ?? []).length === 1, 'and queues exactly one search per interval');
 

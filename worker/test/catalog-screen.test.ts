@@ -173,10 +173,48 @@ async function main(): Promise<void> {
     await page.fill('[data-group-catalog] input[type="search"]', '');
     await page.waitForFunction(() => document.querySelectorAll('[data-group-catalog] li').length === 60, null, { timeout: 4000 });
 
+    /* ───────────── 3b. אזור — THE WHOLE COUNTRY, IN FOUR CUTS ────────── */
+    /*
+     * "במאגר הארצי להוסיף את כל הערים של כל הארץ כולל צפון מרכז דרום ואילת."
+     *
+     * The region is the widest cut and the one a campaign starts from, so it
+     * is a condition in the query like every other filter — and choosing one
+     * NARROWS THE CITY LIST to that region, because a city list spanning the
+     * country is 413 entries and a filter nobody can use.
+     */
+    const cityOptions = async () =>
+      (await page.locator('[data-group-catalog] select[aria-label="עיר"] option').allTextContents()).map((x) => x.trim());
+    const allCities = await cityOptions();
+    is(allCities.length > 2, `the city list offers what the catalog holds (${allCities.length - 1} cities)`);
+    is(allCities.some((c) => c.includes('תל אביב')) && allCities.some((c) => c.includes('באר שבע')),
+      'cities from more than one region, before a region is chosen');
+    /* The counts are the database's and are drawn beside each value. */
+    is(allCities.some((c) => /\(\d/.test(c)), `each city says how many groups are behind it — "${allCities[1]}"`);
+
+    await page.selectOption('[data-group-catalog] select[aria-label="אזור"]', 'מרכז');
+    await page.waitForFunction(() => window.__queries.some((q) => q.region === 'מרכז'), null, { timeout: 4000 });
+    is(true, 'the region is a condition in the query, not a filter over the page');
+    const centre = await cityOptions();
+    is(centre.some((c) => c.includes('תל אביב')), 'the centre\u2019s cities are still offered');
+    is(!centre.some((c) => c.includes('באר שבע')), 'and a southern city is not, under a centre filter');
+    /* AND A CITY FROM ANOTHER REGION GIVES WAY rather than leaving two
+       filters that cannot both be true and an empty screen under them. */
+    await page.selectOption('[data-group-catalog] select[aria-label="אזור"]', '');
+    await page.waitForTimeout(120);
+    await page.selectOption('[data-group-catalog] select[aria-label="עיר"]', 'באר שבע');
+    await page.waitForFunction(() => window.__queries.some((q) => q.city === 'באר שבע'), null, { timeout: 4000 });
+    await page.selectOption('[data-group-catalog] select[aria-label="אזור"]', 'מרכז');
+    await page.waitForTimeout(200);
+    eq(await page.locator('[data-group-catalog] select[aria-label="עיר"]').inputValue(), '',
+      'choosing a region drops a city that is not in it, instead of showing an empty list');
+    await page.selectOption('[data-group-catalog] select[aria-label="אזור"]', '');
+    await page.waitForFunction(() => document.querySelectorAll('[data-group-catalog] li').length === 60, null, { timeout: 4000 });
+
     /* Each filter, with its value in the query rather than applied to an
        array that only holds one page. */
     for (const [label, value, key] of [
       ['עיר', 'באר שבע', 'city'],
+      ['אזור', 'דרום', 'region'],
       ['שפה', 'ru', 'language'],
       ['קטגוריה', 'יד שנייה', 'category'],
     ] as const) {
@@ -221,8 +259,47 @@ async function main(): Promise<void> {
      */
     const allRowText = (await rows.allTextContents()).join(' | ').replace(/\s+/g, ' ');
     is(/חברים/.test(allRowText), 'the rows really do carry the facts line (so the next check is not vacuous)');
-    is(!/(^|[ |·])חבר([ |·]|$)/.test(allRowText), 'and no row says חבר — the catalog cannot know that');
-    is(!/לא הצטרפת|ביקשת/.test(allRowText), 'nor any other membership word');
+
+    /*
+     * ─── "לראות אם אני חבר" — BUT ONLY WHERE HE REALLY LOOKED ───────────
+     *
+     * The badge is NOT from the catalog, which is shared and cannot hold one
+     * account's memberships. It is from this business's own גילוי קבוצות
+     * rows — the stub says one group is his, one he only asked to join, one
+     * he is definitely not in, and nothing about the other 19,997.
+     */
+    /*
+     * FOUND BY THE BADGE ELEMENT, not by a substring of the row's text.
+     * textContent runs the elements together — "חבר" lands against the
+     * button's caption with no separator — so a substring test here is a
+     * test of how the DOM happens to concatenate. An element whose whole
+     * text is the badge's word is the badge.
+     */
+    const badge = (word: string) => rows.filter({ has: page.getByText(word, { exact: true }) });
+    const memberRow = badge('חבר');
+    eq(await memberRow.count(), 1, 'exactly the one group his own search said he is in says חבר');
+    eq(await badge('ממתין לאישור').count(), 1, 'the one he only asked to join says so');
+    eq(await badge('לא הצטרפת').count(), 1, 'and the one he is not in says that');
+    /* AND NOTHING ELSE CLAIMS ANYTHING. Three answers out of sixty rows. */
+    eq(
+      (await badge('חבר').count()) + (await badge('ממתין לאישור').count()) + (await badge('לא הצטרפת').count()),
+      3,
+      'the other rows say nothing about membership, because nothing is known about them',
+    );
+    /* THE TILE SAYS WHAT IT KNOWS, OR SAYS NOTHING — never a confident 0.
+       `mine` is null until the read lands, and the tile draws a dash. */
+    const tiles = (await figures.allTextContents()).join(' | ').replace(/\s+/g, ' ');
+    is(/כבר אצלי/.test(tiles), 'the "already mine" tile is drawn');
+    is(!/כבר אצלי 0|0 כבר אצלי/.test(tiles), 'and it never reads a confident 0 over a list it has read');
+
+    /* A group he is NOT in is not offered for the publishing list — his own
+       rule — and offers the quick way to join instead. */
+    const notIn = rows.filter({ hasText: 'לא הצטרפת' }).first();
+    is(!(await notIn.textContent())?.includes('הוסף לרשימה'), 'a group he is not in is never offered for the publishing list');
+    is((await notIn.textContent())?.includes('פתח להצטרפות'), 'it offers the quick way in instead');
+    is(await notIn.locator('a[href*="facebook.com"][target="_blank"]').count() > 0, 'which is a link to the group itself, where Facebook\u2019s own join button is');
+    /* And the one he IS in opens, rather than offering to join. */
+    is((await memberRow.first().textContent())?.includes('פתח קבוצה'), 'a group he is in opens, it does not offer to join');
 
     /* THE CATALOG'S OWN FACTS ARE STILL ON THE ROW. Moving onto the shared
        row dropped the city and the language once — a catalog row that says
@@ -326,17 +403,48 @@ async function main(): Promise<void> {
     is((await bar.textContent())?.includes('60'), 'and the selection is still there afterwards');
 
     /* THE HAND-OFF, AND WHAT HAPPENS WHEN IT FAILS. */
+    /* Counted BEFORE, because one group was really added by its own button a
+       few lines up: the property is that a refusal adds nothing, not that the
+       number is any particular value. */
+    const beforeRefused = await badge('כבר במערכת').count();
     await page.evaluate(() => { window.__addFails = true; });
     await page.locator('[data-group-catalog] .sticky button', { hasText: 'הוסף לקבוצות שלי' }).click();
     await page.locator('button', { hasText: /^הוסף \d+$/ }).first().click();
     await page.waitForFunction(() => window.__added.length === 1, null, { timeout: 4000 });
     eq((await page.evaluate(() => window.__added[0].length)), 60, 'the groups handed over are the ones that were selected');
     is((await bar.textContent())?.includes('60'), 'a failed hand-off KEEPS the selection — sixty groups are not re-picked by hand');
+    /*
+     * ─── A REFUSED WRITE MUST NOT MARK ANYTHING AS HIS ──────────────────
+     *
+     * The screen used to add every selected id to its own "mine" set after a
+     * bulk add. But the writer returns added / existed / FAILED — an
+     * unparseable link, a row another session took, an RLS refusal — folded
+     * by the caller into one boolean. Ten selected with three refused marked
+     * all ten: the three lost their add button, took the member skin, could
+     * not be retried from this screen, and the tile counted them.
+     *
+     * The hand-off above was told to fail, so the stand-in database knows
+     * about none of them. Not one row may claim otherwise.
+     */
+    const claimed = await badge('כבר במערכת').count();
+    eq(
+      claimed,
+      beforeRefused,
+      `a refused hand-off marked nothing as his (${claimed} rows claim it, ${beforeRefused} did before the refusal)`,
+    );
+
     await page.evaluate(() => { window.__addFails = false; });
     await page.locator('[data-group-catalog] .sticky button', { hasText: 'הוסף לקבוצות שלי' }).click();
     await page.locator('button', { hasText: /^הוסף \d+$/ }).first().click();
     await page.waitForFunction(() => document.querySelectorAll('[data-group-catalog] .sticky').length === 0, null, { timeout: 4000 });
     is(true, 'and a successful one clears it');
+    /* AND NOW THEY REALLY ARE HIS — re-read from the database, not assumed. */
+    await page.waitForFunction(
+      () => [...document.querySelectorAll('[data-group-catalog] li')].filter((li) => (li.textContent ?? '').includes('כבר במערכת')).length > 2,
+      null,
+      { timeout: 4000 },
+    );
+    is(true, 'after a hand-off that landed, the rows say so — from a re-read, not from the selection');
 
     /* ───────────── 5b. THE ORDER, AND IT IS THE DATABASE'S ───────────── */
     /*

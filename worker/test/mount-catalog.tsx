@@ -11,6 +11,7 @@
  */
 import { createRoot } from 'react-dom/client';
 import { GroupCatalog } from '@/components/social/GroupCatalog';
+import { markAdded } from './stub-catalog';
 import { ToastProvider } from '@/components/social/ui';
 
 declare global {
@@ -30,7 +31,13 @@ createRoot(document.getElementById('root') as HTMLElement).render(
       <GroupCatalog
         onAdd={(picked) => {
           window.__added.push(picked.map((g) => g.external_id));
-          return !window.__addFails;
+          if (window.__addFails) return false;
+          /* The write really happened, so the stand-in database knows about
+             it — which is what the screen re-reads. A FAILED hand-off tells
+             it nothing, and that is the case worth testing: those rows must
+             not come back marked as his. */
+          markAdded(picked.map((g) => g.external_id));
+          return true;
         }}
       />
     </div>

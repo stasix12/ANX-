@@ -151,7 +151,22 @@ function files(dir: string, out: string[] = []): string[] {
   for (const e of readdirSync(dir, { withFileTypes: true })) {
     const p = path.join(dir, e.name);
     if (e.isDirectory()) files(p, out);
-    else if (/\.(ts|tsx)$/.test(e.name) && !/i18n\.ts$/.test(e.name)) out.push(p);
+    /*
+     * ─── TWO FILES THAT ARE DATA, NOT SENTENCES ───────────────────────────
+     *
+     * i18n.ts is the dictionary itself. cities-data.ts is every locality in
+     * the country — 413 place names, which this file's own header already
+     * excludes by kind: "WHAT IT DELIBERATELY DOES NOT COUNT ... a city
+     * ('באר שבע' → 'Беэр-Шева' is a place and reads better in Russian)".
+     *
+     * A place name is translated where it is SHOWN, not where it is stored:
+     * the catalog's city chips put it through keep(), the same way a group's
+     * own name is kept. Counting the table as 413 untranslated sentences
+     * would mean adding 413 dictionary keys that no screen ever looks up,
+     * and the dictionary is matched against whole text nodes — a key like
+     * "מגדל" would then claim any node that happened to equal it.
+     */
+    else if (/\.(ts|tsx)$/.test(e.name) && !/i18n\.ts$/.test(e.name) && !/cities-data\.ts$/.test(e.name)) out.push(p);
   }
   return out;
 }

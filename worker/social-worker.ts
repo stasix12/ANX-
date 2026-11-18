@@ -7,6 +7,7 @@ import { JOINED_QUERY, mergeDiscovered, normalizeQuery, type DiscoveredGroup, ty
 import { renderPostText } from '@/lib/social/compose';
 import { planQueue } from '@/lib/social/plan';
 import { catalogLanguage } from '@/lib/social/language';
+import { regionOf } from '@/lib/social/cities';
 import { PREP_LEAD_MS, accountGapLabel, accountGapSeconds, clampCommentDelay, commentArmCutoff, evaluateQueueItem } from '@/lib/social/rules';
 import { Admission, laneCountFor } from './admission';
 import { CHORE_NEEDS_MS, choreFits, roomBeforeNextPublish } from './chore-window';
@@ -2029,7 +2030,7 @@ async function catalogSync(): Promise<void> {
     const slice = ids.slice(i, i + CATALOG_PUBLISH_BATCH);
     const { data, error } = await db
       .from('social_group_catalog')
-      .select('external_id, name, image_url, members, privacy, city, category, language')
+      .select('external_id, name, image_url, members, privacy, city, region, category, language')
       .in('external_id', slice);
     if (error) {
       /* The one error worth a sentence: the table is not there yet. Said
@@ -2056,6 +2057,11 @@ async function catalogSync(): Promise<void> {
         city: f.city,
         category: f.category,
         language: catalogLanguage(f.name),
+        /* The region follows from the city, by the one table in
+           src/lib/social/cities-data.ts — the same one v49 fills the existing
+           rows from. A city nobody recognises leaves it empty rather than
+           guessing a region. */
+        region: regionOf(f.city),
         last_seen_at: new Date().toISOString(),
       })),
     );
@@ -2098,6 +2104,10 @@ async function catalogSync(): Promise<void> {
        so a row the one-time seeding could not classify is corrected here. */
     const language = catalogLanguage(f.name || String(row.name ?? ''));
     if (language && language !== row.language) patch.language = language;
+    /* The region follows the city — including on a row that was seeded before
+       the country list existed, or whose city was only learned later. */
+    const region = regionOf((patch.city as string) ?? String(row.city ?? ''));
+    if (region && region !== row.region) patch.region = region;
     if (!Object.keys(patch).length) continue;
     if (changed >= CATALOG_SYNC_MAX_UPDATES) {
       left += 1;

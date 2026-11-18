@@ -6,8 +6,10 @@ import {
   CATALOG_PAGE,
   catalogFacets,
   catalogStats,
+  listMembershipByExternalId,
   listTargetExternalIds,
   searchCatalog,
+  type CatalogFacets,
   type CatalogGroup,
   type CatalogSort,
 } from '@/lib/social/client';
@@ -15,6 +17,7 @@ import { Figure, GroupRow } from './Discovery';
 import type { DiscoveredGroupRow } from '@/lib/social/types';
 import { friendlyMessage } from '@/lib/social/errors';
 import { CATALOG_LANGUAGE_LABEL } from '@/lib/social/language';
+import { REGIONS, cityInRegion } from '@/lib/social/cities';
 import { SearchIcon } from '@/components/icons';
 import { Button, Notice, inputClass, useConfirm } from './ui';
 
@@ -74,14 +77,16 @@ const CATALOG_BULK_CONFIRM = 25;
  * NOT A LOSSY COPY — every field the row reads is a field the catalog has,
  * except the three it cannot have and must not invent:
  *
- *   · membership — 'unknown'. The catalog says a group EXISTS; it has never
- *     said anybody is in it, and a badge reading חבר off a shared table would
- *     be the exact cross-account claim this table was built to avoid.
+ *   · membership — handed in, and NEVER read off the catalog. The catalog
+ *     says a group EXISTS; a badge reading חבר off a shared table would be
+ *     one customer's membership shown to another. What is passed instead is
+ *     this business's own answer out of its own גילוי קבוצות rows, and
+ *     'unknown' — which draws no badge at all — wherever it has not looked.
  *   · queries — []. The phrases are a property of one business's searches.
  *   · target_id / hidden — the publishing list and one user's dismissals,
  *     neither of which lives in a shared catalog.
  */
-function asDiscovered(g: CatalogGroup): DiscoveredGroupRow {
+function asDiscovered(g: CatalogGroup, membership: DiscoveredGroupRow['membership'] = 'unknown'): DiscoveredGroupRow {
   return {
     id: g.external_id,
     external_id: g.external_id,
@@ -90,7 +95,7 @@ function asDiscovered(g: CatalogGroup): DiscoveredGroupRow {
     image_url: g.image_url,
     members: g.members,
     privacy: g.privacy,
-    membership: 'unknown',
+    membership,
     queries: [],
     first_seen_at: g.first_seen_at,
     last_seen_at: g.last_seen_at,
@@ -122,9 +127,11 @@ export function GroupCatalog({
   const [rows, setRows] = useState<CatalogGroup[]>([]);
   const [total, setTotal] = useState(0);
   const [stats, setStats] = useState<{ total: number; unavailable: number; updatedAt: string | null } | null>(null);
-  const [facets, setFacets] = useState<{ cities: string[]; languages: string[]; categories: string[]; capped: boolean } | null>(null);
+  const [facets, setFacets] = useState<CatalogFacets | null>(null);
   const [query, setQuery] = useState('');
   const [city, setCity] = useState('');
+  /* צפון · מרכז · דרום · אילת — "כולל צפון מרכז דרום ואילת", his four. */
+  const [region, setRegion] = useState('');
   const [language, setLanguage] = useState('');
   const [category, setCategory] = useState('');
   const [loading, setLoading] = useState(true);
@@ -138,9 +145,49 @@ export function GroupCatalog({
    * whole screen rather than per row. Until it lands no row claims anything:
    * an empty set means every row simply has no badge, never a wrong one.
    */
-  const [mine, setMine] = useState<Set<string>>(new Set());
+  /*
+   * `null` until it has been read — NOT an empty set.
+   *
+   * Collapsed to an empty set, a failed read is indistinguishable from "he
+   * has no groups": every row loses its "כבר במערכת" badge and the "כבר אצלי"
+   * tile draws a confident 0 over a list of 293. A tile that cannot answer
+   * says so instead.
+   */
+  const [mine, setMine] = useState<Set<string> | null>(null);
+  /*
+   * ─── "לראות אם אני חבר", WHERE THIS ACCOUNT HAS ACTUALLY LOOKED ───────
+   *
+   * Not from the catalog — a shared table cannot hold one account's
+   * memberships — but from his own גילוי קבוצות rows, which are what
+   * Facebook's own search said as this account. Where he has never searched,
+   * the map simply has no entry and the row says nothing, which is the rule
+   * that screen already lives by: "IT DOES NOT GUESS".
+   */
+  const [member, setMember] = useState<Map<string, 'member' | 'requested' | 'none' | 'unknown'>>(new Map());
   /** The one row whose "הוסף לרשימה" is in flight. */
   const [adding, setAdding] = useState('');
+
+  /*
+   * ─── WHAT HE HAS IS THE DATABASE'S ANSWER, NEVER A GUESS FROM THE PAGE ──
+   *
+   * This used to add every selected id to `mine` after a bulk add. But
+   * adoptCatalogGroups returns added / existed / FAILED — a link that does
+   * not parse, a row another session took, an RLS refusal — and the callers
+   * fold that into one boolean. So ten selected with three refused marked all
+   * ten "כבר במערכת": the three lost their add button, took the member skin,
+   * could not be retried from this screen at all, and the tile read 303 over
+   * a database holding 300.
+   *
+   * One re-read instead. It is the same query the screen opened with, it is
+   * one round trip after a deliberate action, and it cannot be wrong.
+   */
+  const refreshMine = useCallback(async () => {
+    try {
+      setMine(await listTargetExternalIds());
+    } catch {
+      /* Left as it was — a failed refresh must not erase what we know. */
+    }
+  }, []);
 
   /*
    * ONE REQUEST WINS, AND IT IS THE LAST ONE TYPED.
@@ -162,6 +209,7 @@ export function GroupCatalog({
         const page = await searchCatalog({
           q: query,
           city,
+          region,
           language,
           category,
           sort,
@@ -175,6 +223,16 @@ export function GroupCatalog({
       } catch (err) {
         if (ticket.current !== mine) return;
         setError(friendlyMessage(err, 'טעינת המאגר נכשלה.'));
+        /*
+         * THE ROWS ON SCREEN BELONG TO THE PREVIOUS FILTER, and the next
+         * "טען עוד" asks for `offset: rows.length` — an offset into a result
+         * set nobody is looking at. Left there, the error message sits over a
+         * list that answers a different question, and paging it mixes the two.
+         */
+        if (!opts.append) {
+          setRows([]);
+          setTotal(0);
+        }
       } finally {
         if (ticket.current === mine) {
           setLoading(false);
@@ -182,7 +240,7 @@ export function GroupCatalog({
         }
       }
     },
-    [query, city, language, category, sort, rows.length],
+    [query, city, region, language, category, sort, rows.length],
   );
 
   /* The header line and the chips are asked for once — they describe the
@@ -191,7 +249,8 @@ export function GroupCatalog({
   useEffect(() => {
     catalogStats().then(setStats).catch(() => undefined);
     catalogFacets().then(setFacets).catch(() => undefined);
-    listTargetExternalIds().then(setMine).catch(() => undefined);
+    void refreshMine();
+    listMembershipByExternalId().then(setMember).catch(() => undefined);
   }, []);
 
   /*
@@ -202,7 +261,7 @@ export function GroupCatalog({
     const id = setTimeout(() => void load(), query ? 250 : 0);
     return () => clearTimeout(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [query, city, language, category, sort]);
+  }, [query, city, region, language, category, sort]);
 
   const toggle = (g: CatalogGroup) =>
     setChosen((prev) => {
@@ -233,7 +292,7 @@ export function GroupCatalog({
    * ticks on the sixty rows that happen to be drawn would be a number that
    * changed every time he scrolled.
    */
-  const minePresent = mine.size;
+  const minePresent = mine ? mine.size : null;
   const shownAll = rows.length >= total;
 
   return (
@@ -293,26 +352,75 @@ export function GroupCatalog({
         as broken. `[&>*]:min-w-0` is this product's standing rule for every
         multi-column grid.
       */}
-      <div className="grid grid-cols-3 gap-2 [&>*]:min-w-0">
+      {/*
+        FOUR FILTERS, AND EVERY VALUE IN THEM IS ONE THE CATALOG REALLY HOLDS,
+        with the number of groups behind it. A city with nothing behind it is
+        a filter that empties the screen and reads as broken, so the list is
+        the database's answer (social_catalog_facets, v49) rather than a
+        constant — and the count beside each one is the database's too.
+
+        REGION FIRST: "כולל צפון מרכז דרום ואילת". It is the widest cut and
+        the one a campaign starts from; the city list under it narrows to that
+        region as soon as one is chosen.
+      */}
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 [&>*]:min-w-0">
+        <select
+          aria-label={t('אזור')}
+          value={region}
+          onChange={(e) => {
+            setRegion(e.target.value);
+            /* A city from another region under a region filter is an empty
+               screen with two filters on it. The narrower one gives way. */
+            if (e.target.value && city && !cityInRegion(city, e.target.value)) setCity('');
+          }}
+          className={inputClass}
+        >
+          <option value="">{t('כל הארץ')}</option>
+          {REGIONS.map((r) => {
+            const n = facets?.regions.find((x) => x.value === r)?.groups;
+            return (
+              <option key={r} value={r}>
+                {keep(r)}
+                {n ? ` (${n.toLocaleString('he-IL')})` : ''}
+              </option>
+            );
+          })}
+        </select>
         <select aria-label={t('עיר')} value={city} onChange={(e) => setCity(e.target.value)} className={inputClass}>
           <option value="">{t('כל הערים')}</option>
-          {(facets?.cities ?? []).map((c) => (
-            <option key={c} value={c}>{keep(c)}</option>
-          ))}
+          {(facets?.cities ?? [])
+            .filter((c) => !region || cityInRegion(c.value, region))
+            .map((c) => (
+              <option key={c.value} value={c.value}>
+                {keep(c.value)} ({c.groups.toLocaleString('he-IL')})
+              </option>
+            ))}
         </select>
         <select aria-label={t('שפה')} value={language} onChange={(e) => setLanguage(e.target.value)} className={inputClass}>
           <option value="">{t('כל השפות')}</option>
           {(facets?.languages ?? []).map((l) => (
-            <option key={l} value={l}>{CATALOG_LANGUAGE_LABEL[l] ?? l}</option>
+            <option key={l.value} value={l.value}>
+              {CATALOG_LANGUAGE_LABEL[l.value] ?? l.value} ({l.groups.toLocaleString('he-IL')})
+            </option>
           ))}
         </select>
         <select aria-label={t('קטגוריה')} value={category} onChange={(e) => setCategory(e.target.value)} className={inputClass}>
           <option value="">{t('כל הקטגוריות')}</option>
           {(facets?.categories ?? []).map((c) => (
-            <option key={c} value={c}>{keep(c)}</option>
+            <option key={c.value} value={c.value}>
+              {keep(c.value)} ({c.groups.toLocaleString('he-IL')})
+            </option>
           ))}
         </select>
       </div>
+      {/* SAID OUT LOUD WHEN IT IS TRUE: before v49 the values come from a
+          sample of the table, and a filter list that is quietly partial is
+          how somebody concludes a city has no groups. */}
+      {facets?.capped && (
+        <p className="text-[11px] font-bold text-warning-400">
+          {t('רשימת הערים כאן חלקית — צריך להריץ את social-latest.sql פעם אחת כדי שהיא תיקרא מהמסד.')}
+        </p>
+      )}
 
       {/* ─── 3b. the order, as גילוי קבוצות offers it ("מיון") ──────────── */}
       {/* Three orders, all of them ORDER BY in Postgres over the whole match
@@ -323,7 +431,13 @@ export function GroupCatalog({
           aria-label={t('מיון')}
           value={sort}
           onChange={(e) => setSort(e.target.value as CatalogSort)}
-          className="min-h-9 rounded-lg border border-ink-700 bg-ink-900 px-2 text-[12px] font-bold text-mist-200"
+          /* mist-100, NOT mist-200: there is no --color-mist-200 in any theme
+             in this product, so Tailwind resolved it to the storefront's pale
+             grey and this select measured 1.25:1 on its own background —
+             invisible. The contrast guard cannot see it either: an undefined
+             token is in no pair. The same mistake, with the same fix, is
+             recorded in ui.tsx on the tabs variant. */
+          className="min-h-9 rounded-lg border border-ink-700 bg-ink-900 px-2 text-[12px] font-bold text-mist-100"
         >
           <option value="members">{t('הכי גדולות')}</option>
           <option value="new">{t('נוספו לאחרונה')}</option>
@@ -399,14 +513,34 @@ export function GroupCatalog({
             */
             <li key={g.external_id}>
               <GroupRow
-                row={asDiscovered(g)}
+                row={asDiscovered(g, member.get(g.external_id) ?? 'unknown')}
                 picked={chosen.has(g.external_id)}
-                already={mine.has(g.external_id)}
+                already={Boolean(mine?.has(g.external_id))}
                 busy={adding === g.external_id || busy}
-                offerAdd={Boolean(onAdd)}
+                /*
+                 * ─── AND NOW THE RULE CAN BE KEPT HERE TOO ─────────────
+                 *
+                 * "זה נותן לי לצרף לרשימה קבוצות שאני עדיין לא חבר בהם."
+                 * Where this account HAS looked and Facebook said he is not
+                 * in the group — or that he has only asked — the add button
+                 * is not offered at all, exactly as on גילוי קבוצות: each
+                 * one would be a publishing target that fails once a day.
+                 * It stays on where nothing is known, because that is what
+                 * the catalog is for (§6, picking groups for a campaign in a
+                 * city he has never searched) and the row says plainly that
+                 * nothing is known.
+                 */
+                offerAdd={Boolean(onAdd) && !['none', 'requested'].includes(member.get(g.external_id) ?? 'unknown')}
                 /* A group already in his publishing list opens, it does not
                    "join" — and it takes the quiet skin, as on גילוי קבוצות. */
-                openAsMember={mine.has(g.external_id)}
+                /*
+                 * A group of his that Facebook has since refused is not one
+                 * to say "פתח קבוצה" about — that is the sentence for a group
+                 * you are in, and his own search says he is not. Same rule
+                 * the discovery row applies through `refused`.
+                 */
+                openAsMember={Boolean(mine?.has(g.external_id)) && member.get(g.external_id) !== 'none'}
+                refused={Boolean(mine?.has(g.external_id)) && member.get(g.external_id) === 'none'}
                 /* THE CATALOG'S OWN FACTS, which the discovery row has no way
                    to know: the city it is in and the language it is written
                    in. Without these two the row says only its size and
@@ -423,9 +557,8 @@ export function GroupCatalog({
                   setAdding(g.external_id);
                   try {
                     const ok = await onAdd([g], 'row');
-                    /* Marked here as well as re-read by the caller: the badge
-                       has to change on the row he just pressed, now. */
-                    if (ok !== false) setMine((prev) => new Set(prev).add(g.external_id));
+                    /* Asked, not assumed — see refreshMine. */
+                    if (ok !== false) await refreshMine();
                   } finally {
                     setAdding('');
                   }
@@ -489,16 +622,9 @@ export function GroupCatalog({
                 const ok = await onAdd(chosenList, 'bulk');
                 if (ok !== false) {
                   setChosen(new Map());
-                  /* MARK THEM HIS, HERE. The caller re-reads his list, but
-                     this component holds its own copy for the badge and the
-                     tile — without this line the rows he just added go on
-                     offering "הוסף לרשימה" and "כבר אצלי" keeps the number it
-                     had before the write. */
-                  setMine((prev) => {
-                    const next = new Set(prev);
-                    for (const g of chosenList) next.add(g.external_id);
-                    return next;
-                  });
+                  /* THE DATABASE'S ANSWER, not the selection's — some of
+                     those rows may have been refused. See refreshMine. */
+                  await refreshMine();
                 }
               }}
               className="!min-h-9 px-3 !text-[12px]"

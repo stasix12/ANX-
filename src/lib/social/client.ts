@@ -236,6 +236,8 @@ export type CatalogSort = 'members' | 'name' | 'new';
 export interface CatalogQuery {
   q?: string;
   city?: string;
+  /** צפון · מרכז · דרום · אילת — the four the owner named, and only those. */
+  region?: string;
   language?: string;
   category?: string;
   sort?: CatalogSort;
@@ -289,6 +291,7 @@ export async function searchCatalog(query: CatalogQuery = {}): Promise<CatalogPa
   const phrase = likeSafe(query.q ?? '');
   if (phrase) req = req.ilike('name', `%${phrase}%`);
   if (query.city) req = req.eq('city', query.city);
+  if (query.region) req = req.eq('region', query.region);
   if (query.language) req = req.eq('language', query.language);
   if (query.category) req = req.eq('category', query.category);
 
@@ -360,6 +363,49 @@ export async function catalogStats(): Promise<{ total: number; unavailable: numb
     unavailable: gone.count ?? 0,
     updatedAt: (newest.data as { last_seen_at?: string } | null)?.last_seen_at ?? null,
   };
+}
+
+/**
+ * ─── WHAT THIS ACCOUNT ALREADY KNOWS ABOUT BEING A MEMBER ────────────────
+ *
+ * "יש לי איקון מהיר להצטרפות / לראות אם אני חבר כמו בעמוד של הגילוי קבוצות."
+ *
+ * The catalog itself cannot answer that and never will: it is one shared
+ * table of groups that EXIST, with no tenant column, and "I am a member of
+ * this group" is a fact about one Facebook account. Written there it would be
+ * one customer's membership shown to another.
+ *
+ * But this business has its own answer for the groups IT has seen, in its own
+ * table: social_discovery_groups.membership is what Facebook's own search
+ * said, as this account, when it last looked. That table is tenant-scoped by
+ * RLS, so this read returns his rows and nobody else's — and the catalog
+ * screen can then say "חבר" exactly where גילוי קבוצות would say it, and say
+ * NOTHING where it has not looked.
+ *
+ * @returns external_id → what Facebook last said about this account in it.
+ */
+export async function listMembershipByExternalId(): Promise<Map<string, 'member' | 'requested' | 'none' | 'unknown'>> {
+  const out = new Map<string, 'member' | 'requested' | 'none' | 'unknown'>();
+  for (let from = 0; ; from += 1000) {
+    const { data, error } = await db()
+      .from('social_discovery_groups')
+      .select('external_id, membership')
+      .neq('external_id', '')
+      .order('external_id', { ascending: true })
+      .range(from, from + 999);
+    if (error) throw new Error(error.message);
+    const rows = (data ?? []) as { external_id: string; membership: string | null }[];
+    for (const r of rows) {
+      const said = (r.membership ?? 'unknown') as 'member' | 'requested' | 'none' | 'unknown';
+      /* A row seen twice under two searches: the stronger claim wins, because
+         "member" was something Facebook printed and "unknown" is the absence
+         of an answer, not a denial. */
+      const had = out.get(r.external_id);
+      if (!had || had === 'unknown' || (had === 'none' && said !== 'unknown')) out.set(r.external_id, said);
+    }
+    if (rows.length < 1000) break;
+  }
+  return out;
 }
 
 /**
@@ -456,12 +502,22 @@ export async function catalogCoverage(): Promise<CatalogCoverage> {
    * beside it rather than silent.
    */
   const facets = await catalogFacets();
-  const byLanguage = await Promise.all(
-    facets.languages.map(async (language) => ({ language, groups: await head((q) => q.eq('language', language)) })),
-  );
-  const cityCounts = await Promise.all(
-    facets.cities.slice(0, CATALOG_PANEL_CITIES).map(async (city) => ({ city, groups: await head((q) => q.eq('city', city)) })),
-  );
+  /*
+   * THE COUNTS COME WITH THE VALUES NOW. catalogFacets() groups and counts in
+   * Postgres (v49), so the per-value head counts this used to fire — one
+   * request per language and one per city — are a round trip each for a
+   * number it already has. They are still counted here when the database is
+   * a migration behind, where the facets came from a sample and its counts
+   * are a sample's counts.
+   */
+  const byLanguage = facets.capped
+    ? await Promise.all(facets.languages.map(async (l) => ({ language: l.value, groups: await head((q) => q.eq('language', l.value)) })))
+    : facets.languages.map((l) => ({ language: l.value, groups: l.groups }));
+  const cityCounts = facets.capped
+    ? await Promise.all(
+        facets.cities.slice(0, CATALOG_PANEL_CITIES).map(async (c) => ({ city: c.value, groups: await head((q) => q.eq('city', c.value)) })),
+      )
+    : facets.cities.slice(0, CATALOG_PANEL_CITIES).map((c) => ({ city: c.value, groups: c.groups }));
 
   return {
     total: stats.total,
@@ -487,16 +543,71 @@ export async function catalogCoverage(): Promise<CatalogCoverage> {
  * a thousand entries is not a chip row. The cap is stated so a caller can say
  * so rather than quietly drawing a short list as if it were all of them.
  */
-export async function catalogFacets(): Promise<{ cities: string[]; languages: string[]; categories: string[]; capped: boolean }> {
-  const rows = unwrap<{ city: string; language: string; category: string }[]>(
-    await db().from('social_group_catalog').select('city, language, category').limit(1000),
-  );
-  const pick = (get: (r: { city: string; language: string; category: string }) => string) =>
-    [...new Set(rows.map(get).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'he'));
+export interface CatalogFacets {
+  cities: { value: string; groups: number }[];
+  regions: { value: string; groups: number }[];
+  languages: { value: string; groups: number }[];
+  categories: { value: string; groups: number }[];
+  /** True when the values came from a sample of rows rather than from the
+      whole table — i.e. the database has not run v49 yet. */
+  capped: boolean;
+}
+
+export async function catalogFacets(): Promise<CatalogFacets> {
+  /*
+   * ─── FROM THE WHOLE TABLE, NOT FROM A SAMPLE OF IT ──────────────────────
+   *
+   * This used to read a thousand rows and take DISTINCT over them in the
+   * browser. On his catalog — 1,354 groups and growing with every city in the
+   * country — that is a filter list built from the first three quarters of
+   * the table: a city whose groups all sort below row 1000 simply had no chip,
+   * and nothing on screen said so.
+   *
+   * social_catalog_facets() (v49) groups and counts in Postgres and returns a
+   * few dozen rows. One round trip, every value, with the real count beside
+   * it.
+   */
+  const rpc = await db().rpc('social_catalog_facets');
+  if (!rpc.error) {
+    const rows = (rpc.data ?? []) as { kind: string; value: string; groups: number }[];
+    const of = (kind: string) =>
+      rows
+        .filter((r) => r.kind === kind && r.value)
+        .map((r) => ({ value: r.value, groups: Number(r.groups) || 0 }))
+        .sort((a, b) => b.groups - a.groups || a.value.localeCompare(b.value, 'he'));
+    return { cities: of('city'), regions: of('region'), languages: of('language'), categories: of('category'), capped: false };
+  }
+  /*
+   * THE DATABASE IS ONE MIGRATION BEHIND — and the screen still has to work.
+   * The old read, kept exactly as it was, with `capped` telling the truth so
+   * the screen can say the list is partial rather than looking complete.
+   */
+  if (!CATALOG_MISSING.test(rpc.error.message) && !/function|does not exist|schema cache/i.test(rpc.error.message)) {
+    throw new Error(rpc.error.message);
+  }
+  const { data, error } = await db().from('social_group_catalog').select('city, region, language, category').limit(1000);
+  if (error) {
+    if (CATALOG_MISSING.test(error.message)) {
+      return { cities: [], regions: [], languages: [], categories: [], capped: false };
+    }
+    throw new Error(error.message);
+  }
+  const rows = (data ?? []) as { city: string; region: string; language: string; category: string }[];
+  const tally = (get: (r: (typeof rows)[number]) => string) => {
+    const n = new Map<string, number>();
+    for (const r of rows) {
+      const v = get(r);
+      if (v) n.set(v, (n.get(v) ?? 0) + 1);
+    }
+    return [...n.entries()]
+      .map(([value, groups]) => ({ value, groups }))
+      .sort((a, b) => b.groups - a.groups || a.value.localeCompare(b.value, 'he'));
+  };
   return {
-    cities: pick((r) => r.city),
-    languages: pick((r) => r.language),
-    categories: pick((r) => r.category),
+    cities: tally((r) => r.city),
+    regions: tally((r) => r.region),
+    languages: tally((r) => r.language),
+    categories: tally((r) => r.category),
     capped: rows.length >= 1000,
   };
 }

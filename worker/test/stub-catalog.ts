@@ -30,6 +30,38 @@ export const CATALOG_PAGE = 60;
  * page by construction, whatever the member formula below becomes.
  */
 export const ALREADY_MINE: string[] = [];
+/**
+ * What Facebook's own search said about this account, for the handful of
+ * groups it has looked at — the stand-in for his own גילוי קבוצות rows.
+ *
+ * Deliberately three different answers and a silence: a member, one he only
+ * asked to join, one he is definitely not in, and everything else unknown.
+ */
+export async function listMembershipByExternalId(): Promise<Map<string, 'member' | 'requested' | 'none' | 'unknown'>> {
+  const biggest = Array.from({ length: TOTAL }, (_, i) => group(i + 1))
+    .sort((a, b) => (b.members ?? -1) - (a.members ?? -1) || a.external_id.localeCompare(b.external_id))
+    .map((g) => g.external_id);
+  return new Map([
+    [biggest[2], 'member' as const],
+    [biggest[3], 'requested' as const],
+    [biggest[4], 'none' as const],
+  ]);
+}
+
+/**
+ * WHAT THE "DATABASE" HAS BEEN TOLD — the ids the harness really added.
+ *
+ * The screen no longer guesses which of a selection landed; it re-reads this
+ * list. So the stub has to behave like the thing it stands in for: a group it
+ * was told about comes back, and one it was not does not. Without this the
+ * re-read would hand back the same three rows for ever and the test could not
+ * tell a successful add from a refused one.
+ */
+const ADDED = new Set<string>();
+export function markAdded(ids: string[]): void {
+  for (const id of ids) ADDED.add(id);
+}
+
 export async function listTargetExternalIds(): Promise<Set<string>> {
   if (!ALREADY_MINE.length) {
     const biggest = Array.from({ length: TOTAL }, (_, i) => group(i + 1))
@@ -38,7 +70,7 @@ export async function listTargetExternalIds(): Promise<Set<string>> {
       .map((g) => g.external_id);
     ALREADY_MINE.push(...biggest);
   }
-  return new Set(ALREADY_MINE);
+  return new Set([...ALREADY_MINE, ...ADDED]);
 }
 
 export interface CatalogGroup {
@@ -61,6 +93,7 @@ export type CatalogSort = 'members' | 'name' | 'new';
 export interface CatalogQuery {
   q?: string;
   city?: string;
+  region?: string;
   language?: string;
   category?: string;
   sort?: CatalogSort;
@@ -89,7 +122,15 @@ if (typeof window !== 'undefined') {
 
 /* A deterministic catalog: 20,000 groups over five cities and three languages,
    the same shape the real table is loaded with in catalog.test.ts. */
-const CITIES = ['באר שבע', 'תל אביב', 'ירושלים', 'אשדוד', 'ערד'];
+const CITIES = ['באר שבע', 'תל אביב-יפו', 'ירושלים', 'אשדוד', 'ערד'];
+/* Their real regions — the same answer src/lib/social/cities-data.ts gives. */
+const REGION_OF: Record<string, string> = {
+  'באר שבע': 'דרום',
+  'תל אביב-יפו': 'מרכז',
+  'ירושלים': 'מרכז',
+  אשדוד: 'דרום',
+  ערד: 'דרום',
+};
 const LANGUAGES = ['he', 'ru', ''];
 const NAMES = ['קבוצת מודעות', 'Объявления', 'יד שנייה', 'דרושים'];
 const TOTAL = 20_000;
@@ -103,7 +144,7 @@ function group(i: number): CatalogGroup {
     members: (i * 7) % 50_000,
     privacy: i % 3 === 0 ? 'public' : 'private',
     city: CITIES[i % CITIES.length],
-    region: 'דרום',
+    region: REGION_OF[CITIES[i % CITIES.length]],
     language: LANGUAGES[i % LANGUAGES.length],
     category: i % 4 === 0 ? 'יד שנייה' : '',
     status: i % 97 === 0 ? 'unavailable' : 'active',
@@ -121,6 +162,7 @@ export async function searchCatalog(query: CatalogQuery = {}): Promise<CatalogPa
     const g = group(i);
     if (query.q && !g.name.includes(query.q)) continue;
     if (query.city && g.city !== query.city) continue;
+    if (query.region && g.region !== query.region) continue;
     if (query.language && g.language !== query.language) continue;
     if (query.category && g.category !== query.category) continue;
     all.push(g);
@@ -143,6 +185,33 @@ export async function catalogStats(): Promise<{ total: number; unavailable: numb
   return { total: TOTAL, unavailable: 206, updatedAt: '2026-11-18T00:00:00.000Z' };
 }
 
-export async function catalogFacets(): Promise<{ cities: string[]; languages: string[]; categories: string[]; capped: boolean }> {
-  return { cities: CITIES, languages: ['he', 'ru'], categories: ['יד שנייה'], capped: false };
+/**
+ * The filter values WITH their counts, as social_catalog_facets() returns
+ * them — values and counts out of the database, never a DISTINCT over a
+ * sample of rows in the browser.
+ */
+export async function catalogFacets(): Promise<{
+  cities: { value: string; groups: number }[];
+  regions: { value: string; groups: number }[];
+  languages: { value: string; groups: number }[];
+  categories: { value: string; groups: number }[];
+  capped: boolean;
+}> {
+  const tally = (get: (g: CatalogGroup) => string) => {
+    const n = new Map<string, number>();
+    for (let i = 1; i <= TOTAL; i += 1) {
+      const v = get(group(i));
+      if (v) n.set(v, (n.get(v) ?? 0) + 1);
+    }
+    return [...n.entries()].map(([value, groups]) => ({ value, groups })).sort((a, b) => b.groups - a.groups);
+  };
+  return {
+    cities: tally((g) => g.city),
+    /* The stub's five cities are in three different regions, which is what
+       lets the test prove the city list narrows when a region is chosen. */
+    regions: tally((g) => g.region),
+    languages: tally((g) => g.language),
+    categories: tally((g) => g.category),
+    capped: false,
+  };
 }

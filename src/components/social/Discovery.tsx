@@ -48,7 +48,21 @@ const FIGURE_SKIN: Record<'good' | 'warn' | 'brand', { tint: string; text: strin
   brand: { tint: 'border-brand-400/25 bg-brand-400/[0.07]', text: 'text-brand-400', chip: 'bg-brand-400/12' },
 };
 
-export function Figure({ tone, value, label }: { tone: 'good' | 'warn' | 'brand'; value: number; label: string }) {
+export function Figure({
+  tone,
+  value,
+  label,
+}: {
+  tone: 'good' | 'warn' | 'brand';
+  /**
+   * `null` means NOT KNOWN — the read failed or has not landed — and draws a
+   * dash. Zero means zero. Collapsing the two was how the catalog's "כבר
+   * אצלי" tile drew a confident 0 over a list of 293 groups when one query
+   * came back empty.
+   */
+  value: number | null;
+  label: string;
+}) {
   const skin = FIGURE_SKIN[tone];
   const Glyph = tone === 'good' ? UsersIcon : tone === 'warn' ? ClockIcon : SparklesIcon;
   /* The reference's tile: a round glyph and the number on one line, the words
@@ -67,7 +81,14 @@ export function Figure({ tone, value, label }: { tone: 'good' | 'warn' | 'brand'
         <span className={`grid h-6 w-6 shrink-0 place-items-center rounded-full ${skin.chip} ${skin.text}`}>
           <Glyph aria-hidden className="h-3.5 w-3.5" />
         </span>
-        <p className={`text-[19px] font-extrabold leading-none tabular-nums ${skin.text}`}>{value}</p>
+        {/* THE NUMBER AS A PERSON READS IT. Printed raw, the catalog's size
+            came out "1354" beside a header line saying "1,354" — the same
+            number twice on one screen in two spellings. `dir="ltr"` for the
+            reason every figure in this product carries it: a grouped number
+            in an RTL line renders its separators in the wrong places. */}
+        <p dir="ltr" className={`text-[19px] font-extrabold leading-none tabular-nums ${skin.text}`}>
+          {value === null ? '—' : value.toLocaleString('he-IL')}
+        </p>
       </div>
       {/* nowrap, not leading-tight: a label that wraps on one tile and not on
           its neighbour makes three tiles of two different heights, which is
@@ -306,9 +327,16 @@ export function GroupRow({
           </p>
 
           {facts.length > 0 && (
-            <p className="mt-1 flex items-center gap-1 text-[11px] text-mist-500">
-              <GlobeIcon aria-hidden className="h-3 w-3 shrink-0 text-brand-300" />
-              <span className="truncate">{facts.join(' · ')}</span>
+            <p className="mt-1 flex items-start gap-1 text-[11px] text-mist-500">
+              <GlobeIcon aria-hidden className="mt-[2px] h-3 w-3 shrink-0 text-brand-300" />
+              {/*
+                TWO LINES, BUT ONLY WHERE THERE IS MORE TO SAY. גילוי קבוצות
+                has two facts and they fit on one line at 360px, so it keeps
+                `truncate` and its measured row height. The catalog adds the
+                city and the language, and measured at 360 that line lost the
+                language to the ellipsis — the facts were there and invisible.
+              */}
+              <span className={extraFacts.length > 0 ? 'line-clamp-2 min-w-0' : 'truncate'}>{facts.join(' · ')}</span>
             </p>
           )}
 
@@ -493,7 +521,12 @@ export function GroupRow({
           */}
           {canAdd ? (
             <>
-              <Button size="sm" variant="primary" busy={busy} onClick={onAdopt} className="w-full whitespace-nowrap px-1 text-[11px]">
+              {/* NO `whitespace-nowrap`: the Hebrew caption is one word and
+                  fits, but "Добавить в список" is 150px of text in a 94px
+                  pill and ran out of both its ends. Wrapped, it is two 11px
+                  lines inside a button whose min height already allows them,
+                  and the row's measured height does not move. */}
+              <Button size="sm" variant="primary" busy={busy} onClick={onAdopt} className="w-full px-1 text-[11px] leading-tight">
                 {t('הוסף לרשימה')}
               </Button>
             </>

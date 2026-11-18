@@ -40,6 +40,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { spawnSync } from 'node:child_process';
 import { applyFile, applySchema, available, one, refusedQuiet, resetSchema, rows, skip } from './db/harness';
 import { catalogLanguage } from '../../src/lib/social/language';
 
@@ -177,13 +178,40 @@ is(/<GroupRow/.test(screen), 'every result is one of those rows');
  * EXISTS; it has never known whether this account is a member, so the row is
  * handed 'unknown' and no badge claims otherwise.
  */
-is(/membership: 'unknown'/.test(screen), "no catalog row claims a membership — the shared table cannot know one");
-is(/offerAdd=\{Boolean\(onAdd\)\}/.test(screen), 'the add action is turned on explicitly, because the discovery rule is "only where Facebook said חבר"');
+/*
+ * ─── "לראות אם אני חבר", AND WHERE THAT ANSWER MAY COME FROM ────────────
+ *
+ * He asked for the discovery screen's membership mark on the catalog too.
+ * The catalog cannot supply it: one shared table with no tenant column, and
+ * "I am a member" is a fact about one Facebook account — written there it
+ * would be one customer's membership shown to another.
+ *
+ * So the answer comes from HIS OWN rows (social_discovery_groups, tenant
+ * scoped by RLS), is handed to the row as a parameter, and defaults to
+ * 'unknown' — which draws no badge at all — wherever he has not looked.
+ */
+is(/membership: DiscoveredGroupRow\['membership'\] = 'unknown'/.test(screen),
+  'a catalog row is given its membership, and defaults to knowing nothing');
+is(/membership,/.test(screen) && !/membership: g\./.test(screen),
+  'and never reads one off the catalog row');
+is(/listMembershipByExternalId/.test(screen), 'the answer comes from his own searches');
+is(/social_discovery_groups/.test(slice(client, 'export async function listMembershipByExternalId', 'export async function listTargetExternalIds')),
+  'which is his own tenant-scoped table, not the shared catalog');
+/* AND THE CATALOG IS NOT EVEN ASKED FOR IT: the column is not in the select. */
+is(!/membership/.test(searchFn), 'the catalog read does not even ask for a membership column');
+/* A group his own search says he is NOT in is not offered for the publishing
+   list — his rule, now kept on this screen too. */
+is(/!\['none', 'requested'\]\.includes\(member\.get\(g\.external_id\) \?\? 'unknown'\)/.test(screen),
+  'a group he is not in is never offered for the publishing list');
+is(/offerAdd=\{Boolean\(onAdd\)/.test(screen), 'the add action is turned on explicitly, because the discovery rule is "only where Facebook said חבר"');
 /* NO ⋮: hiding a row would hide it for every other user of the app. */
 is(!/onHide=/.test(screen), 'the catalog never offers to hide a row from a table it shares with everyone');
 /* The mark comes from his own list, read once for the screen. */
 is(/listTargetExternalIds/.test(screen), '"כבר במערכת" is read from his publishing list');
-is(/already=\{mine\.has\(g\.external_id\)\}/.test(screen), 'and it is that list the badge is drawn from');
+is(/already=\{Boolean\(mine\?\.has\(g\.external_id\)\)\}/.test(screen), 'and it is that list the badge is drawn from');
+/* `mine` is null until the read lands — an empty set would draw a confident
+   "no, none of these are yours" over a list of 293. */
+is(/useState<Set<string> \| null>\(null\)/.test(screen), 'and "not read yet" is a state of its own, not an empty answer');
 /*
  * ─── WHAT THE SHARED ROW WOULD OTHERWISE NOT KNOW ───────────────────────
  *
@@ -201,14 +229,27 @@ is(/mark=\{g\.status === 'unavailable'/.test(screen), 'and a group marked unavai
  * not "join". That is passed explicitly rather than derived from `already`
  * inside the row — see below for why.
  */
-is(/openAsMember=\{mine\.has\(g\.external_id\)\}/.test(screen), 'a group he already has opens rather than offering to join it');
+is(/openAsMember=\{Boolean\(mine\?\.has\(g\.external_id\)\) && member\.get\(g\.external_id\) !== 'none'\}/.test(screen),
+  'a group he already has opens rather than offering to join it — unless Facebook has since refused him');
+is(/refused=\{Boolean\(mine\?\.has\(g\.external_id\)\) && member\.get\(g\.external_id\) === 'none'\}/.test(screen),
+  'and such a row says why it stopped claiming one');
 /*
  * THE BULK ADD MARKS THEM HIS. Without this the rows he just added go on
  * offering "הוסף לרשימה" and the "כבר אצלי" tile keeps its old number — the
  * screen contradicting a write it just made.
  */
-const bulk = slice(screen, "onAdd(chosenList, 'bulk')", '</Button>');
-is(/setMine/.test(bulk), 'a bulk add marks those groups as his, at once');
+/*
+   * ─── NOT FROM THE SELECTION — FROM THE DATABASE ───────────────────────
+   *
+   * The writer returns added / existed / FAILED and the callers fold that
+   * into one boolean, so marking every selected id as his was wrong for
+   * every row the write refused: it lost its add button, took the member
+   * skin, could not be retried, and the tile counted it. One re-read says
+   * what really landed.
+   */
+  const bulk = slice(screen, "onAdd(chosenList, 'bulk')", '</Button>');
+is(/refreshMine\(\)/.test(bulk), 'a bulk add re-reads his list rather than assuming the selection landed');
+is(!/for \(const g of chosenList\) next\.add/.test(screen), 'and nothing adds the selection to that set by hand');
 /* And a row's own button must not close a sheet he is still picking in. */
 is(/source === 'bulk'/.test(editor), "the campaign sheet closes on a deliberate bulk add, never after one row");
 
@@ -318,6 +359,12 @@ is(!/search|discover\(/.test(syncFn), 'it starts no search of its own');
 /* NO SILENT CAP: a bounded pass says what it left for next week. */
 is(/CATALOG_SYNC_MAX_UPDATES/.test(syncFn) && /left/.test(syncFn), 'a bounded pass reports what it did not reach');
 is(/last_seen_at/.test(syncFn), 'and only a real change moves "עודכן לאחרונה"');
+/* THE REGION FOLLOWS THE CITY, by the same table v49 fills the old rows
+   from — so a group this PC adds next week is filed the same way as the
+   1,354 that were there before. */
+is(/region: regionOf\(f\.city\)/.test(syncFn), 'a group the computer adds gets its region from its city');
+is(/regionOf\(\(patch\.city as string\) \?\? String\(row\.city \?\? ''\)\)/.test(syncFn),
+  'and a row seeded before the country list existed gets one on the next pass');
 
 /* ══════════ §6 PICKING FROM THE CATALOG INSIDE A CAMPAIGN ════════════════ */
 /*
@@ -381,6 +428,71 @@ is(!poll.includes('catalogCoverage'), 'and never re-counts the catalog, which ch
 /* AND IT SAYS WHAT IS NOT IN THE TABLE, which is the private half. */
 is(settings.includes('מי חבר בקבוצה ומי מפרסם אליה אינו נשמר כאן בכלל'),
   'the panel states that membership and who publishes where are not in the catalog');
+
+/* ══════════ §2b כל הערים של כל הארץ, והאזור שלהן ════════════════════════ */
+/*
+ * "במאגר הארצי להוסיף את כל הערים של כל הארץ כולל צפון מרכז דרום ואילת."
+ *
+ * The list is data (src/lib/social/cities-data.ts) and the logic that reads
+ * it is cities.ts. What matters here is that it really covers the country,
+ * that nothing invented a fifth region, and — the part that rots silently —
+ * that the SQL which fills the column was generated from the SAME list.
+ */
+import { CITY_REGION, REGIONS } from '../../src/lib/social/cities-data';
+import { cityInRegion, detectCity, regionOf } from '../../src/lib/social/cities';
+
+const localities = Object.keys(CITY_REGION);
+is(localities.length > 350, `the list covers the country (${localities.length} localities)`);
+eq([...REGIONS], ['צפון', 'מרכז', 'דרום', 'אילת'], 'four regions, in the order he named them');
+/* Nothing filed under a region that does not exist. */
+for (const [city, region] of Object.entries(CITY_REGION)) {
+  if (!REGIONS.includes(region)) is(false, `${city} is filed under "${region}", which is not one of the four`);
+}
+checks += 1;
+/* EVERY REGION REALLY HAS LOCALITIES — a filter value with nothing behind it
+   is a chip that empties the screen. */
+for (const region of REGIONS) {
+  is(localities.some((c) => CITY_REGION[c] === region), `${region} has localities in it`);
+}
+/* The cities this business actually works in, each in the right region. */
+for (const [city, region] of [
+  ['ערד', 'דרום'],
+  ['באר שבע', 'דרום'],
+  ['תל אביב-יפו', 'מרכז'],
+  ['ירושלים', 'מרכז'],
+  ['חיפה', 'צפון'],
+  ['קריית שמונה', 'צפון'],
+  ['אילת', 'אילת'],
+] as const) {
+  eq(regionOf(city), region, `${city} is in ${region}`);
+  is(cityInRegion(city, region), `and the catalog's city filter agrees`);
+}
+
+/*
+ * ─── THE NAME IS HOW PEOPLE WRITE IT ─────────────────────────────────────
+ *
+ * A group is called "דירות להשכרה בתל אביב", not "תל אביב". Hebrew attaches
+ * its prepositions, Russian declines its nouns, and a guard that ignores both
+ * reads almost no real group name. Each of these is a shape that was broken
+ * at some point while this was written.
+ */
+for (const [name, want] of [
+  ['דירות להשכרה בתל אביב', 'תל אביב-יפו'],
+  ['יד שנייה בחיפה והקריות', 'חיפה'],
+  ['לוח מודעות קריית שמונה', 'קריית שמונה'],
+  ['דרושים באשדוד', 'אשדוד'],
+  ['Квартиры в Хайфе', 'חיפה'],
+  ['Объявления Ашдода', 'אשדוד'],
+  ['Беэр-Шева объявления и реклама', 'באר שבע'],
+  /* AND THE ONES THAT MUST NOT MATCH. "אזור" is a town and also the word for
+     an area; "ל״ג בעומר" is a holiday and עומר is a town. */
+  ['קבוצת מכירות אזור המרכז', 'אחר'],
+  ['ל״ג בעומר שמח', 'אחר'],
+] as const) {
+  eq(detectCity(name), want, `"${name}" reads as ${want}`);
+}
+/* The fifteen tuned by hand still win: ערד and באר שבע keep their own rules. */
+eq(detectCity('לוח ב"ש'), 'באר שבע', 'the hand-tuned abbreviation still works');
 
 /* ══════════════════════ THE DATABASE ITSELF ══════════════════════════════ */
 
@@ -570,6 +682,48 @@ for (const [what, took] of [['first page', first], ['city + language', filtered]
 }
 /* The load rows go again: this is a schema test, not a seeded database. */
 rows(`delete from public.social_group_catalog where external_id like 'perf-%'`);
+
+/* ── v49: the region column, filled from the SAME list the app reads ────── */
+/*
+ * TWO COPIES OF ONE TABLE IS HOW THEY DRIFT. The SQL that fills `region` for
+ * the rows already in the catalog is GENERATED from cities-data.ts, and this
+ * runs the generator in --check mode: if somebody edits either side by hand,
+ * this fails rather than the database and the app quietly disagreeing about
+ * which region חיפה is in.
+ */
+{
+  const { status, stderr } = spawnSync('node', ['scripts/build-regions-sql.mjs', '--check'], {
+    cwd: repoRoot,
+    encoding: 'utf8',
+  });
+  is(status === 0, `social-schema-v49.sql is what cities-data.ts produces${status === 0 ? '' : ` — ${stderr.trim()}`}`);
+}
+const v49 = src('supabase/social-schema-v49.sql');
+is(/create or replace function public\.social_catalog_facets\(\)/.test(v49), 'v49 adds the function the filter list is read from');
+is(/security invoker/.test(v49), 'which runs as the caller, so the catalog\u2019s own RLS still decides what it can see');
+is(/grant execute on function public\.social_catalog_facets\(\) to authenticated/.test(v49), 'and every signed-in user may call it');
+is(latest.includes('social_catalog_facets'), 'and social-latest.sql carries it, so one file still builds everything');
+
+applyFile(repoRoot, 'social-schema-v49.sql');
+rows(`insert into public.social_group_catalog (external_id, name, url, city) values
+        ('reg-1','a','https://facebook.com/groups/reg-1','תל אביב-יפו'),
+        ('reg-2','b','https://facebook.com/groups/reg-2','ערד'),
+        ('reg-3','c','https://facebook.com/groups/reg-3','חיפה'),
+        ('reg-4','d','https://facebook.com/groups/reg-4','אילת')
+      on conflict (external_id) do nothing`);
+applyFile(repoRoot, 'social-schema-v49.sql');
+for (const [id, region] of [['reg-1', 'מרכז'], ['reg-2', 'דרום'], ['reg-3', 'צפון'], ['reg-4', 'אילת']] as const) {
+  eq(one(`select region from public.social_group_catalog where external_id = '${id}'`), region, `${id} was filled as ${region}`);
+}
+/* The facets function answers with values AND counts, from the whole table. */
+const facetRows = rows(`select kind, value, groups from public.social_catalog_facets() order by kind, value`);
+is(facetRows.some((r) => r[0] === 'city'), 'the function returns the cities');
+is(facetRows.some((r) => r[0] === 'region'), 'and the regions');
+is(
+  facetRows.filter((r) => r[0] === 'region').every((r) => Number(r[2]) > 0),
+  'every value it returns has groups behind it',
+);
+rows(`delete from public.social_group_catalog where external_id like 'reg-%'`);
 
 /* ── the rollback really is a rollback ──────────────────────────────────── */
 is(/drop table if exists public\.social_group_catalog/.test(rollback), 'the rollback drops the table it created');

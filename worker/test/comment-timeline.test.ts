@@ -97,7 +97,20 @@ async function main(): Promise<void> {
           /* Rows for a publication that has not gone out yet. The rail has no
              section headings, so they are counted by the only thing that
              marks them. */
-          aheadRows: [...(card?.querySelectorAll('ul.anxf-queue > li span') ?? [])].filter((p) => (p.textContent ?? '').trim() === 'תגובה אחרי הפרסום').length,
+          /*
+           * RE-POINTED 18.11.2026. The line used to read "תגובה אחרי הפרסום"
+           * over the PUBLICATION's own clock — two different facts on one row,
+           * and the owner read them as one: "למה בלוח של התור זה מראה לי שזה
+           * יוצא באותו שעה של פרסום הפוסט". The words now follow the clock
+           * beside them: "לא לפני" over the comment's earliest instant when
+           * the round's switch is on, and "מפרסם, ואז תגובה" over the post's
+           * own instant when it is off. Either one is still an 'ahead' row,
+           * which is what this count is about.
+           */
+          aheadRows: [...(card?.querySelectorAll('ul.anxf-queue > li span') ?? [])].filter((p) => {
+            const text = (p.textContent ?? '').trim();
+            return text === 'לא לפני — תגובה אחרי הפוסט' || text === 'מפרסם, ואז תגובה';
+          }).length,
           cardHeight: card ? Math.round(card.getBoundingClientRect().height) : 0,
           /*
            * WHERE EACH ROW POINTS. It was an <a> per row; the row is now the

@@ -3,6 +3,7 @@
 import { Fragment, useState } from 'react';
 import Link from 'next/link';
 import { t, keep } from '@/lib/social/i18n';
+import { clampCommentDelay } from '@/lib/social/rules';
 import type { CommentTotals, QueueRow } from '@/lib/social/client';
 import type { Campaign } from '@/lib/social/types';
 import { COMMENT_TONE, commentLabel, commentNeedsHuman } from '@/lib/social/comments';
@@ -406,9 +407,42 @@ export function CommentTimeline({
   const real = today.done + needsHuman + totals.pending;
   const dayISO = zonedDateISO(now);
 
+  /*
+   * ─── AN 'AHEAD' ROW'S CLOCK IS THE COMMENT'S, NOT THE POST'S ────────────
+   *
+   *   "התגובה אמורה לצאת 4 שעות אחרי פרסום הפוסט, למה בלוח של התור זה מראה
+   *    לי שזה יוצא באותו שעה של פרסום הפוסט בקבוצה" — 18.11.2026
+   *
+   * It printed `scheduled_at` — the instant the POST goes out — beside the
+   * words "תגובה אחרי הפרסום". Two different facts on one line, and the only
+   * available reading is that the comment lands with the post. On a round set
+   * to four hours that is wrong by four hours, and it is wrong in the
+   * direction that makes the owner think the delay is not working.
+   *
+   * So a round whose automatic comment is ON is placed at publication + its
+   * own delay, through the same clamp the arm uses — the earliest the comment
+   * could be written. The row says "לא לפני" over it, because that is what
+   * the number is: the arm still waits for an idle window.
+   *
+   * A round with the switch OFF keeps the publication instant, because there
+   * is no comment time to show: nothing will arm it, and the row is only here
+   * to say that this post carries words for one. Its label says so.
+   */
+  const commentFloorOf = (row: QueueRow): string | null => {
+    const round = row.campaign_id ? rounds.get(row.campaign_id) : undefined;
+    if (!round || round.comment_auto !== true) return null;
+    const at = Date.parse(row.scheduled_at ?? '');
+    if (!Number.isFinite(at)) return null;
+    return new Date(at + clampCommentDelay(round.comment_delay_seconds) * 1000).toISOString();
+  };
+
   /** The instant a row is placed at — null for a queue that has no clock. */
   const stampOf = (it: { row: QueueRow; kind: Kind }): string | null =>
-    it.kind === 'past' ? it.row.comment_at ?? null : it.kind === 'ahead' ? it.row.scheduled_at : null;
+    it.kind === 'past'
+      ? it.row.comment_at ?? null
+      : it.kind === 'ahead'
+        ? commentFloorOf(it.row) ?? it.row.scheduled_at
+        : null;
 
   return (
     <Card title={t('ציר הזמן של התגובות')} subtitle={t('מה כבר נכתב, מה נכשל ומה עוד בתור')}>
@@ -610,7 +644,17 @@ export function CommentTimeline({
             */
             const said =
               item.kind === 'ahead'
-                ? 'תגובה אחרי הפרסום'
+                /*
+                 * THE WORDS HAVE TO MATCH THE CLOCK BESIDE THEM. With the
+                 * switch on, the stamp is the comment's earliest instant and
+                 * the line says so; with it off, the stamp is the post's own
+                 * and the line says THAT instead. The old wording —
+                 * "תגובה אחרי הפרסום" over the publication time — read as a
+                 * comment landing with the post.
+                 */
+                ? commentFloorOf(row)
+                  ? 'לא לפני — תגובה אחרי הפוסט'
+                  : 'מפרסם, ואז תגובה'
                 : item.kind === 'queued' && status === 'pending'
                   /* place is 1-based, so the NEXT one out is place 1 and must
                      be zero paces away — at `paceSeconds * place` the head of
@@ -753,7 +797,13 @@ export function CommentTimeline({
       </ul>
 
       <p className="mt-2 text-[11px] leading-snug text-mist-500">
-        {t('התגובות יוצאות אחת-אחת, במרווח שנבחר לכל סבב, ורק כשיש חלון פנוי בין שני פרסומים — ולכן אין להן שעה מראש. לפרסום שעוד לא יצא מוצגת השעה שבה הוא מתוזמן.')}
+        {/*
+          RE-WORDED 18.11.2026 WITH THE CLOCK ABOVE IT. The old sentence ended
+          "לפרסום שעוד לא יצא מוצגת השעה שבה הוא מתוזמן", which is now true
+          only for a round whose automatic comment is off — and it was the
+          sentence that let the publication time be read as the comment's.
+        */}
+        {t('התגובות יוצאות אחת-אחת, רק כשיש חלון פנוי בין שני פרסומים — ולכן השעה היא תמיד המוקדמת ביותר האפשרית ולא הבטחה. לפרסום שעוד לא יצא, בסבב עם תגובה אוטומטית, מוצגת שעת הפרסום ועוד העיכוב שבחרתם.')}
       </p>
 
       {/*

@@ -1020,6 +1020,34 @@ async function tick(state: WorkerState): Promise<void> {
   }
 
   /*
+   * ─── THE CATALOG'S OWN WORK, BEFORE EVERY PUBLISHING GATE ──────────────
+   *
+   * "מספר קבוצות לא השתנה, אותו דבר."
+   *
+   * These two were below — after `control.paused`, after the rate-limit
+   * freeze, after `state.attention`, after the disconnected check. All four
+   * of those are gates on PUBLISHING, and they are right to be: a machine
+   * that is paused, frozen or waiting for a human must not post anything.
+   *
+   * But these two passes post nothing. They open no browser window, they
+   * touch no Facebook page: one carries rows this computer already has from
+   * one of its own tables into another, and the other reads a city out of a
+   * name it already stored. Behind those gates, an owner who paused his
+   * queue for the evening — or whose account had one notice waiting on it —
+   * got a national catalog frozen at yesterday's number, with nothing on
+   * screen connecting the two. That is the report above, and this is it.
+   *
+   * Guarded like the sweep above, and for the same reason: a database error
+   * in the catalog may not take the publishing loop down with it.
+   */
+  try {
+    await catalogSync();
+    await catalogCityPass();
+  } catch (err) {
+    console.error('[worker] סנכרון המאגר הארצי נכשל:', safeError(err));
+  }
+
+  /*
    * ─── FACEBOOK SAID "TOO FAST", AND THE CLOCK IS STILL RUNNING ──────────
    *
    * "ומקפיא את הפרסום למשך 3 שעות — אחרי שנגמר 3 שעות חוזר לפרסם רגיל."
@@ -1229,13 +1257,13 @@ async function tick(state: WorkerState): Promise<void> {
      read and, at most once a night, one update — the looking is a chore and
      is paced by the chore window like everything else. */
   await nightlyGroupCheck();
-  /* Once a week, and it opens no browser window at all — see catalogSync(). */
-  await catalogSync();
-  /* And the city repair, which is hourly until there is nothing left to
-     repair and then costs one count. Also no browser window. */
-  await catalogCityPass();
-  /* The national coverage — OFF unless he turned it on, and at most one
-     search queued per interval. See coveragePass(). */
+  /*
+   * THE NATIONAL COVERAGE STAYS HERE, BEHIND THE GATES — and the two
+   * database-only passes do not; they moved to the top of the tick. See the
+   * note there. This one is different in kind: it QUEUES a Facebook search,
+   * so a machine that is paused, rate-limited or waiting for a human must
+   * not start new work with the owner's account.
+   */
   await coveragePass();
 
   const gate = await spacingGate(db, limits, browser);

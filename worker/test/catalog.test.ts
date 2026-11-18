@@ -359,7 +359,37 @@ for (const forbidden of ['openPage', 'newPage', 'browser', 'goto', 'logPageOpen'
    publishing gap precisely because they do open windows. */
 const choreTable = slice(worker, 'const chores: {', '];');
 is(!choreTable.includes('catalogSync'), 'the sync is not in the chore table — it costs the account nothing');
-is(/await nightlyGroupCheck\(\);\s*await catalogSync\(\);/.test(worker), 'it runs beside the nightly check, which is the other database-only pass');
+/*
+ * ─── IN FRONT OF EVERY PUBLISHING GATE ──────────────────────────────────
+ *
+ * "מספר קבוצות לא השתנה, אותו דבר."
+ *
+ * This pass used to sit after four gates — paused, rate-limited, an
+ * attention message waiting for a human, disconnected — all of which are
+ * gates on PUBLISHING. It posts nothing and opens no window: it carries rows
+ * this computer already has from one of its own tables into another. Behind
+ * those gates, a paused queue or one unread notice froze the national
+ * catalog at yesterday's number with nothing on screen connecting the two.
+ */
+{
+  const tick = slice(worker, 'async function tick(', 'async function idle(');
+  const syncAt = tick.indexOf('await catalogSync();');
+  const cityAt = tick.indexOf('await catalogCityPass();');
+  const coverAt = tick.indexOf('await coveragePass();');
+  is(syncAt > 0 && cityAt > 0, 'both database-only passes run inside the tick');
+  for (const gate of ['if (control.paused) return idle(', 'if (state.attention) return idle(', "if (state.browserState === 'disconnected') return idle("]) {
+    const at = tick.indexOf(gate);
+    is(at > 0, `the gate ${gate.slice(0, 28)} is still there`);
+    is(syncAt < at, `the catalog sync runs BEFORE ${gate.slice(0, 28)} — it publishes nothing`);
+    is(cityAt < at, `and so does the city repair`);
+    /*
+     * AND THE COVERAGE DOES NOT. It queues a real Facebook search, so a
+     * machine that is paused, rate-limited or waiting for a human must not
+     * start new work with the owner's account.
+     */
+    is(coverAt > at, `the national coverage stays BEHIND ${gate.slice(0, 28)} — it queues a real search`);
+  }
+}
 /* It reads what the PC already knows and nothing else. */
 is(/social_discovery_groups/.test(factsFn), 'it carries over what discovery already found');
 is(/social_targets/.test(factsFn), 'and what his own groups already know');

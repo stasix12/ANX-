@@ -601,7 +601,29 @@ export function CampaignSchedulePanel({
           </span>
           <span className="min-w-0 grow">
             <span className="block text-[12.5px] font-extrabold leading-4 text-mist-100">{t('שעת התחלה')}</span>
-            <span className="mt-px block text-[10px] font-bold leading-[13px] text-mist-300">{t('הסבב פותח בשעה הזו בכל יום פרסום')}</span>
+            {/*
+              ─── AND IT ONLY CLAIMS AN OPENING HOUR WHEN THERE IS ONE ───────
+              *
+              * "כאן זה לא מסונכרן, רשום יתחיל ב-7:00 ולמעלה שעת ההתחלה 00:00."
+              *
+              * He is reading one card that said three things: "הסבב פותח
+              * בשעה הזו בכל יום פרסום" over 0:00, "מפרסם בכל יום, בכל שעה"
+              * under it, and "הפרסום הבא 07:00" below that. The second and
+              * third are true. The FIRST is not, and it is the one that reads
+              * like a setting: with no limit stored, shownSchedule() resolves
+              * the row to midnight for the picker's sake — and nothing opens
+              * at midnight. The round goes out when its queue says, which on
+              * his account was 07:00.
+              *
+              * So the sentence says which of the two this is. The value stays
+              * 0:00 because the picker needs one and because that IS the
+              * instant a limit would start from the moment he sets it; what
+              * changes is that the card no longer presents it as a decision
+              * somebody made.
+              */}
+            <span className="mt-px block text-[10px] font-bold leading-[13px] text-mist-300">
+              {publishesAlways(schedule) ? t('אין הגבלת שעה — הסבב יוצא לפי התור. בחרו שעה כדי להגביל.') : t('הסבב פותח בשעה הזו בכל יום פרסום')}
+            </span>
           </span>
           <span aria-hidden className="h-7 w-px shrink-0 bg-ink-700" />
           {/*

@@ -56,7 +56,25 @@ import {
  * the caller skips every row it already has one for, so a repeated search
  * costs nothing.
  */
-const MAX_GROUPS = 120;
+/*
+ * ─── 18.11.2026 · 120 → 300 ───────────────────────────────────────────────
+ *
+ * "אני רוצה שתחפש את כל הקבוצות שיש בישראל... לא משנה כמה שעות זה ייקח."
+ *
+ * The expensive thing in a search is not the groups — it is the PAGE. One
+ * search is one page load against his account, and that page holds far more
+ * than a hundred and twenty results for a phrase like "יד שנייה חיפה". The
+ * ceiling threw the rest away and the next search for the same phrase loaded
+ * the same page again to find them.
+ *
+ * So the ceiling moves and the page is read out properly. The scroll still
+ * stops the moment the list stops growing (two barren passes), so a narrow
+ * phrase costs exactly what it did.
+ *
+ * THE PICTURES DO NOT FOLLOW IT — see PICTURE_LIMIT. Storage is the reason
+ * that number exists, and storage has not changed.
+ */
+const MAX_GROUPS = 300;
 /*
  * ONE SEARCH FINISHES THE JOB. It was 60 against a MAX_GROUPS of 120, so a
  * broad phrase could picture at most half of what it found and the other half
@@ -68,7 +86,16 @@ const MAX_GROUPS = 120;
  * session in four lanes, so the extra sixty are cache-warm requests to a CDN
  * rather than anything Facebook reads as traffic.
  */
-const PICTURE_LIMIT = MAX_GROUPS;
+/*
+ * AND THE PICTURES STAY AT A HUNDRED AND TWENTY, which is what this number
+ * was always about: an account already over its Supabase storage quota. It
+ * was written as `= MAX_GROUPS` when the two happened to be equal; now that
+ * the group ceiling has moved it says what it means on its own. A group with
+ * no picture draws a letter and publishes exactly the same, and the next
+ * search for that phrase picks up where this one stopped, because the caller
+ * only ever asks for the ones it has no picture for.
+ */
+const PICTURE_LIMIT = 120;
 
 /**
  * THE WHOLE PICTURE DOWNLOAD GETS 25 SECONDS.
@@ -95,6 +122,23 @@ const UNREAD_SAMPLES = 3;
  * ends the loop the moment the list really stops growing.
  */
 const PASSES = 12;
+/*
+ * ─── AND A DEEPER READ, FOR THE PASS NOBODY IS WAITING FOR ────────────────
+ *
+ * 30 instead of 12, for the automatic national coverage only.
+ *
+ * NOT FOR A SEARCH HE TYPED. The two barren passes below end the loop the
+ * moment the list stops growing — but only once the page also reports itself
+ * at the bottom, and a result list inside its own scroll container never
+ * does. On that layout the loop runs every pass, so thirty passes is
+ * 1.4 seconds each: twenty-five seconds added to a search a person is sitting
+ * and watching. Measured, not reasoned: worker/test/discovery-complete.test.ts
+ * times a 56-result page and caught exactly that.
+ *
+ * The coverage pass runs once every half hour at most and nobody is watching
+ * it, so there the depth is free and the extra screenfuls are real groups.
+ */
+const DEEP_PASSES = 30;
 /** And the ceiling, because a phrase like "קבוצה" matches most of Facebook. */
 
 /** One group's picture, as bytes, for the caller to store somewhere durable. */
@@ -187,6 +231,14 @@ export async function searchGroups(
      * in the database rather than overwriting it with null.
      */
     haveFacts?: string[];
+    /**
+     * Read the result list as deep as it goes.
+     *
+     * The automatic coverage pass sets it; a search a person typed does not,
+     * because the extra passes are seconds he spends watching a spinner. See
+     * DEEP_PASSES.
+     */
+    deep?: boolean;
   } = {},
 ): Promise<SearchOutcome> {
   const url = `https://www.facebook.com/search/groups/?q=${encodeURIComponent(query)}`;
@@ -208,7 +260,8 @@ export async function searchGroups(
    */
   let barren = 0;
 
-  for (let pass = 0; pass < PASSES; pass += 1) {
+  const passes = opts.deep ? DEEP_PASSES : PASSES;
+  for (let pass = 0; pass < passes; pass += 1) {
     const cards = await readCards(page);
     for (const raw of cards) {
       const group = interpretCard(raw);
@@ -260,7 +313,7 @@ export async function searchGroups(
      * itself complete and the screen said nothing. Whatever stops this loop
      * short of the bottom now says so.
      */
-    if (pass === PASSES - 1 && !atBottom) truncated = true;
+    if (pass === passes - 1 && !atBottom) truncated = true;
     lastCount = unique;
     await page.evaluate(() => window.scrollBy(0, window.innerHeight * 2));
     await page.waitForTimeout(1_400);

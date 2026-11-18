@@ -82,9 +82,19 @@ const pass = slice(worker, 'async function coveragePass(', 'async function catal
 
 /* ═══════════════ §1 THE PLAN IS AN ORDER, AND IT STARTS AT HOME ═════════ */
 
-eq(COVERAGE_TOPICS.length, 10, 'ten kinds of group, as the brief asks');
-is(new Set(COVERAGE_TOPICS.map((t) => t.id)).size === 10, 'each with an id of its own');
-for (const t of COVERAGE_TOPICS) is(t.word.trim().length > 1, `"${t.id}" has a phrase to search`);
+eq(COVERAGE_TOPICS.length, 11, 'the ten kinds of group the brief asks for, plus the city on its own');
+is(new Set(COVERAGE_TOPICS.map((t) => t.id)).size === 11, 'each with an id of its own');
+/*
+ * THE BARE CITY IS FIRST, and it is the only one with an empty word: the
+ * highest-yielding search for a city is its name. A plan stopped halfway has
+ * then read the broadest page for every city it reached.
+ */
+eq(COVERAGE_TOPICS[0].word, '', 'the first phrase for a city is the city alone');
+for (const t of COVERAGE_TOPICS.slice(1)) is(t.word.trim().length > 1, `"${t.id}" has a phrase to search`);
+eq(coveragePhrase('חיפה', COVERAGE_TOPICS[0]), 'חיפה', 'and it really searches just the name');
+/* AND NOTHING IS EVER FILED UNDER IT: an empty word is in every string. */
+eq(detectTopic('סתם קבוצה בלי שום מילה'), '', 'an empty word files nothing');
+eq(detectTopic('יד שנייה חיפה'), 'יד שנייה', 'while the real words still file');
 
 const mine = ['ערד', 'באר שבע'];
 const cities = coverageCities(mine);
@@ -101,16 +111,16 @@ is(!coverageCities(['אחר', 'סתם משהו']).includes('אחר'), '"אחר" 
    catalog. Ten cities covered ten ways beats a hundred covered once. */
 const first = nextCoverageStep([], mine);
 eq(first?.city, 'ערד', 'the first search is in the first city');
-eq(first?.phrase, `${COVERAGE_TOPICS[0].word} ערד`, 'and it is that city with the first phrase');
+eq(first?.phrase, 'ערד', 'and it is the city on its own — the broadest page it has');
 const aradDone = COVERAGE_TOPICS.map((t) => coverageKey('ערד', t.id));
 eq(nextCoverageStep(aradDone, mine)?.city, 'באר שבע', 'the next city starts only once this one is finished');
 eq(nextCoverageStep([...aradDone, coverageKey('באר שבע', COVERAGE_TOPICS[0].id)], mine)?.phrase,
   `${COVERAGE_TOPICS[1].word} באר שבע`, 'and a step already done is never repeated');
 
-eq(coverageTotal(mine), cities.length * 10, 'the plan is every city times every phrase');
+eq(coverageTotal(mine), cities.length * COVERAGE_TOPICS.length, 'the plan is every city times every phrase');
 const progress = coverageProgress(aradDone, mine);
 eq(progress.citiesDone, 1, 'a city counts as covered only when all ten of its phrases have run');
-eq(progress.done, 10, 'and the step count is the cursor itself');
+eq(progress.done, COVERAGE_TOPICS.length, 'and the step count is the cursor itself');
 /* THE PLAN ENDS. A cursor that can never finish is a machine that searches
    for ever. */
 const everything = cities.flatMap((c) => COVERAGE_TOPICS.map((t) => coverageKey(c, t.id)));
@@ -124,7 +134,15 @@ eq(nextCoverageStep(everything, mine), null, 'when every phrase has run, there i
  * the idle window, the login check, the activity line.
  */
 is(/command: 'discover'/.test(pass), 'it queues the same command a typed search queues');
-is(/payload: \{ query: step\.phrase \}/.test(pass), 'with a phrase, and nothing else');
+/*
+ * A PHRASE AND HOW DEEPLY TO READ IT — and nothing else. `deep` is not a new
+ * power: it is the number of times the same already-loaded page is scrolled,
+ * which is why the automatic pass may have it and a search he is watching may
+ * not (DEEP_PASSES).
+ */
+is(/payload: \{ query: step\.phrase, deep: '1' \}/.test(pass), 'with a phrase and how deeply to read it, and nothing else');
+const payloadKeys = [...(/payload: \{([^}]*)\}/.exec(pass)?.[1] ?? '').matchAll(/(\w+):/g)].map((m) => m[1]);
+eq(payloadKeys.sort(), ['deep', 'query'], 'the payload carries no url, no list and no account');
 /*
  * The verbs as they would really be written — a command name, a call — and
  * not as substrings: `error.message` is not a message sent to anybody, and a
@@ -157,12 +175,12 @@ is(!/done:/.test(save), 'and the screen never writes the cursor, which the worke
 /* ═══════════════ §4 ONE AT A TIME, AND A CEILING ════════════════════════ */
 
 eq(COVERAGE_PER_DAY_DEFAULT, 6, 'six searches a day out of the box');
-eq(COVERAGE_PER_DAY_MAX, 24, 'twenty-four at the ceiling — one an hour, and no setting above it');
+eq(COVERAGE_PER_DAY_MAX, 48, 'forty-eight at the ceiling — one every half hour, and no setting above it');
 eq(clampCoveragePerDay(500), COVERAGE_PER_DAY_MAX, 'a number from anywhere is clamped to it');
 eq(clampCoveragePerDay(0), COVERAGE_PER_DAY_MIN, 'and to the floor');
 eq(clampCoveragePerDay(undefined), COVERAGE_PER_DAY_DEFAULT, 'and an absent setting is the default, not zero');
 eq(coverageGapMs(6), 4 * 60 * 60_000, 'six a day is one every four hours');
-eq(coverageGapMs(24), 60 * 60_000, 'and the ceiling is one an hour');
+eq(coverageGapMs(48), 30 * 60_000, 'and the ceiling is one every half hour');
 is(/coverageGapMs\(clampCoveragePerDay\(cfg\.perDay\)\)/.test(pass), 'the worker paces itself by that same gap, clamped');
 is(/insert\(\{/.test(pass) && (pass.match(/insert\(/g) ?? []).length === 1, 'and queues exactly one search per interval');
 
@@ -199,5 +217,37 @@ is(card.includes('לא שולחת בקשות הצטרפות'), 'and sends no joi
 is(/COVERAGE_PER_DAY_MIN/.test(settings) && /COVERAGE_PER_DAY_MAX/.test(settings), 'the pace field is bounded on the screen too');
 is(/getCoverage\(\)/.test(settings), 'and the screen reads the real stored value rather than guessing');
 is(/coverageProgress/.test(settings), 'and shows how far the plan has got');
+
+/* ═══════════════ §8 WHAT ONE SEARCH IS WORTH ════════════════════════════ */
+/*
+ * "כמה קבוצות הוא יכול למצוא בחיפוש" — and then "תחפש את כל הקבוצות שיש
+ * בישראל". The expensive thing in a search is the PAGE, not the groups on
+ * it: one search is one page load against his account whether it reads
+ * twenty results or three hundred. So the ceiling is high and the scroll is
+ * deep, and the early stop is what keeps a narrow phrase cheap.
+ */
+{
+  const scan = code('worker/facebook/discover.ts');
+  const cap = /const MAX_GROUPS = (\d+);/.exec(scan);
+  const passes = /const DEEP_PASSES = (\d+);/.exec(scan);
+  const typed = /const PASSES = (\d+);/.exec(scan);
+  const pictures = /const PICTURE_LIMIT = (\d+);/.exec(scan);
+  is(Number(cap?.[1]) >= 300, `one search reads up to ${cap?.[1]} groups off the page it already loaded`);
+  is(Number(passes?.[1]) >= 30, `and the automatic pass scrolls it ${passes?.[1]} times`);
+  /*
+   * AND A SEARCH HE TYPED IS NOT MADE SLOWER BY ANY OF THIS. On a result list
+   * inside its own scroll container the page never reports itself at the
+   * bottom, so the loop runs every pass — thirty of them is twenty-five extra
+   * seconds of spinner on a screen somebody is watching.
+   * worker/test/discovery-complete.test.ts times exactly that page.
+   */
+  is(Number(typed?.[1]) <= 12, `while a search he types still scrolls ${typed?.[1]} times`);
+  is(/opts\.deep \? DEEP_PASSES : PASSES/.test(scan), 'and the depth is the caller\u2019s choice, not a global');
+  /* THE PICTURES DID NOT FOLLOW IT. That number is about his Supabase
+     storage quota, which has not changed. */
+  is(Number(pictures?.[1]) === 120, 'while the picture limit stays where storage put it');
+  is(/barren = unique === lastCount \? barren \+ 1 : 0;/.test(scan) && /if \(barren >= 2 && atBottom\) break;/.test(scan),
+    'and a list that stops growing ends the scroll, so a narrow phrase costs what it always did');
+}
 
 console.log(`${NAME} OK — ${checks} assertions over a ${coverageTotal(mine).toLocaleString('he-IL')}-step plan`);

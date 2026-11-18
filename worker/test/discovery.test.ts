@@ -1173,12 +1173,33 @@ const eq = (a: unknown, b: unknown, msg: string) => {
   is(/const \{ data: existing, error: read \}/.test(rebuild), 'the read that feeds the rebuild is checked');
   is(/if \(read\) throw read;/.test(rebuild), 'and a failed read fails the command rather than rewriting every row from nothing');
 
-  /* One search finishes the pictures. 60 against a MAX_GROUPS of 120 meant a
-     broad phrase could only ever picture half of what it found, while the
-     sentence reported the half it did and said nothing of the half it skipped —
-     which on screen is the same purple letters he already reported once. */
+  /*
+   * ─── 18.11.2026 · THE TWO CAPS CAME APART, AND THE SENTENCE CLOSES IT ──
+   *
+   * This read `PICTURE_LIMIT === MAX_GROUPS` — "one search finishes the
+   * pictures" — and it was right while the two numbers meant the same thing.
+   * They no longer do: the group ceiling moved to 300 because the expensive
+   * part of a search is the PAGE, and the picture cap stayed at 120 because
+   * it is about Supabase storage on an account already over its quota.
+   *
+   * What the old pin was really protecting is the thing that made him report
+   * it: a broad phrase picturing half of what it found WHILE THE SENTENCE
+   * SAID NOTHING, so the purple letters looked like a bug. So that is what is
+   * pinned now — the gap is allowed, the silence is not.
+   */
   const reader = readFileSync(new URL('../facebook/discover.ts', import.meta.url), 'utf8');
-  is(/const PICTURE_LIMIT = MAX_GROUPS;/.test(reader), 'the picture cap matches how many groups a search may return, so one run finishes the job');
+  const picCap = Number(/const PICTURE_LIMIT = (\d+);/.exec(reader)?.[1]);
+  const groupCap = Number(/const MAX_GROUPS = (\d+);/.exec(reader)?.[1]);
+  is(picCap >= 120, `the picture cap is still at least what storage allowed (${picCap})`);
+  is(groupCap >= picCap, 'and a search may return at least as many groups as it pictures');
+  is(
+    /const missed = Math\.max\(0, found\.groups\.length - \(wrote\.pictures \?\? 0\)\);/.test(worker),
+    'the worker counts the groups it did NOT picture',
+  );
+  is(
+    /תמונה תימשך בחיפוש הבא לאותו ביטוי/.test(worker),
+    'and the result sentence says so, with what closes the gap — never silence over purple letters',
+  );
 
   /*
    * "שיראה תמונות של קבוצות שאני עוד לא שם."

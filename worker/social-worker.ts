@@ -2185,7 +2185,9 @@ async function coveragePass(): Promise<void> {
   const { error } = await db.from('social_worker_commands').insert({
     worker_id: null,
     command: 'discover',
-    payload: { query: step.phrase },
+    /* `deep` asks the scan to read the whole result list — see DEEP_PASSES.
+       Nobody is watching this one, so the extra screenfuls are free. */
+    payload: { query: step.phrase, deep: '1' },
   });
   if (error) {
     console.error('[worker] ✗ כיסוי ארצי: לא הצלחנו לתזמן חיפוש:', error.message);
@@ -2841,7 +2843,7 @@ async function runCommands(state: WorkerState, headless: boolean, browser: Brows
     .or(`worker_id.eq.${state.id},worker_id.is.null`)
     .order('created_at')
     .limit(5);
-  for (const cmd of (data ?? []) as (WorkerCommand & { payload?: { user?: string; pass?: string; name?: string; query?: string; source?: string ; urls?: unknown[]; url?: string } })[]) {
+  for (const cmd of (data ?? []) as (WorkerCommand & { payload?: { user?: string; pass?: string; name?: string; query?: string; source?: string ; deep?: string; urls?: unknown[]; url?: string } })[]) {
     /*
      * CLAIMING A COMMAND ALSO EMPTIES IT.
      *
@@ -3074,6 +3076,14 @@ async function runCommands(state: WorkerState, headless: boolean, browser: Brows
             havePictures: stored.pictures,
             /* What it has no reason to stop on. See storedDiscovery. */
             haveFacts: stored.facts,
+            /*
+             * THE AUTOMATIC PASS READS THE LIST TO THE END; a search he typed
+             * does not. The flag arrives in the payload rather than being
+             * inferred, because "who asked for this" is not something the
+             * browser can work out — and the difference is twenty-five
+             * seconds of spinner on a screen somebody is watching.
+             */
+            deep: cmd.payload?.deep === '1',
           });
           if (found.problem) {
             ok = false;
@@ -3118,6 +3128,26 @@ async function runCommands(state: WorkerState, headless: boolean, browser: Brows
                "54 תמונות" are different bugs, which is why it is on screen. */
             const shots = wrote.pictures ? ` ${wrote.pictures} תמונות.` : '';
             /*
+             * ─── AND WHAT IT DID NOT PICTURE, SAID OUT LOUD ───────────────
+             *
+             * The picture cap (PICTURE_LIMIT, 120) is lower than the number of
+             * groups a search may now return (MAX_GROUPS, 300), because the
+             * cap is about Supabase storage on an account already over its
+             * quota — and the groups are free.
+             *
+             * That is a real gap and it must not be silent: a broad phrase
+             * that finds three hundred groups pictures a hundred and twenty of
+             * them, and the hundred and eighty purple letters on screen look
+             * exactly like the bug he already reported once. So the sentence
+             * says it, and says what closes it: the caller only ever asks for
+             * the groups it has no picture for, so the next search for that
+             * phrase picks up where this one stopped.
+             */
+            const missed = Math.max(0, found.groups.length - (wrote.pictures ?? 0));
+            const rest = wrote.pictures && missed > 0
+              ? ` ל-${missed} קבוצות נוספות תמונה תימשך בחיפוש הבא לאותו ביטוי.`
+              : '';
+            /*
              * AND THE OTHER HALF OF THE SAME QUESTION.
              *
              * "0 תמונות" has had two completely different causes, and from the
@@ -3148,7 +3178,7 @@ async function runCommands(state: WorkerState, headless: boolean, browser: Brows
               ? ` מתוכן ${found.groups.length - found.offTopic} מכילות את המילה במדויק, ו-${found.offTopic} קרובות אליה ומסומנות בהמשך הרשימה.`
               : '';
             result = found.groups.length
-              ? `נמצאו ${found.groups.length} קבוצות${wrote.fresh ? `, ${wrote.fresh} חדשות` : ''}.${split}${shots}${blind}${found.truncated ? ' יש עוד — נסו מילה מדויקת יותר.' : ''}`
+              ? `נמצאו ${found.groups.length} קבוצות${wrote.fresh ? `, ${wrote.fresh} חדשות` : ''}.${split}${shots}${rest}${blind}${found.truncated ? ' יש עוד — נסו מילה מדויקת יותר.' : ''}`
               : `לא נמצאו קבוצות עבור "${phrase}".`;
           }
         }

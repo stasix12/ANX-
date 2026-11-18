@@ -353,7 +353,7 @@ export class BrowserSession {
   async discoverGroups(
     headless: boolean,
     query: string,
-    opts: { havePictures?: string[]; haveFacts?: string[] } = {},
+    opts: { havePictures?: string[]; haveFacts?: string[]; deep?: boolean } = {},
   ): Promise<SearchOutcome> {
     if (!this.hasProfile()) return { groups: [], pictures: new Map(), unread: [], offTopic: 0, pictureless: 0, problem: 'אין עדיין פרופיל דפדפן — צריך קודם להתחבר לפייסבוק.', truncated: false };
     const page = await this.newPage(headless, 'גילוי קבוצות');

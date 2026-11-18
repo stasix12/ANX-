@@ -52,6 +52,23 @@ export interface CoverageTopic {
  * category a group gets when its own name carries the word.
  */
 export const COVERAGE_TOPICS: readonly CoverageTopic[] = [
+  /*
+   * ─── THE CITY ON ITS OWN, FIRST ────────────────────────────────────────
+   *
+   * "תחפש את כל הקבוצות שיש בישראל."
+   *
+   * The highest-yielding phrase for a city is its name. "חיפה" returns every
+   * kind of group at once — the ones named for the city and the ones that
+   * merely mention it — where "יד שנייה חיפה" returns one kind. It is first
+   * in the list so that a city's single best search runs before its nine
+   * narrower ones, and a plan that is stopped halfway has still read the
+   * broadest page for every city it reached.
+   *
+   * Its `word` is empty: coveragePhrase() then produces the city alone.
+   * Nothing is ever FILED under it — detectTopic skips an empty word — so a
+   * group found this way keeps whatever category its own name says.
+   */
+  { id: 'העיר', word: '' },
   { id: 'יד שנייה', word: 'יד שנייה', also: ['יד 2', 'יד2', 'יד שניה'] },
   { id: 'לוח מודעות', word: 'לוח מודעות', also: ['לוח'] },
   { id: 'דרושים', word: 'דרושים', also: ['דרושות', 'עבודה'] },
@@ -155,7 +172,15 @@ export function coverageTotal(mine: readonly string[] = []): number {
  */
 export const COVERAGE_PER_DAY_DEFAULT = 6;
 export const COVERAGE_PER_DAY_MIN = 3;
-export const COVERAGE_PER_DAY_MAX = 24;
+/*
+ * 24 → 48 on 18.11, at his explicit request ("לא משנה כמה שעות זה ייקח"), and
+ * it is the last number in this file that is a judgement rather than a
+ * measurement. One search every half hour is still one page load every half
+ * hour from a machine that is signed in all day anyway; the burst guard in
+ * the worker (IDLE_WINDOW_LIMIT) is what actually stops a storm, and it is
+ * untouched. The DEFAULT is still six.
+ */
+export const COVERAGE_PER_DAY_MAX = 48;
 
 export function clampCoveragePerDay(n: number | null | undefined): number {
   const v = Math.round(Number(n));
@@ -182,7 +207,9 @@ export function detectTopic(name: string | null | undefined): string {
   if (!text) return '';
   for (const topic of COVERAGE_TOPICS) {
     for (const word of [topic.word, ...(topic.also ?? [])]) {
-      if (text.includes(word)) return topic.id;
+      /* An empty word is in every string. The bare-city phrase has one, and
+         it is a way of SEARCHING, not a category to file a group under. */
+      if (word && text.includes(word)) return topic.id;
     }
   }
   return '';

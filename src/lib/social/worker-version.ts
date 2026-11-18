@@ -2113,5 +2113,11 @@ export const WORKER_VERSION = '4.83.0';
  *   dist/app/worker.cjs    waitingForYouSince 0   readSeenUntil 0
  *                          needs_intervention 0
  *   (הבקרה)                planQueue 4
+ *
+ * (ושוב, אחרי ש-history-filters.test.ts תפס את החצי שפספסתי: הבאנר הכתום
+ * היה הדבר היחיד שקישר אל ?status=needs_attention ואל ?status=paused, ושני
+ * הדליים האלה מוסתרים משורת הסינון של מסך ההיסטוריה בכוונה. הסרת הבאנר
+ * השאירה שני סינונים שאי אפשר להגיע אליהם. עכשיו כל ספירה פותחת את השורות
+ * שהיא סופרת, ישירות מהאריח. i18n.ts זזה בשורה אחת — "תקוע" ביחיד.)
  */
-export const WORKER_FINGERPRINT = '1724472467926c43';
+export const WORKER_FINGERPRINT = '49b1ee87106e50cf';

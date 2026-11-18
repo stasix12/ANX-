@@ -1960,7 +1960,20 @@ export default function SocialDashboard() {
                   /* What the number does not hold, named — unless the reset is
                      on screen, which takes this row (StatStrip). */
                   sub: summary.automaticWaiting > data.waitingToday ? `ועוד ${summary.automaticWaiting - data.waitingToday} אחרי חצות` : summary.needsHuman ? `${summary.needsHuman} דורשים אתכם` : undefined,
-                  href: '/social/history?status=scheduled',
+                  /*
+                   * THE TAP LANDS WHERE THE WORDS POINT, and it has to: the
+                   * orange bar that used to be the only way into these rows
+                   * is gone ("תמחק את ההתראות הכתומות האלה"), and a filter
+                   * nothing links to is a filter nobody reaches — the
+                   * 'ידניים' bucket is hidden from the history screen's own
+                   * bar by design. So when this column's sub-line says "N
+                   * דורשים אתכם", the column opens exactly those rows.
+                   *
+                   * Only then. With nothing waiting on a person the line is
+                   * about tomorrow's queue and the column opens the queue,
+                   * which is what it has always done.
+                   */
+                  href: summary.needsHuman && !(summary.automaticWaiting > data.waitingToday) ? '/social/history?status=needs_attention' : '/social/history?status=scheduled',
                   /* THE RESET LIVES ON THE NUMBER IT RESETS. "אפס הכל", not
                      "אפס": cancelAllScheduled() matches on status with no date
                      bound at all, so beside a column that says "להיום" a chip
@@ -1991,8 +2004,19 @@ export default function SocialDashboard() {
                   value: data.failedToday,
                   /* The reference's own chip, in his words. */
                   chipLabel: data.failedToday ? 'טיפול נדרש' : undefined,
-                  sub: data.skippedToday ? `ועוד ${data.skippedToday} ${agree(data.skippedToday, 'דולג', 'דולגו')}` : undefined,
-                  href: '/social/history?status=failed&range=1',
+                  /*
+                   * AND THE STUCK ROWS KEEP THEIR WAY IN TOO. They had one —
+                   * the second orange bar — and they are the rows no worker
+                   * ever claims, so a person is the only thing that moves
+                   * them. The skipped line keeps the column when there is
+                   * nothing stuck, which is the common case.
+                   */
+                  sub: data.counts.paused
+                    ? `${data.counts.paused} ${agree(data.counts.paused, 'תקוע', 'תקועים')}`
+                    : data.skippedToday
+                      ? `ועוד ${data.skippedToday} ${agree(data.skippedToday, 'דולג', 'דולגו')}`
+                      : undefined,
+                  href: data.counts.paused ? '/social/history?status=paused' : '/social/history?status=failed&range=1',
                 },
                 {
                   key: 'comments',

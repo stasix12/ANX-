@@ -89,6 +89,24 @@ const page = readFileSync(new URL('../../src/app/social/page.tsx', import.meta.u
     page.includes('summary.needsHuman ? `${summary.needsHuman} דורשים אתכם`'),
     'the rows waiting on a person still carry their count on the "ממתינים היום" tile — the warning went, the fact did not',
   );
+  /*
+   * AND THE COUNT IS STILL A WAY IN. This is the half I got wrong the first
+   * time and history-filters.test.ts caught: the orange bar was the ONLY
+   * thing linking at ?status=needs_attention and ?status=paused, and both
+   * buckets are hidden from the history screen's own filter bar on purpose.
+   * Removing the bar left two filters nothing could reach.
+   *
+   * So each count now opens the rows it is counting — the sub-line and the
+   * tap agree, which is more than the bar ever managed.
+   */
+  is(
+    page.includes("summary.needsHuman && !(summary.automaticWaiting > data.waitingToday) ? '/social/history?status=needs_attention'"),
+    'and the column opens those rows when its sub-line is about them',
+  );
+  is(
+    page.includes("data.counts.paused ? '/social/history?status=paused'"),
+    'and the stuck rows, which no worker ever claims, keep their own way in as well',
+  );
 
   const history = readFileSync(new URL('../../src/app/social/history/page.tsx', import.meta.url), 'utf8');
   const groups = history.slice(history.indexOf('const STATUS_GROUPS'), history.indexOf('const RANGES'));

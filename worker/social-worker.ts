@@ -6,7 +6,7 @@ import { detectCity } from '@/lib/social/cities';
 import { JOINED_QUERY, mergeDiscovered, normalizeQuery, type DiscoveredGroup, type StoredGroup } from '@/lib/social/discovery';
 import { renderPostText } from '@/lib/social/compose';
 import { planQueue } from '@/lib/social/plan';
-import { PREP_LEAD_MS, accountGapLabel, accountGapSeconds, clampCommentDelay, evaluateQueueItem } from '@/lib/social/rules';
+import { PREP_LEAD_MS, accountGapLabel, accountGapSeconds, clampCommentDelay, commentArmCutoff, evaluateQueueItem } from '@/lib/social/rules';
 import { Admission, laneCountFor } from './admission';
 import { CHORE_NEEDS_MS, choreFits, roomBeforeNextPublish } from './chore-window';
 import { OPEN_STATUSES } from '@/lib/social/status';
@@ -5063,7 +5063,11 @@ async function armAutoComments(db: SupabaseClient): Promise<number> {
        the column to — is brought inside the range here rather than obeyed, so
        the arm can never wait on a number no screen can express. */
     const delay = clampCommentDelay(round.comment_delay_seconds);
-    const cutoff = new Date(Date.now() - delay * 1000).toISOString();
+    /* THE CUTOFF COMES FROM rules.ts, and that is not tidiness: auto-comment
+       .test.ts sends the string this very function returns into a real
+       Postgres and checks which rows come back, so "לא מיד אחרי הפוסט" is
+       proved against the database rather than against a copy of this line. */
+    const cutoff = commentArmCutoff(round.comment_delay_seconds, Date.now());
     const ready = await db
       .from('social_queue')
       .select('id, target:social_targets(url)')

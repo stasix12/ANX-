@@ -309,6 +309,28 @@ export function clampCommentDelay(seconds: number | null | undefined): number {
 }
 
 /**
+ * ─── THE INSTANT A PUBLICATION BECOMES OLD ENOUGH TO COMMENT ON ──────────
+ *
+ * The arm asks the database for publications whose `published_at` is at or
+ * before this. Everything newer is too young and is simply not a candidate —
+ * which is the whole of "לא מיד אחרי הפוסט": the row is not skipped, not
+ * deferred and not marked; it is not selected at all until the clock has
+ * passed, and the next pass asks again.
+ *
+ * IT IS A FUNCTION RATHER THAN A LINE INSIDE THE WORKER so that a test can
+ * send the EXACT string the arm sends into a real Postgres and watch which
+ * rows come back. An arithmetic that only exists inside the chore can be
+ * tested only by a copy of itself, and a copy is the one thing that cannot
+ * catch a mistake in the original.
+ *
+ * `nowMs` is passed in rather than read here: a function that reads the clock
+ * is a function a test cannot place in time.
+ */
+export function commentArmCutoff(delaySeconds: number | null | undefined, nowMs: number): string {
+  return new Date(nowMs - clampCommentDelay(delaySeconds) * 1000).toISOString();
+}
+
+/**
  * ─── THE FOURTH CARD, WHICH SHIPS WITH NO NUMBERS OF ITS OWN ─────────────
  *
  *   "אין להמציא ערכים למצב ״בטוח״. אם לא קיימת הגדרה, יש להשאיר אותו לא

@@ -40,8 +40,8 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { applySchema, available, one, resetSchema, skip } from './db/harness';
-import { COMMENT_DELAY_MAX_SECONDS, COMMENT_DELAY_MIN_SECONDS, clampCommentDelay } from '../../src/lib/social/rules';
+import { applySchema, available, one, resetSchema, rows, skip } from './db/harness';
+import { COMMENT_DELAY_MAX_SECONDS, COMMENT_DELAY_MIN_SECONDS, clampCommentDelay, commentArmCutoff } from '../../src/lib/social/rules';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const src = (rel: string) => readFileSync(path.join(repoRoot, rel), 'utf8');
@@ -216,7 +216,7 @@ is(/ascending: false/.test(arm), 'and it takes the NEWEST publications — the o
 is(/comment_delay_seconds/.test(arm), 'the arming reads the delay column');
 is(/clampCommentDelay\(round\.comment_delay_seconds\)/.test(arm), 'and clamps it through the same one function the screen and the client use, so a stored value no screen can express is never obeyed');
 is(!/comment_gap_seconds/.test(arm), 'and not the between-comments gap, which is a different clock');
-is(/Date\.now\(\) - delay \* 1000/.test(arm), 'the cutoff is now minus the delay');
+is(/commentArmCutoff\(round\.comment_delay_seconds, Date\.now\(\)\)/.test(arm), 'the cutoff comes from the one function in rules.ts, so the test below can send the arm\'s own arithmetic into a real database');
 is(/\.lte\('published_at', cutoff\)/.test(arm), 'and it is applied to published_at IN THE DATABASE — the post’s own age, not a timer that a worker restart would lose');
 /* AND THE CARD PROMISES A FLOOR RATHER THAN A SCHEDULE. The chore needs an
    idle window of 45 seconds (four minutes when the post's address still has to
@@ -379,5 +379,99 @@ is(one(armOnce) === '1', 'the first arming claims the row');
 is(one(armOnce) === '0', 'and the second changes nothing at all — one publication, one automatic comment');
 /* AND THE POST IS UNTOUCHED BY EITHER. */
 is(one(`select status from social_queue where id='${row}'`) === 'published', 'the publication itself is exactly as it was — a comment write cannot move a post back into the queue');
+
+/* ══════════ 9. "לא מיד אחרי הפוסט" — AGAINST A REAL CLOCK AND DATABASE ═══ */
+
+/*
+ *   "תאמת שהתגובה מהירה אחרי פוסט יוצאת באמת אחרי 12 שעות מרגע הפרסום ולא
+ *    ישר" — 18.11.2026
+ *
+ * The question is not whether the code CONTAINS a delay. It is whether a post
+ * published a minute ago is selected by the arm, and a post published twelve
+ * hours ago is. So this sends the EXACT cutoff string the arm computes —
+ * commentArmCutoff(), the same function the chore calls — into the EXACT
+ * predicate the arm uses, against rows placed at known ages in a real
+ * Postgres, and reads back which ones come out.
+ *
+ * Five rows, one round, twelve hours chosen:
+ *
+ *   just now        must NOT be selected
+ *   6 hours old     must NOT be selected
+ *   11h 59m old     must NOT be selected   ← the minute before
+ *   12h 01m old     MUST be selected       ← the minute after
+ *   3 days old, already commented ('done') must NOT be selected, ever
+ *
+ * If the delay were ignored, the first four would all come back. If the
+ * cutoff were inverted, only the young ones would. Neither can pass this.
+ */
+{
+  const tenant2 = '33333333-3333-3333-3333-333333333333';
+  one(`insert into social_tenants (id, name) values ('${tenant2}', 'בדיקת עיכוב') on conflict do nothing; select 1`);
+  const round = one(
+    `insert into social_campaigns (tenant_id, name, comment_auto, comment_text, comment_delay_seconds)
+     values ('${tenant2}', 'סבב עיכוב', true, 'שלחו הודעה', 43200) returning id`,
+  );
+  const post2 = one(`insert into social_posts (tenant_id, title, base_text, campaign_id) values ('${tenant2}', 'פוסט', 'טקסט', '${round}') returning id`);
+  const group = one(
+    `insert into social_targets (tenant_id, channel, name, url) values ('${tenant2}', 'facebook_group', 'קבוצה', 'https://www.facebook.com/groups/9988776') returning id`,
+  );
+
+  /** A published row of this round, `age` old, in the given comment state. */
+  const place = (age: string, state: string) =>
+    one(
+      `insert into social_queue (tenant_id, post_id, campaign_id, target_id, status, scheduled_at, published_at, comment_status)
+       values ('${tenant2}', '${post2}', '${round}', '${group}', 'published',
+               now() - interval '${age}', now() - interval '${age}', '${state}')
+       returning id`,
+    );
+
+  const justNow = place('1 minute', '');
+  const sixHours = place('6 hours', '');
+  const minuteBefore = place('11 hours 59 minutes', '');
+  const minuteAfter = place('12 hours 1 minute', '');
+  const alreadyDone = place('3 days', 'done');
+
+  /*
+   * THE ARM'S OWN ARITHMETIC. Twelve hours, through the same function the
+   * chore calls, with the clock passed in — not a string typed here.
+   */
+  const cutoff = commentArmCutoff(43200, Date.now());
+  is(/^\d{4}-\d{2}-\d{2}T/.test(cutoff), 'the cutoff is an ISO instant, which is what PostgREST sends');
+
+  /* And the arm's own predicate, in the same order it builds it. */
+  const selected = rows(
+    `select id from social_queue
+      where campaign_id = '${round}'
+        and status = 'published'
+        and comment_status = ''
+        and published_at <= '${cutoff}'
+      order by published_at desc`,
+  ).map((r) => r[0]);
+
+  eq(selected.includes(justNow), false, 'a post published a MINUTE ago is not armed — "ולא ישר"');
+  eq(selected.includes(sixHours), false, 'nor one published six hours ago, which is half the chosen delay');
+  eq(selected.includes(minuteBefore), false, 'nor one a single minute short of twelve hours');
+  eq(selected.includes(minuteAfter), true, 'and one a minute PAST twelve hours is');
+  eq(selected.includes(alreadyDone), false, 'while a post that already has its comment is never armed again, however old it is');
+  eq(selected.length, 1, 'exactly one of the five is a candidate');
+
+  /*
+   * AND THE SAME ROWS UNDER AN HOUR, which is the other end of the range the
+   * owner chose. The six-hour-old post becomes a candidate and the one-minute
+   * post still does not — so the cutoff really moves with the setting rather
+   * than being a constant with a number printed beside it.
+   */
+  const hourCutoff = commentArmCutoff(3600, Date.now());
+  const underAnHour = rows(
+    `select id from social_queue
+      where campaign_id = '${round}'
+        and status = 'published'
+        and comment_status = ''
+        and published_at <= '${hourCutoff}'`,
+  ).map((r) => r[0]);
+  eq(underAnHour.includes(justNow), false, 'at an hour, a post from a minute ago is still too young');
+  eq(underAnHour.includes(sixHours), true, 'but the six-hour-old one is now a candidate — the cutoff moves with the setting');
+  eq(underAnHour.length, 3, 'three of the five qualify at an hour, which is every uncommented row older than that');
+}
 
 console.log(`auto-comment OK — ${checks} assertions, the columns and the duplicate guard against a real Postgres`);

@@ -12,7 +12,7 @@ import type { JoinProgress } from './join-run';
 import { dedupeKey, renderPostText } from './compose';
 import { friendlyError, friendlyMessage } from './errors';
 import { queueIdOf } from './activity';
-import { accountGapLabel, accountGapSeconds, paceProfile, splitAccountGap, type PaceProfile } from './rules';
+import { accountGapLabel, accountGapSeconds, clampCommentDelay, paceProfile, splitAccountGap, type PaceProfile } from './rules';
 import { checkCampaignInvariants, checkQueueInvariants, takeUnreported, type InvariantViolation } from './invariants';
 import {
   ALL_QUEUE_STATUSES,
@@ -2568,14 +2568,15 @@ export async function setCampaignAutoComment(
   next: { auto: boolean; text: string; delaySeconds: number },
 ): Promise<{ auto: boolean; text: string; delaySeconds: number }> {
   /* CLAMPED HERE AS WELL AS IN THE INPUT, because this is the last place
-     before the database: 5..3600 is the CHECK v44 put on the column, and 500
-     characters is the ceiling the brief sets on the text. A value out of range
-     would otherwise be a statement the database rejects with an English
-     sentence nobody can act on. */
+     before the database: the range is the one the column itself CHECKs (v45,
+     one hour to twelve), read from rules.ts so the picker, this write and the
+     arm on the PC cannot drift apart; 500 characters is the ceiling the brief
+     sets on the text. A value out of range would otherwise be a statement the
+     database rejects with an English sentence nobody can act on. */
   const value = {
     comment_auto: next.auto,
     comment_text: next.text.slice(0, 500),
-    comment_delay_seconds: Math.max(5, Math.min(3600, Math.round(next.delaySeconds))),
+    comment_delay_seconds: clampCommentDelay(next.delaySeconds),
   };
   const saved = await db().from('social_campaigns').update(value).eq('id', campaignId);
   if (saved.error) {

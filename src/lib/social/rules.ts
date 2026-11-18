@@ -281,6 +281,34 @@ export const PACE_PROFILES: PaceProfile[] = [
 ];
 
 /**
+ * ─── HOW LONG AFTER A POST ITS COMMENT MAY BE ARMED ──────────────────────
+ *
+ *   "באופציות תשאיר רק עיכוב תגובה - לבחירה מ שעה אחת עד 12 שעות"
+ *   — 18.11.2026
+ *
+ * ONE RANGE, READ BY THREE PLACES. The card builds its list from it, the
+ * client clamps to it before writing, and the arm on the owner's PC clamps to
+ * it before using the stored number. The database holds the same range as a
+ * CHECK (v45), so a value that reaches any of them is a value every one of
+ * them accepts — a picker offering twelve hours over a column that refuses
+ * anything above one is a control that fails on the tap, and this product has
+ * shipped that shape of bug before with the publishing gap.
+ *
+ * SECONDS, because the column is seconds and always was. The hours are a
+ * spelling on screen, not a second unit: a number that travels in two units
+ * is how "600" came to sit over the word "דקות" in the queue tuner.
+ */
+export const COMMENT_DELAY_MIN_SECONDS = 3600;
+export const COMMENT_DELAY_MAX_SECONDS = 12 * 3600;
+
+/** The stored number, brought inside the range — the one clamp, for all three. */
+export function clampCommentDelay(seconds: number | null | undefined): number {
+  const n = Math.round(Number(seconds));
+  if (!Number.isFinite(n)) return COMMENT_DELAY_MIN_SECONDS;
+  return Math.max(COMMENT_DELAY_MIN_SECONDS, Math.min(COMMENT_DELAY_MAX_SECONDS, n));
+}
+
+/**
  * ─── THE FOURTH CARD, WHICH SHIPS WITH NO NUMBERS OF ITS OWN ─────────────
  *
  *   "אין להמציא ערכים למצב ״בטוח״. אם לא קיימת הגדרה, יש להשאיר אותו לא

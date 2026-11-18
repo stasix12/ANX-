@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { t } from '@/lib/social/i18n';
+import { COMMENT_DELAY_MAX_SECONDS, COMMENT_DELAY_MIN_SECONDS } from '@/lib/social/rules';
 import { MessageIcon } from '@/components/icons';
 import { friendlyMessage } from '@/lib/social/errors';
 import { Button, Toggle, useToast } from './ui';
@@ -72,20 +73,42 @@ import { Button, Toggle, useToast } from './ui';
 export const COMMENT_TEXT_MAX = 500;
 
 /**
- * The delays the picker offers, in seconds. Whole, round amounts a person
- * would actually mean — and the stored value is added to the list when it is
- * not one of them, so a round set from elsewhere never renders as a blank
- * picker or silently snaps to a number nobody chose.
+ * ─── THE DELAYS, IN WHOLE HOURS ──────────────────────────────────────────
+ *
+ *   "באופציות תשאיר רק עיכוב תגובה - לבחירה מ שעה אחת עד 12 שעות"
+ *   — 18.11.2026
+ *
+ * It was seconds-to-an-hour, because the first reference image drew
+ * "30 שניות". The choice is hours now, and the column's own range moved with
+ * it (v45: 3600..43200) so the two cannot disagree — a picker offering twelve
+ * hours over a database that refuses anything above one is a control that
+ * fails on the tap.
+ *
+ * STORED IN SECONDS STILL. The column did not change meaning or unit; only
+ * what may be put in it. Twelve entries, one per hour, generated rather than
+ * typed so the list and the range cannot drift apart.
  */
-const DELAYS = [10, 30, 60, 120, 300, 900, 3600];
+const DELAYS = Array.from(
+  { length: COMMENT_DELAY_MAX_SECONDS / COMMENT_DELAY_MIN_SECONDS },
+  (_, i) => (i + 1) * COMMENT_DELAY_MIN_SECONDS,
+);
 
-/** "30 שניות" / "2 דקות" / "שעה" — the one spelling, for one list. */
+/**
+ * "שעה" / "שעתיים" / "5 שעות" — Hebrew counts two of something with its own
+ * word, and "2 שעות" is the kind of wrong that makes a screen read as
+ * machine-made. Anything that is not a whole number of hours (a value stored
+ * before v45, or one a future version adds) is spelled in minutes rather than
+ * rendered as a bare number.
+ */
 function delayWords(seconds: number): string {
-  if (seconds < 60) return `${seconds} שניות`;
-  if (seconds === 60) return 'דקה';
-  if (seconds === 3600) return 'שעה';
-  const m = seconds / 60;
-  return `${Number.isInteger(m) ? m : m.toFixed(1)} דקות`;
+  const h = seconds / 3600;
+  if (Number.isInteger(h)) {
+    if (h === 1) return 'שעה';
+    if (h === 2) return 'שעתיים';
+    return `${h} שעות`;
+  }
+  const m = Math.round(seconds / 60);
+  return `${m} דקות`;
 }
 
 export function QuickCommentCard({
@@ -93,9 +116,7 @@ export function QuickCommentCard({
   auto,
   text,
   delaySeconds,
-  hasMedia,
   onSave,
-  onOpenComment,
   disabled = false,
   className = '',
 }: {
@@ -104,12 +125,8 @@ export function QuickCommentCard({
   auto: boolean;
   text: string;
   delaySeconds: number;
-  /** Whether the round already carries an image for its comment. */
-  hasMedia: boolean;
-  /** One writer for all three fields — see setCampaignAutoComment. */
+  /** One writer for all three stored values — see setCampaignAutoComment. */
   onSave: (next: { auto: boolean; text: string; delaySeconds: number }) => Promise<unknown> | void;
-  /** The existing comment window, which is where an image is chosen. */
-  onOpenComment?: () => void;
   disabled?: boolean;
   className?: string;
 }) {
@@ -249,54 +266,47 @@ export function QuickCommentCard({
         </div>
       </div>
 
-      {/* ─── 3. the three pickers along the foot ───────────────────────────── */}
+      {/* ─── 3. the one picker along the foot ─────────────────────────────── */}
       {/*
-        grid-cols-3 with `[&>*]:min-w-0`, which is this product's standing rule
-        for every multi-column grid: the three narrow together on a 320px phone
-        instead of overflowing the card.
-
-        TWO OF THE THREE STATE A FACT AND DO NOT OFFER A CHOICE, and that is
-        the brief's own discipline applied twice:
-
-          · תצוגה has exactly one supported value — after every post. A picker
-            with one option is a decoration, and inventing a second (after the
-            first post only? after a round?) would be a setting nothing reads.
-          · סוג תגובה is DERIVED from whether the round carries an image, which
-            is already stored in comment_media. A second column saying the same
-            thing would be a second source of truth for one fact — so this one
-            PRINTS the type and opens the comment window, where the image is
-            chosen and removed. That is the pattern the schedule board already
-            uses: a readout box that is also the door to its own editor.
-
-        Only עיכוב תגובה writes, because only it has a column of its own.
+        ─── IT WAS THREE, AND TWO WERE REMOVED ON REQUEST ──────────────────
+        *
+        *   "סוג תגובה להסיר. תצוגה להסיר" — 18.11.2026
+        *
+        * "תצוגה" had one supported value (after every post) and "סוג תגובה"
+        * only ever PRINTED what comment_media already said, with a tap that
+        * opened the existing comment window. Neither stored anything of its
+        * own, so neither leaves anything behind: no column was added for them
+        * and none is dropped now. The image for a comment is still chosen
+        * where it always was — the round's own comment window, on the
+        * campaigns screen and from "תגובות מהירות" below this card.
+        *
+        * What is left is the one control that writes a column, at the width
+        * the three shared, so the card keeps its proportions.
       */}
-      <div className="mt-3 grid grid-cols-3 gap-2 [&>*]:min-w-0">
-        <Picker label={t('תצוגה')} value={t('אחרי כל פוסט')} note={t('הערך היחיד הנתמך')} />
-        <Picker
-          label={t('סוג תגובה')}
-          value={hasMedia ? t('טקסט ותמונה') : t('טקסט')}
-          onClick={onOpenComment}
-          note={onOpenComment ? t('נבחר בחלון התגובה') : undefined}
-        />
-        <div className="min-w-0">
-          <label className="block truncate text-[11px] font-bold text-mist-500" htmlFor="quick-comment-delay">
-            {t('עיכוב תגובה')}
-          </label>
-          <select
-            id="quick-comment-delay"
-            aria-label={t('עיכוב תגובה')}
-            disabled={off}
-            value={String(delaySeconds)}
-            onChange={(e) => void write({ auto, text, delaySeconds: Number(e.target.value) }).catch(() => undefined)}
-            className="mt-1 h-11 w-full min-w-0 rounded-2xl border border-brand-500/25 bg-ink-900 px-2 text-[12.5px] font-extrabold text-mist-100 outline-none focus:border-brand-500 disabled:opacity-60"
-          >
-            {(DELAYS.includes(delaySeconds) ? DELAYS : [...DELAYS, delaySeconds].sort((a, b) => a - b)).map((s) => (
-              <option key={s} value={s}>
-                {delayWords(s)}
-              </option>
-            ))}
-          </select>
-        </div>
+      <div className="mt-3">
+        <label className="block truncate text-[11px] font-bold text-mist-500" htmlFor="quick-comment-delay">
+          {t('עיכוב תגובה')}
+        </label>
+        <select
+          id="quick-comment-delay"
+          aria-label={t('עיכוב תגובה')}
+          disabled={off}
+          value={String(delaySeconds)}
+          onChange={(e) => void write({ auto, text, delaySeconds: Number(e.target.value) }).catch(() => undefined)}
+          className="mt-1 h-11 w-full min-w-0 rounded-2xl border border-brand-500/25 bg-ink-900 px-3 text-[13px] font-extrabold text-mist-100 outline-none focus:border-brand-500 disabled:opacity-60"
+        >
+          {/*
+            THE STORED VALUE IS ALWAYS IN THE LIST. A round written before v45
+            — or by a future version with a finer step — would otherwise render
+            as a blank picker, and the first touch of it would silently snap to
+            an hour nobody chose.
+          */}
+          {(DELAYS.includes(delaySeconds) ? DELAYS : [...DELAYS, delaySeconds].sort((x, y) => x - y)).map((sec) => (
+            <option key={sec} value={sec}>
+              {delayWords(sec)}
+            </option>
+          ))}
+        </select>
       </div>
 
       {/*
@@ -320,49 +330,11 @@ export function QuickCommentCard({
   );
 }
 
-/**
- * One of the two foot boxes that STATE something. Drawn exactly like the live
- * picker beside them — same height, same radius, same hairline — because the
- * reference draws three identical boxes; what differs is that these two have
- * nothing to choose, and a box that opens its own editor says so by being a
- * button.
+/*
+ * ─── WHAT WAS HERE: <Picker> ─────────────────────────────────────────────
+ *
+ * The box the two removed controls were drawn with — a label over a bordered
+ * value, either inert or a doorway to its own editor. It had exactly two
+ * callers, both of them "תצוגה" and "סוג תגובה", and it went out with them on
+ * 18.11.2026 rather than being left as a component nothing renders.
  */
-function Picker({
-  label,
-  value,
-  note,
-  onClick,
-}: {
-  label: string;
-  value: string;
-  note?: string;
-  onClick?: () => void;
-}) {
-  const body = (
-    <span className="flex h-11 w-full min-w-0 items-center justify-center rounded-2xl border border-brand-500/25 bg-ink-900 px-2 text-[12.5px] font-extrabold text-mist-100">
-      <span dir="auto" className="min-w-0 truncate">
-        {value}
-      </span>
-    </span>
-  );
-  return (
-    <div className="min-w-0">
-      {/* dir="auto" on a truncating box, always: layout.test.ts walks these
-          statically and cannot tell one of our own words from a group name — and
-          the rule it is enforcing (a label clipped at the wrong end) is right
-          either way. */}
-      <span dir="auto" className="block truncate text-[11px] font-bold text-mist-500">{label}</span>
-      <span className="mt-1 block" title={note}>
-        {onClick ? (
-          <button type="button" onClick={onClick} aria-label={`${label}: ${value}${note ? ` — ${note}` : ''}`} className="block w-full min-w-0">
-            {body}
-          </button>
-        ) : (
-          <span aria-label={`${label}: ${value}${note ? ` — ${note}` : ''}`} role="note" className="block w-full min-w-0">
-            {body}
-          </span>
-        )}
-      </span>
-    </div>
-  );
-}

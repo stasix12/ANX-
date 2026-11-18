@@ -61,7 +61,7 @@ import {
 } from '@/lib/social/client';
 import { cancellableRows, percentFinished, type CampaignState } from '@/lib/social/campaign';
 import { MIN_REPEAT_HOURS, readRepeat, readSchedule, scheduleColumns, type CampaignRepeat, type CampaignSchedule, type ScheduleFields, readRounds, repeatFloorFrom, roundsColumn, roundsSavedMessage, type CampaignRound,} from '@/lib/social/campaign-schedule';
-import { accountGapLabel } from '@/lib/social/rules';
+import { accountGapLabel, clampCommentDelay } from '@/lib/social/rules';
 import { OVERDUE_AFTER_SECONDS } from '@/lib/social/countdown';
 import { AUTOMATIC_WAITING_STATUSES, EMPTY_QUEUE_SUMMARY, IN_FLIGHT_STATUSES, TERMINAL_STATUSES, type QueueSummary } from '@/lib/social/status';
 import { SNAPSHOT, readSnapshot, writeSnapshot } from '@/lib/social/snapshot';
@@ -2178,20 +2178,19 @@ export default function SocialDashboard() {
                   pace={data.limits.pace}
                   /*
                     "תגובה מהירה אחרי פוסט" — the card that replaced the three
-                    mode tiles here. Straight off the round's own columns, with
-                    the TYPE derived from comment_media rather than stored a
-                    second time.
+                    mode tiles here. Straight off the round's own columns.
+
+                    The delay falls back to the column's own default (one hour
+                    since v45), through the same clamp the write and the arm
+                    use — so a round written before v45 draws a legal value
+                    rather than a blank picker.
                   */
                   quickComment={{
                     auto: run.campaign.comment_auto === true,
                     text: run.campaign.comment_text ?? '',
-                    delaySeconds: run.campaign.comment_delay_seconds ?? 30,
-                    hasMedia: (run.campaign.comment_media?.length ?? 0) > 0,
+                    delaySeconds: clampCommentDelay(run.campaign.comment_delay_seconds),
                   }}
                   onQuickCommentChange={(next) => saveAutoComment(run.campaign, next)}
-                  /* The app's existing comment window, which the card's
-                     "סוג תגובה" box opens — one sheet, not a second uploader. */
-                  onComment={() => setCommentFor(run.campaign)}
                   spacing={{
                     minGapMinutes: data.limits.minGapMinutes,
                     groupMinGapMinutes: data.browser.groupMinGapMinutes,

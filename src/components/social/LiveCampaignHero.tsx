@@ -275,7 +275,6 @@ export function LiveCampaignHero({
   pace,
   quickComment,
   onQuickCommentChange,
-  onComment,
   floorHours,
   frozenUntil = null,
   scheduleBusy = false,
@@ -372,15 +371,18 @@ export function LiveCampaignHero({
    * twice. Absent on any caller that cannot write them, and the card is then
    * not drawn at all.
    */
-  quickComment?: { auto: boolean; text: string; delaySeconds: number; hasMedia: boolean };
+  quickComment?: { auto: boolean; text: string; delaySeconds: number };
   /** The one writer — see setCampaignAutoComment in client.ts. */
   onQuickCommentChange?: (next: { auto: boolean; text: string; delaySeconds: number }) => Promise<unknown> | void;
-  /**
-   * Opens the app's EXISTING comment window for this round, which is where an
-   * image for the comment is chosen. The card's "סוג תגובה" box is the door;
-   * this is what it opens, so there is no second uploader.
+  /*
+   * ─── WHAT WAS HERE: onComment ──────────────────────────────────────────
+   *
+   * The door to the round's existing comment window, opened by the card's
+   * "סוג תגובה" box. That box was removed on 18.11.2026 — "סוג תגובה להסיר" —
+   * and the prop went with it rather than being left as a handler nothing
+   * calls. The window itself is untouched and is still reached from
+   * "תגובות מהירות" on this screen and from the campaigns screen.
    */
-  onComment?: () => void;
   /** How close two publications of one post to one group may be, in hours —
       the account's setting, defaulted by the panel when absent. */
   floorHours?: number;
@@ -1003,11 +1005,7 @@ export function LiveCampaignHero({
           auto={quickComment.auto}
           text={quickComment.text}
           delaySeconds={quickComment.delaySeconds}
-          hasMedia={quickComment.hasMedia}
           onSave={onQuickCommentChange}
-          /* The app's existing comment window — where the image for a comment
-             is chosen, and the only place it ever was. */
-          onOpenComment={onComment}
           disabled={busy}
         />
       )}

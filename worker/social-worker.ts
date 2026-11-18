@@ -6,7 +6,7 @@ import { detectCity } from '@/lib/social/cities';
 import { JOINED_QUERY, mergeDiscovered, normalizeQuery, type DiscoveredGroup, type StoredGroup } from '@/lib/social/discovery';
 import { renderPostText } from '@/lib/social/compose';
 import { planQueue } from '@/lib/social/plan';
-import { PREP_LEAD_MS, accountGapLabel, accountGapSeconds, evaluateQueueItem } from '@/lib/social/rules';
+import { PREP_LEAD_MS, accountGapLabel, accountGapSeconds, clampCommentDelay, evaluateQueueItem } from '@/lib/social/rules';
 import { Admission, laneCountFor } from './admission';
 import { CHORE_NEEDS_MS, choreFits, roomBeforeNextPublish } from './chore-window';
 import { OPEN_STATUSES } from '@/lib/social/status';
@@ -5058,7 +5058,11 @@ async function armAutoComments(db: SupabaseClient): Promise<number> {
        has — so they are not armed in the first place. */
     if (!round.comment_text || !round.comment_text.trim()) continue;
 
-    const delay = Math.max(5, Math.min(3600, Math.round(round.comment_delay_seconds ?? 30)));
+    /* THE SAME CLAMP THE SCREEN AND THE CLIENT USE, from the one place it is
+       written. A stored value older than v45 — or one a future version widens
+       the column to — is brought inside the range here rather than obeyed, so
+       the arm can never wait on a number no screen can express. */
+    const delay = clampCommentDelay(round.comment_delay_seconds);
     const cutoff = new Date(Date.now() - delay * 1000).toISOString();
     const ready = await db
       .from('social_queue')

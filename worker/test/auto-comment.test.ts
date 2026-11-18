@@ -41,6 +41,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { applySchema, available, one, resetSchema, skip } from './db/harness';
+import { COMMENT_DELAY_MAX_SECONDS, COMMENT_DELAY_MIN_SECONDS, clampCommentDelay } from '../../src/lib/social/rules';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const src = (rel: string) => readFileSync(path.join(repoRoot, rel), 'utf8');
@@ -69,6 +70,8 @@ const dash = code('src/app/social/page.tsx');
 const hero = code('src/components/social/LiveCampaignHero.tsx');
 const v44 = src('supabase/social-schema-v44.sql');
 const rollback = src('supabase/social-schema-v44-rollback.sql');
+const v45 = src('supabase/social-schema-v45.sql');
+const rollback45 = src('supabase/social-schema-v45-rollback.sql');
 const latest = src('supabase/social-latest.sql');
 
 /* ══════════════ 2. THE SCREEN WRITES INTENT, NEVER A PUBLICATION ═════════ */
@@ -89,7 +92,25 @@ is(!/comment_gap_seconds/.test(writer), 'and comment_gap_seconds is NOT — that
  * otherwise be a statement Postgres refuses with an English sentence nobody
  * can act on.
  */
-is(/Math\.max\(5, Math\.min\(3600, Math\.round\(next\.delaySeconds\)\)\)/.test(writer), 'the delay is clamped to the column’s own CHECK range before the write');
+/*
+ * ─── ONE RANGE, READ BY THREE PLACES — 18.11.2026 ────────────────────────
+ *
+ *   "באופציות תשאיר רק עיכוב תגובה - לבחירה מ שעה אחת עד 12 שעות"
+ *
+ * The clamp was typed out here as 5..3600. The choice is hours now, the
+ * column's CHECK moved with it (v45), and the numbers live in rules.ts so the
+ * picker, this write and the arm on the PC cannot drift apart. A picker
+ * offering twelve hours over a column that refuses anything above one is a
+ * control that fails on the tap — the shape of bug this product shipped once
+ * already with the publishing gap.
+ */
+is(/clampCommentDelay\(next\.delaySeconds\)/.test(writer), 'the delay is clamped before the write, through the one clamp');
+eq(COMMENT_DELAY_MIN_SECONDS, 3600, 'the minimum is one hour');
+eq(COMMENT_DELAY_MAX_SECONDS, 12 * 3600, 'and the maximum twelve');
+eq(clampCommentDelay(30), 3600, 'a value from before v45 is brought up to the minimum rather than obeyed');
+eq(clampCommentDelay(99999), 43200, 'and one above the ceiling is brought down');
+eq(clampCommentDelay(null), 3600, 'a missing value is an hour, which is the column default');
+eq(clampCommentDelay(7200), 7200, 'and a legal value is left exactly as it is');
 is(/next\.text\.slice\(0, 500\)/.test(writer), 'and the text to 500 characters — the ceiling the brief sets');
 is(/social-latest\.sql/.test(writer), 'and a database without the migration is told so in Hebrew, naming the file, rather than leaving a dead switch');
 
@@ -102,8 +123,26 @@ is(/\{draft\.length\}\/\{COMMENT_TEXT_MAX\}/.test(card), 'and the count is drawn
 is(/<Toggle/.test(card), 'the switch is the app’s own Toggle, which rolls itself back and says why when a write fails');
 is(/<textarea/.test(card), 'the words are a real field');
 is(/id="quick-comment-delay"/.test(card), 'and the delay is a real picker');
-is(/תצוגה/.test(card) && /הערך היחיד הנתמך/.test(card), '"תצוגה" states its one supported value rather than offering a choice that does not exist');
-is(/onClick=\{onOpenComment\}/.test(card), 'and "סוג תגובה" opens the app’s existing comment window, where the image is chosen — not a second uploader');
+/*
+ * ─── AND THE TWO THAT WERE REMOVED ON REQUEST ────────────────────────────
+ *
+ *   "סוג תגובה להסיר. תצוגה להסיר" — 18.11.2026
+ *
+ * Neither stored anything of its own — "תצוגה" had one supported value and
+ * "סוג תגובה" only printed what comment_media already said — so neither
+ * leaves a column behind. The pins invert: they must be gone from the card,
+ * and the <Picker> they were drawn with must be gone with them rather than
+ * left as a component nothing renders.
+ */
+is(!/תצוגה/.test(card), '"תצוגה" is gone from the card');
+is(!/סוג תגובה/.test(card), 'and so is "סוג תגובה"');
+is(!/onOpenComment/.test(card), 'with the door it opened — the comment window is still reached from "תגובות מהירות" and from the campaigns screen');
+is(!/function Picker/.test(card), 'and the box they were drawn with is deleted, not orphaned');
+/* THE DELAYS ARE GENERATED FROM THE RANGE, never typed — a list and a CHECK
+   that are two hand-written copies of one decision is how they come apart. */
+is(/COMMENT_DELAY_MAX_SECONDS \/ COMMENT_DELAY_MIN_SECONDS/.test(card), 'the twelve choices are built from the range itself');
+is(!/const DELAYS = \[/.test(card), 'and not from a hand-written list beside it');
+is(/שעתיים/.test(card), 'and two hours is spelled the way Hebrew spells it, not as "2 שעות"');
 
 /* ══════════════ 3. THE ARMING PASS, AND WHERE IT RUNS ═══════════════════ */
 
@@ -175,6 +214,7 @@ is(/ascending: false/.test(arm), 'and it takes the NEWEST publications — the o
  * clock is not anchored to the post at all.
  */
 is(/comment_delay_seconds/.test(arm), 'the arming reads the delay column');
+is(/clampCommentDelay\(round\.comment_delay_seconds\)/.test(arm), 'and clamps it through the same one function the screen and the client use, so a stored value no screen can express is never obeyed');
 is(!/comment_gap_seconds/.test(arm), 'and not the between-comments gap, which is a different clock');
 is(/Date\.now\(\) - delay \* 1000/.test(arm), 'the cutoff is now minus the delay');
 is(/\.lte\('published_at', cutoff\)/.test(arm), 'and it is applied to published_at IN THE DATABASE — the post’s own age, not a timer that a worker restart would lose');
@@ -224,8 +264,7 @@ is(/'unverified'/.test(worker), "the honest middle state still exists in the wor
 
 is(/quickComment=\{\{/.test(dash), 'the round card is handed the round’s own three columns');
 is(/auto: run\.campaign\.comment_auto === true/.test(dash), 'the switch comes from the column, with no default that would turn it on by accident');
-is(/delaySeconds: run\.campaign\.comment_delay_seconds \?\? 30/.test(dash), 'the delay falls back to the column’s own default');
-is(/hasMedia: \(run\.campaign\.comment_media\?\.length \?\? 0\) > 0/.test(dash), 'and the comment TYPE is derived from comment_media rather than stored a second time');
+is(/delaySeconds: clampCommentDelay\(run\.campaign\.comment_delay_seconds\)/.test(dash), 'the delay reaches the card through the one clamp, so a round written before v45 draws a legal value rather than a blank picker');
 is(/onQuickCommentChange=\{\(next\) => saveAutoComment\(run\.campaign, next\)\}/.test(dash), 'with one handler behind all three fields');
 is(/await setCampaignAutoComment\(campaign\.id, next\)/.test(dash), 'which writes through the one writer');
 /* IT RE-THROWS. <Toggle> rolls the switch back on a rejection, so a handler
@@ -243,6 +282,25 @@ is(/quickComment && onQuickCommentChange/.test(hero), 'and only when the screen 
 is(/add column if not exists comment_auto boolean not null default false/.test(v44), 'the switch ships OFF for every round that already exists, so the file changes no account’s behaviour');
 is(/add column if not exists comment_delay_seconds integer not null default 30/.test(v44), 'and the delay has a default, so a round never has none');
 is(/check \(comment_delay_seconds between 5 and 3600\)/.test(v44), 'with a sane range, guarded the same way schedule_gap_seconds is');
+/*
+ * ─── AND v45 MOVED THAT RANGE THE SAME DAY ───────────────────────────────
+ *
+ * v44 is left exactly as it shipped — a migration already run on a database
+ * is not edited afterwards, or the file and the database stop describing the
+ * same thing. v45 is the correction, and the ORDER inside it is the whole of
+ * its safety: drop the old CHECK, lift the values that can no longer be
+ * expressed, move the default, then add the new CHECK. Any other order fails
+ * on existing rows and leaves the table half-migrated.
+ */
+is(/drop constraint if exists social_campaigns_comment_delay_seconds_check/.test(v45), 'v45 drops the old range before touching anything');
+is(v45.indexOf('drop constraint') < v45.indexOf('update public.social_campaigns'), 'and lifts the stored values only once the old CHECK is out of the way');
+is(v45.indexOf('update public.social_campaigns') < v45.indexOf('add constraint'), 'and adds the new range only once no row can violate it');
+is(/set comment_delay_seconds = 3600\s*\n\s*where comment_delay_seconds < 3600/.test(v45), 'a value below the new minimum is raised TO the minimum — not reset to a default nobody chose');
+is(/alter column comment_delay_seconds set default 3600/.test(v45), 'and a new round defaults to an hour');
+is(/check \(comment_delay_seconds between 3600 and 43200\)/.test(v45), 'with the range the owner asked for — one hour to twelve');
+is(/⚠/.test(rollback45), 'the rollback warns that a choice above an hour cannot survive it');
+is(/where comment_delay_seconds > 3600/.test(rollback45), 'and brings such a value down to the nearest legal one rather than to a default');
+is(latest.includes('between 3600 and 43200'), 'and social-latest.sql carries v45 too, so the one file the owner runs is still enough');
 is(/create index if not exists social_queue_comment_arm_idx/.test(v44), 'and the arming read has an index, or it scans every publication ever made');
 is(/drop column if exists comment_auto/.test(rollback) && /drop column if exists comment_delay_seconds/.test(rollback), 'the rollback drops exactly what the migration added');
 is(/⚠/.test(rollback), 'and warns that the owner’s choice goes with them');
@@ -258,7 +316,7 @@ resetSchema();
 applySchema(repoRoot);
 
 is(one("select column_default from information_schema.columns where table_name='social_campaigns' and column_name='comment_auto'") === 'false', 'comment_auto really exists, and really defaults to false');
-is(one("select column_default from information_schema.columns where table_name='social_campaigns' and column_name='comment_delay_seconds'") === '30', 'comment_delay_seconds really exists, and really defaults to 30');
+is(one("select column_default from information_schema.columns where table_name='social_campaigns' and column_name='comment_delay_seconds'") === '3600', 'comment_delay_seconds really exists, and really defaults to one hour');
 is(one("select is_nullable from information_schema.columns where table_name='social_campaigns' and column_name='comment_auto'") === 'NO', 'and neither can be null, so no round is in an undecided state');
 is(
   one("select count(*) from pg_indexes where tablename='social_queue' and indexname='social_queue_comment_arm_idx'") === '1',
@@ -278,8 +336,9 @@ const tenant = '11111111-1111-1111-1111-111111111111';
 one(`insert into social_tenants (id, name) values ('${tenant}', 'בדיקה') on conflict do nothing; select 1`);
 const mk = (delay: string) =>
   `insert into social_campaigns (tenant_id, name, comment_delay_seconds) values ('${tenant}', 'סבב', ${delay}) returning id`;
-is(one(mk('30')) !== '', 'a delay inside the range is stored');
-for (const bad of ['4', '3601', '0', '-30']) {
+is(one(mk('3600')) !== '', 'one hour is stored');
+is(one(mk('43200')) !== '', 'and so is twelve — the two ends of the range the owner asked for');
+for (const bad of ['3599', '43201', '30', '0', '-30']) {
   let refused = false;
   try {
     one(mk(bad));

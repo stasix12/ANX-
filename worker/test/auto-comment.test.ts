@@ -76,7 +76,11 @@ const latest = src('supabase/social-latest.sql');
 
 /* ══════════════ 2. THE SCREEN WRITES INTENT, NEVER A PUBLICATION ═════════ */
 
-const writer = client.slice(client.indexOf('export async function setCampaignAutoComment'), client.indexOf('export async function queueCampaignComment'));
+/* UP TO clearPendingComments AND NOT TO queueCampaignComment: the reset lives
+   between the two and DOES touch social_queue — by design, it is the button
+   that empties the queue. A slice that swallowed it would be asserting the
+   opposite of what it means to. */
+const writer = client.slice(client.indexOf('export async function setCampaignAutoComment'), client.indexOf('export async function clearPendingComments'));
 is(writer.length > 300, 'setCampaignAutoComment could not be isolated — every check over it would be vacuous');
 is(/\.from\('social_campaigns'\)/.test(writer), 'it writes the ROUND');
 is(!/social_queue/.test(writer), "and never a publication — a screen cannot arm a row, which is half of why a comment can't cause a repeat post");
@@ -576,6 +580,67 @@ is(one(`select status from social_queue where id='${row}'`) === 'published', 'th
   const theirs = new Date(`${one(`select to_char((now() - interval '12 hours') at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS')`)}Z`).getTime();
   const driftSeconds = Math.abs(mine - theirs) / 1000;
   is(driftSeconds < 120, `the cutoff agrees with the database's own clock — ${driftSeconds.toFixed(1)}s apart, where a timezone fault would be thousands`);
+}
+
+/* ══════ 11. THE FLOOR, AND THE BUTTON THAT EMPTIES THE QUEUE ════════════ */
+
+/*
+ *   "אז מה זה כל התגובות שצריכות לצאת כאן? תוסיף לי כפתור איפוס"
+ *   — 18.11.2026, after the queue went from 25 to 166 in half an hour
+ *
+ * THE DEFECT: the arm had no lower bound, so the first pass after the switch
+ * went on considered every publication the round had ever made. "אחרי פוסט"
+ * has to mean from the moment it is switched on.
+ */
+{
+  is(/comment_auto_since/.test(arm), 'the arm reads when the switch was turned on');
+  is(/if \(!round\.comment_auto_since\) continue;/.test(arm), 'and a round with no such instant arms NOTHING — the safe reading, because the alternative is reaching into history again');
+  is(/\.gte\('published_at', round\.comment_auto_since\)/.test(arm), 'the window has a floor as well as a ceiling, and both are asked of the database');
+  /* THE STAMP IS WRITTEN ONLY ON THE WAY ON. Writing it on every save would
+     move the floor under a queue already building whenever the text changed;
+     writing it on the way OFF would lose where the round started. */
+  is(/next\.auto\s*\n?\s*\?\s*\{ \.\.\.value, comment_auto_since: new Date\(\)\.toISOString\(\) \}/.test(writer), 'the switch stamps the floor on the way ON');
+  is(/:\s*\{ \.\.\.value \}/.test(writer), 'and a save that only changes the text or the delay leaves it where it is');
+
+  /* ─── AND THE BUTTON ─────────────────────────────────────────────────── */
+  const reset = client.slice(client.indexOf('export async function clearPendingComments'), client.indexOf('export async function queueCampaignComment'));
+  is(reset.length > 300, 'clearPendingComments could not be isolated — the checks over it would be vacuous');
+  is(/\.eq\('comment_status', 'pending'\)/.test(reset), 'it clears only what is WAITING');
+  for (const kept of ['done', 'failed', 'unverified', 'commenting']) {
+    is(!reset.includes(`'${kept}'`), `and never touches a '${kept}' row — that is the record of what really happened, or a row a worker is holding this second`);
+  }
+  is(!/\.delete\(/.test(reset), 'it deletes nothing');
+  /* A LITERAL SPACE AND A LOOKBEHIND: `comment_status:` is the only `status`
+     this function sets, and it is the comment's own. A bare /status:/ matches
+     that too — the same backtracking trap this file already met once. */
+  is(!/(?<!comment_)status: /.test(reset), 'and writes no publication status — a reset of a comment queue may not move a post');
+  is(/comment_auto_since: new Date\(\)\.toISOString\(\)/.test(reset), 'and it raises the floor on every armed round, or it is a button that empties a bucket with the tap running');
+  is(/\.limit\(100\)/.test(reset), 'in pages, because PostgREST stops returning rows at a thousand however many it changed');
+
+  /* THE SCREEN: beside the number it zeroes, and only when there is one. */
+  const rail = code('src/components/social/CommentTimeline.tsx');
+  is(/onClearQueue && totals\.pending > 0/.test(rail), 'the button is drawn only when something is waiting');
+  is(/disabled=\{clearing\}/.test(rail), 'and goes dead while the write is in flight');
+  const dash2 = code('src/app/social/page.tsx');
+  is(/async function clearComments/.test(dash2), 'the dashboard owns the write');
+  is(/confirm\.ask/.test(dash2.slice(dash2.indexOf('async function clearComments'), dash2.indexOf('async function act'))), 'behind a confirmation');
+  is(/לאפס את תור התגובות\? \(\$\{waiting\}\)/.test(dash2), 'that names the exact number');
+}
+
+/* ─── AND THE MIGRATION THAT CARRIES BOTH ──────────────────────────────── */
+{
+  const v46 = src('supabase/social-schema-v46.sql');
+  const rb46 = src('supabase/social-schema-v46-rollback.sql');
+  is(/add column if not exists comment_auto_since timestamptz/.test(v46), 'v46 adds the floor');
+  is(!/not null/.test(v46.slice(v46.indexOf('add column if not exists comment_auto_since'), v46.indexOf('add column if not exists comment_auto_since') + 120)), 'nullable, because "we do not know when this began" is a real state and must not be defaulted into a lie');
+  is(/where comment_status = 'pending'/.test(v46), 'and it empties the queue the defect built');
+  for (const kept of ["'done'", "'failed'", "'unverified'", "'commenting'"]) {
+    is(!v46.includes(`comment_status = ${kept}`), `without touching a ${kept} row`);
+  }
+  is(/⚠/.test(v46), 'and it warns that a manually queued row cannot be told apart from an automatic one, so it goes too');
+  is(/drop column if exists comment_auto_since/.test(rb46), 'the rollback removes exactly what it added');
+  is(/⚠/.test(rb46), 'and says that the emptied queue cannot be brought back');
+  is(latest.includes('comment_auto_since'), 'and social-latest.sql carries it');
 }
 
 console.log(`auto-comment OK — ${checks} assertions, the columns and the duplicate guard against a real Postgres`);

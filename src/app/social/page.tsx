@@ -44,6 +44,7 @@ import {
   getBrowserSettings,
   lastPublishedAt,
   saveCampaign,
+  clearPendingComments,
   setCampaignAutoComment,
   setCampaignRepeat,
   repeatRefusedText,
@@ -637,6 +638,47 @@ export default function SocialDashboard() {
     });
     if (!ok) return;
     await act('meta-hold', clearMetaHold, 'ההמתנה בוטלה. הפרסום ימשיך בתור הרגיל.');
+  }
+
+  /**
+   * ─── EMPTY THE COMMENT QUEUE — "תוסיף לי כפתור איפוס" ────────────────────
+   *
+   *   18.11.2026, after the automatic arm reached back over a round's whole
+   *   history and put 166 publications in line for a comment.
+   *
+   * THE DIALOG NAMES THE NUMBER and says exactly what survives, because the
+   * word "איפוס" over a comment queue could reasonably be read as deleting
+   * publications or erasing what already happened. It does neither: a row
+   * that leaves the queue goes back to "nobody asked for a comment here",
+   * every finished outcome keeps its state and its note, and a row a worker
+   * is holding this second is left to it.
+   *
+   * It also says the other half out loud — that rounds with the switch on
+   * start counting from now — because an owner who empties a queue and sees
+   * it refill in a minute has been lied to by a button.
+   */
+  async function clearComments() {
+    const waiting = data?.commentTotals.pending ?? 0;
+    if (!waiting) return;
+    const ok = await confirm.ask({
+      title: `לאפס את תור התגובות? (${waiting})`,
+      body:
+        `${waiting} ${agree(waiting, 'פרסום ממתין', 'פרסומים ממתינים')} לתגובה. איפוס מוציא אותם מהתור — הם לא יקבלו תגובה.\n\n` +
+        'מה שלא נמחק: הפרסומים עצמם, כל תגובה שכבר יצאה, וכל מה שנכשל או צריך בדיקה — אלה נשארים בדיוק כמו שהם. גם פרסום שהמחשב כותב עליו תגובה ברגע זה לא נוגע.\n\n' +
+        'וסבב שהתגובה האוטומטית שלו דולקת יתחיל לספור מעכשיו, כדי שהתור לא יתמלא מחדש מפרסומים ישנים.',
+      confirmLabel: 'אפס את התור',
+    });
+    if (!ok) return;
+    setBusy('clear-comments');
+    try {
+      const cleared = await clearPendingComments();
+      await load();
+      toast(cleared ? `${cleared} ${agree(cleared, 'פרסום הוצא', 'פרסומים הוצאו')} מתור התגובות.` : 'לא נמצאו פרסומים בתור.');
+    } catch (err) {
+      toast(friendlyMessage(err, 'איפוס תור התגובות נכשל.'), 'error');
+    } finally {
+      setBusy(null);
+    }
   }
 
   async function act(key: string, fn: () => Promise<unknown>, done: string) {
@@ -2372,6 +2414,10 @@ export default function SocialDashboard() {
             is passed so the footer counts the database rather than the window.
           */}
           <CommentTimeline
+            /* "תוסיף לי כפתור איפוס" — beside the count it zeroes. The card
+               counts and draws; the write and the confirmation are here. */
+            onClearQueue={() => void clearComments()}
+            clearing={busy === 'clear-comments'}
             rows={data.comments}
             waiting={data.commentsWaiting}
             done={data.commentsDone}

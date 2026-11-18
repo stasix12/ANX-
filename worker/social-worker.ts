@@ -5033,7 +5033,7 @@ const COMMENT_ARM_CAMPAIGNS = 10;
 async function armAutoComments(db: SupabaseClient): Promise<number> {
   const rounds = await db
     .from('social_campaigns')
-    .select('id, comment_auto, comment_delay_seconds, comment_text')
+    .select('id, comment_auto, comment_delay_seconds, comment_text, comment_auto_since')
     .eq('comment_auto', true)
     .neq('status', 'archived')
     .limit(COMMENT_ARM_CAMPAIGNS);
@@ -5046,10 +5046,15 @@ async function armAutoComments(db: SupabaseClient): Promise<number> {
    * the screen already explains that in Hebrew when the switch is pressed.
    */
   if (rounds.error) {
-    if (/column|comment_auto|comment_delay_seconds/i.test(rounds.error.message)) return 0;
+    if (/column|comment_auto|comment_auto_since|comment_delay_seconds/i.test(rounds.error.message)) return 0;
     throw new Error(rounds.error.message);
   }
-  const list = (rounds.data ?? []) as unknown as { id: string; comment_delay_seconds: number | null; comment_text: string | null }[];
+  const list = (rounds.data ?? []) as unknown as {
+    id: string;
+    comment_delay_seconds: number | null;
+    comment_text: string | null;
+    comment_auto_since: string | null;
+  }[];
 
   let armed = 0;
   for (const round of list) {
@@ -5057,6 +5062,24 @@ async function armAutoComments(db: SupabaseClient): Promise<number> {
        would arm rows the chore then has to refuse — see the guard it already
        has — so they are not armed in the first place. */
     if (!round.comment_text || !round.comment_text.trim()) continue;
+
+    /*
+     * ─── THE FLOOR: NOTHING FROM BEFORE THE SWITCH WAS TURNED ON ──────────
+     *
+     *   "אז מה זה כל התגובות שצריכות לצאת כאן?" — 18.11.2026
+     *
+     * This read had no lower bound, so the first pass after the switch went on
+     * considered EVERY publication the round had ever made. The owner watched
+     * his queue go from 25 to 166 in half an hour, on posts from previous
+     * days. "תגובה מהירה אחרי פוסט" means from the moment it is switched on.
+     *
+     * A ROUND WITH NO STAMP ARMS NOTHING, and that is deliberate rather than
+     * lenient: the column is null on a database that has not run v46 and on a
+     * round switched on before it existed, and in both cases the only safe
+     * reading is "we do not know when this began" — the alternative is
+     * reaching into the history again. One tap on the switch gives it a stamp.
+     */
+    if (!round.comment_auto_since) continue;
 
     /* THE SAME CLAMP THE SCREEN AND THE CLIENT USE, from the one place it is
        written. A stored value older than v45 — or one a future version widens
@@ -5074,7 +5097,12 @@ async function armAutoComments(db: SupabaseClient): Promise<number> {
       .eq('campaign_id', round.id)
       .eq('status', 'published')
       .eq('comment_status', '')
+      /* OLD ENOUGH … */
       .lte('published_at', cutoff)
+      /* … AND NOT FROM BEFORE THE SWITCH. Both bounds in the database, so the
+         window is one question the index can answer rather than a filter
+         applied to rows that were fetched anyway. */
+      .gte('published_at', round.comment_auto_since)
       /* NEWEST FIRST — the end a comment can still be left at. The oldest end
          is where this chore's own candidate window used to be stuck, and the
          note on `pending()` below is the record of what that cost. */

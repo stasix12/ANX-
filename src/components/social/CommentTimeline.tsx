@@ -102,7 +102,18 @@ export function CommentTimeline({
   campaigns,
   today,
   now: nowProp,
+  onClearQueue,
+  clearing = false,
 }: {
+  /**
+   * ─── EMPTY THE QUEUE — "תוסיף לי כפתור איפוס" ──────────────────────────
+   *
+   * Drawn beside the count it zeroes, and only when there is something to
+   * zero. The caller owns the confirmation and the write: this card counts
+   * and draws, and has never written anything.
+   */
+  onClearQueue?: () => void;
+  clearing?: boolean;
   /** Everything carrying a comment state — the dashboard's existing read. */
   rows: QueueRow[];
   /**
@@ -419,6 +430,28 @@ export function CommentTimeline({
         <span className={TONE_TEXT.good}>{`${today.done} הגיבו היום`}</span>
         {totals.pending > 0 && <span className="text-mist-500">{`${totals.pending} בתור`}</span>}
         {needsHuman > 0 && <span className={TONE_TEXT.warn}>{`${needsHuman} דורשות טיפול היום`}</span>}
+        {/*
+          ─── AND A WAY TO EMPTY IT, BESIDE THE NUMBER IT EMPTIES ───────────
+
+          Drawn only when something is waiting, so a card with an empty queue
+          does not carry a button that would do nothing — and never while a
+          write is in flight, which is what `clearing` is for.
+
+          It is deliberately quiet rather than red: emptying a comment queue
+          removes no publication and no history, and a destructive-looking
+          control would say otherwise. The confirmation the caller raises is
+          where the exact number is named.
+        */}
+        {onClearQueue && totals.pending > 0 && (
+          <button
+            type="button"
+            onClick={onClearQueue}
+            disabled={clearing}
+            className="inline-flex min-h-8 items-center rounded-full border border-ink-700 px-2.5 text-[11px] font-bold text-mist-300 transition-colors hover:border-brand-400 hover:text-brand-400 disabled:opacity-50"
+          >
+            {clearing ? t('מאפס…') : t('אפס את התור')}
+          </button>
+        )}
       </p>
       {/* The rail's scope, said once. Without it the bar reads 271 over a list
           of nine and the only available conclusion is that something is lost. */}

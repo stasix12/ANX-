@@ -2573,23 +2573,114 @@ export async function setCampaignAutoComment(
      arm on the PC cannot drift apart; 500 characters is the ceiling the brief
      sets on the text. A value out of range would otherwise be a statement the
      database rejects with an English sentence nobody can act on. */
+  /* The three stored values, typed — so the return below is the real thing
+     written and not an `unknown` cast back into shape. The floor is added to
+     the PAYLOAD rather than to this object, because it is written and never
+     read back by the caller. */
   const value = {
     comment_auto: next.auto,
     comment_text: next.text.slice(0, 500),
     comment_delay_seconds: clampCommentDelay(next.delaySeconds),
   };
-  const saved = await db().from('social_campaigns').update(value).eq('id', campaignId);
+  /*
+   * ─── AND THE FLOOR, STAMPED ON THE WAY ON ────────────────────────────────
+   *
+   * Turning the switch on starts the feature HERE, not at the beginning of the
+   * round's history. Without this the arm reached back over everything already
+   * published — the owner watched his queue go from 25 to 166 in half an hour,
+   * on posts from previous days, which is not what "אחרי פוסט" means.
+   *
+   * ONLY ON THE WAY ON. Turning it off leaves the stamp where it is, so a
+   * round switched off and on again starts from the SECOND moment and not the
+   * first; and a save that only changes the text or the delay does not quietly
+   * move the floor under a queue that is already building.
+   */
+  const payload: Record<string, unknown> = next.auto
+    ? { ...value, comment_auto_since: new Date().toISOString() }
+    : { ...value };
+  const saved = await db().from('social_campaigns').update(payload).eq('id', campaignId);
   if (saved.error) {
     /* THE MISSING MIGRATION SAYS SO, IN HEBREW, NAMING THE FILE — the same
        answer queueCampaignComment gives, for the same reason: Postgres answers
        a missing column with a sentence about relations, and the switch would
        otherwise read as dead. */
-    if (/column|comment_auto|comment_delay_seconds|comment_text/i.test(saved.error.message)) {
+    if (/column|comment_auto|comment_auto_since|comment_delay_seconds|comment_text/i.test(saved.error.message)) {
       throw new Error('צריך להריץ את social-latest.sql ב-Supabase לפני שאפשר להפעיל תגובה אוטומטית. אפשר להריץ אותו שוב גם אם כבר הרצתם.');
     }
     throw new Error(saved.error.message);
   }
   return { auto: value.comment_auto, text: value.comment_text, delaySeconds: value.comment_delay_seconds };
+}
+
+/**
+ * ─── EMPTY THE COMMENT QUEUE — "תוסיף לי כפתור איפוס" ─────────────────────
+ *
+ *   18.11.2026, after the automatic arm reached back over a round's whole
+ *   history and put 166 publications in line for a comment.
+ *
+ * WHAT IT CLEARS AND WHAT IT MAY NOT TOUCH. Only rows that are WAITING —
+ * comment_status 'pending'. Never 'done', 'failed' or 'unverified', which are
+ * the record of comments that really happened or really did not; and never
+ * 'commenting', which a worker is holding this second — clearing that one
+ * would let a second comment land under a post that is already getting one.
+ *
+ * IT DELETES NOTHING. The publications themselves are untouched, every past
+ * outcome keeps its state and its note, and a row that leaves the queue simply
+ * goes back to "nobody asked for a comment here" — which is what it was before
+ * something asked.
+ *
+ * AND IT RAISES THE FLOOR, which is the half that makes it stick. Emptying the
+ * queue while the switch is on and the floor is behind the round's history
+ * means the arm refills it on the next pass, seconds later. So every round
+ * whose switch is on gets comment_auto_since moved to now: the queue empties
+ * AND stays empty, and the feature goes on working for whatever publishes from
+ * here.
+ *
+ * IN BATCHES OF A HUNDRED, by explicit id, for the same reason every other
+ * bulk write in this file is: an in(...) list is a URL, and PostgREST stops
+ * returning rows at a thousand however many it changed.
+ */
+export async function clearPendingComments(): Promise<number> {
+  let cleared = 0;
+  /* Paged rather than one statement, so the count is what really changed
+     rather than what PostgREST was willing to hand back. */
+  for (let guard = 0; guard < 200; guard += 1) {
+    const page = unwrap<{ id: string }[]>(
+      await db().from('social_queue').select('id').eq('comment_status', 'pending').limit(100),
+    );
+    if (!page.length) break;
+    const wrote = unwrap<{ id: string }[]>(
+      await db()
+        .from('social_queue')
+        .update({ comment_status: '', comment_at: null, comment_note: '' })
+        .in('id', page.map((r) => r.id))
+        /* The condition repeated, so a row a worker claimed between the read
+           and the write is left to it rather than pulled out from under it. */
+        .eq('comment_status', 'pending')
+        .select('id'),
+    );
+    cleared += wrote.length;
+    if (!wrote.length) break;
+  }
+
+  /*
+   * THE FLOOR, FOR EVERY ROUND THAT IS STILL ARMED. Without it this function
+   * is a button that empties a bucket with the tap running.
+   *
+   * Tolerated rather than required: a database that has not run v46 has no
+   * such column, and the clearing above is still worth doing — the owner
+   * pressed a button that says "empty the queue", and it emptied.
+   */
+  try {
+    await db()
+      .from('social_campaigns')
+      .update({ comment_auto_since: new Date().toISOString() })
+      .eq('comment_auto', true)
+      .neq('status', 'archived');
+  } catch {
+    /* no column, no floor to raise — see above */
+  }
+  return cleared;
 }
 
 /**

@@ -118,6 +118,19 @@ export interface Campaign {
    * first comment on than a post that has been up a minute.
    */
   comment_delay_seconds?: number;
+  /**
+   * WHEN THE SWITCH WAS LAST TURNED ON — the floor under the automatic arm.
+   *
+   * Without it, flipping the switch on reached back over everything the round
+   * had ever published: the owner watched his queue go from 25 to 166 in half
+   * an hour on posts from previous days. "תגובה מהירה אחרי פוסט" means from
+   * the moment it is switched on, and this column is that moment.
+   *
+   * undefined/null means the switch has not been turned on since the column
+   * existed, and the arm treats that as a floor nothing passes — the safe
+   * reading, because the alternative is reaching into history again.
+   */
+  comment_auto_since?: string | null;
   /*
    * WHEN THIS CAMPAIGN IS ALLOWED TO PUBLISH — the five columns behind the
    * "תזמון פרסום" panel on its card. src/lib/social/campaign-schedule.ts owns

@@ -18,8 +18,10 @@
  *       search already uses;
  *   §3  OFF unless he turned it on, and the switch cannot be flipped by an
  *       update;
- *   §4  one search per interval, six a day out of the box, twenty-four at the
- *       ceiling and no setting above it;
+ *   §4  one search per interval, six a day out of the box, SEVENTY-TWO at the
+ *       ceiling — one every twenty minutes — and no setting above it; and the
+ *       screen says the interval it will really use rather than a word that
+ *       went stale when the ceiling tripled;
  *   §5  the step is spent BEFORE the search is queued, so a phrase that fails
  *       cannot become a loop of page loads against his account;
  *   §6  a group is filed under a category only when its own NAME says so —
@@ -41,8 +43,10 @@ import {
   COVERAGE_TOPICS,
   clampCoveragePerDay,
   coverageCities,
+  coverageGapLabel,
   coverageGapMs,
   coverageKey,
+  coverageLastRun,
   coveragePhrase,
   coverageProgress,
   coverageTotal,
@@ -174,9 +178,29 @@ is(/command: 'discover'/.test(pass), 'it queues the same command a typed search 
  * which is why the automatic pass may have it and a search he is watching may
  * not (DEEP_PASSES).
  */
-is(/payload: \{ query: step\.phrase, deep: '1' \}/.test(pass), 'with a phrase and how deeply to read it, and nothing else');
+is(/payload: \{ query: step\.phrase, deep: '1', auto: 'coverage' \}/.test(pass),
+  'with a phrase, how deeply to read it, and the mark that holds it back on a busy machine — and nothing else');
 const payloadKeys = [...(/payload: \{([^}]*)\}/.exec(pass)?.[1] ?? '').matchAll(/(\w+):/g)].map((m) => m[1]);
-eq(payloadKeys.sort(), ['deep', 'query'], 'the payload carries no url, no list and no account');
+eq(payloadKeys.sort(), ['auto', 'deep', 'query'], 'the payload carries no url, no list and no account');
+/*
+ * ─── AND THE WIRE BETWEEN THE TWO ENDS IS PINNED, NOT JUST THE ENDS ──────
+ *
+ * This file used to pin the producer here and the consumer in §8
+ * (`opts.deep ? DEEP_PASSES : PASSES`) and nothing in between. The link is
+ * one expression in runCommands, and a one-character change to it —
+ * `=== '1'` to `=== '2'` — made every coverage search fall back to the
+ * shallow twelve passes while all three assertions still passed. A suite that
+ * reports a deep national scan which is not happening is worse than no suite.
+ *
+ * So the two literals are read out of the file and compared to each other.
+ * Neither end can be changed without the other.
+ */
+const sent = /payload: \{ query: step\.phrase, deep: '([^']*)', auto: '([^']*)' \}/.exec(pass);
+const readDeep = /deep: cmd\.payload\?\.deep === '([^']*)'/.exec(worker);
+const readAuto = /cmd\.payload\?\.auto === '([^']*)'/.exec(worker);
+is(!!sent && !!readDeep && !!readAuto, 'both ends of the payload are still written where they can be read');
+eq(readDeep?.[1], sent?.[1], 'the depth the pass sends is the depth the command loop reads');
+eq(readAuto?.[1], sent?.[2], 'and the mark it sends is the mark the hold looks for');
 /*
  * The verbs as they would really be written — a command name, a call — and
  * not as substrings: `error.message` is not a message sent to anybody, and a
@@ -196,15 +220,46 @@ for (const forbidden of ['openPage', 'newPage', 'goto', 'session.', 'browser']) 
 
 /* ═══════════════ §3 OFF UNLESS HE TURNED IT ON ══════════════════════════ */
 
-is(/if \(!cfg\.on\) return;/.test(pass), 'off is the default, and it is checked before anything else is read');
-is(pass.indexOf('if (!cfg.on) return;') < pass.indexOf('workerDb()'),
+is(/if \(!cfg\.on\) \{/.test(pass), 'off is the default, and it is checked before anything else is read');
+is(pass.indexOf('if (!cfg.on) {') < pass.indexOf('workerDb()'),
   'and before the database is even asked — an update must not start searching by itself');
+/*
+ * AND THE WRITE CANNOT PUT THE SWITCH BACK ON.
+ *
+ * The step is chosen from a copy of the row read before a target query and a
+ * plan walk, and the write used to spread that whole copy back — `{ ...cfg }`
+ * — including `on`. An owner who turned the switch off in that window had it
+ * turned back on by a background write, with the screen still showing OFF.
+ * The write now spreads a FRESH read and bails if that read says off.
+ */
+is(/const fresh = await getSetting<CoverageSettings>\(COVERAGE_SETTING/.test(pass),
+  'the write is built from a fresh read, not from the copy the step was chosen from');
+is(/if \(!fresh\.on\) \{/.test(pass), 'and a switch turned off while the step was being chosen stops it');
+is(!/\.\.\.cfg,/.test(pass), 'nothing spreads the stale copy back over the row');
+is(pass.indexOf('const fresh = await getSetting') < pass.indexOf("command: 'discover'"),
+  'and that happens before the search is queued, not after');
 is(/on: false/.test(client), 'the stored default is off');
 /* THE SCREEN WRITES THE SWITCH, THE WORKER WRITES THE CURSOR — and the screen
    must not hand the plan back its old position. */
 const save = slice(client, 'export async function saveCoverage', 'export async function catalogCoverage');
-is(/const now = await getCoverage\(\)/.test(save), 'the switch is written onto the row as it is NOW');
+is(/await getCoverage\(\)/.test(save), 'the switch is written onto the row as it is NOW');
 is(!/done:/.test(save), 'and the screen never writes the cursor, which the worker owns');
+/*
+ * AND A FRESH READ IS NOT A LOCK.
+ *
+ * The read closes the minute between opening the screen and tapping the
+ * switch; it does not close the round trip between the read and the upsert,
+ * and the whole row is written. The worker queueing a step in that window
+ * lost the key — one repeated search, harmless — and lost `at`, which is the
+ * only pace interlock there is, so the next search was allowed up to a full
+ * interval early. The write is verified and re-applied over the newer cursor
+ * once, so each side ends up holding its own half.
+ */
+is(/const after = await getCoverage\(\)/.test(save), 'the write is read back');
+is(/after\.done\.length !== merged\.done\.length \|\| after\.at !== merged\.at/.test(save),
+  'and compared against the cursor and the stamp the worker owns');
+eq((save.match(/await saveSetting\('coverage'/g) ?? []).length, 2,
+  'and re-applied exactly once if the worker moved under it — not in a loop');
 
 /* ═══════════════ §4 ONE AT A TIME, AND A CEILING ════════════════════════ */
 
@@ -217,8 +272,85 @@ eq(clampCoveragePerDay(0), COVERAGE_PER_DAY_MIN, 'and to the floor');
 eq(clampCoveragePerDay(undefined), COVERAGE_PER_DAY_DEFAULT, 'and an absent setting is the default, not zero');
 eq(coverageGapMs(6), 4 * 60 * 60_000, 'six a day is one every four hours');
 eq(coverageGapMs(72), 20 * 60_000, 'and the ceiling is one every twenty minutes');
+/*
+ * AND THE SCREEN SAYS THE INTERVAL IT WILL REALLY USE.
+ *
+ * The hint under the input read "עם שעות ביניהם" and went on reading it when
+ * the ceiling went 24 → 72, where the gap is twenty minutes: the screen
+ * understated what it does by three times, at the very value its own `max`
+ * offers. A label derived from the number cannot drift from it again.
+ */
+eq(coverageGapLabel(72), 'אחד כל 20 דקות', 'the ceiling says minutes, because minutes is what it is');
+eq(coverageGapLabel(24), 'אחד כל שעה', 'one an hour says hour, singular');
+eq(coverageGapLabel(6), 'אחד כל 4 שעות', 'and the default says four hours');
+is(!/שעות ביניהם/.test(settings), 'and the stale words are gone from the screen');
+is(!/שעות ביניהם/.test(code('src/lib/social/i18n.ts')), 'and out of the Russian dictionary too');
+is(/coverageGapLabel\(plan\.perDay\)/.test(settings), 'which now prints the interval for the number he chose');
+is(/COVERAGE_PER_DAY_MIN\}–\$\{COVERAGE_PER_DAY_MAX/.test(settings),
+  'and the allowed range, because 100 typed into the box silently became 72');
 is(/coverageGapMs\(clampCoveragePerDay\(cfg\.perDay\)\)/.test(pass), 'the worker paces itself by that same gap, clamped');
 is(/insert\(\{/.test(pass) && (pass.match(/insert\(/g) ?? []).length === 1, 'and queues exactly one search per interval');
+
+/*
+ * ─── AND A STAMP IT CANNOT TRUST DOES NOT OPEN THE GATE ──────────────────
+ *
+ * CALLED, not grepped. The worker used to decide this inline with
+ * `Number.isFinite(last) && last <= nowMs ? last : 0`, and every one of these
+ * four cases went through the `: 0` branch — which the gap check reads as
+ * "never ran" and lets straight through. Two workers with a skewed clock then
+ * queue a deep search on every five-second tick while the screen says one
+ * every twenty minutes. Each case below is a real call with a real answer.
+ */
+{
+  const now = Date.parse('2026-11-20T12:00:00.000Z');
+  eq(coverageLastRun(undefined, now), 0, 'no stamp at all means never ran — the first search goes out at once');
+  eq(coverageLastRun('', now), 0, 'and so does an empty one');
+  eq(coverageLastRun('2026-11-20T11:40:00.000Z', now), now - 20 * 60_000, 'a stamp in the past is itself');
+  /* THE TWO THAT WERE WRONG. Both must read as "just ran", so the next search
+     waits a full interval instead of going out immediately. */
+  eq(coverageLastRun('2026-11-20T13:00:00.000Z', now), now,
+    'a stamp an hour in the FUTURE means wait, not "never ran" — this is the two-worker clock skew');
+  eq(coverageLastRun('not a date at all', now), now, 'and a stamp that will not parse means wait too');
+  /* Which is the property that matters, stated as the gate itself states it. */
+  for (const bad of ['2026-11-20T13:00:00.000Z', 'not a date at all']) {
+    const lastMs = coverageLastRun(bad, now);
+    is(lastMs > 0 && now - lastMs < coverageGapMs(72),
+      `and so the gap is CLOSED for ${bad.slice(0, 18)} — nothing is queued this tick`);
+  }
+}
+
+/*
+ * ─── THE SETTING IS NOT READ SEVENTEEN THOUSAND TIMES A DAY ──────────────
+ *
+ * `done` is 4,543 keys when the plan is finished — about 130 KB of JSON in
+ * one jsonb value, measured off cities-data.ts — and getSetting reads `value`
+ * whole. On a five-second tick that was 2.3 GB a day pulled out of Supabase
+ * to answer "is it time yet", on an account already over its quota, and the
+ * read came BEFORE the `on` check so switching the feature off changed
+ * nothing. The gate is an instant held in memory; the setting itself is still
+ * always read fresh when it is read at all.
+ */
+is(/let coverageReadAfter = 0;/.test(worker), 'the next read is an instant this process remembers');
+is(/if \(nowMs < coverageReadAfter\) return;/.test(pass),
+  'and it is asked from memory before anything crosses the wire');
+is(pass.indexOf('if (nowMs < coverageReadAfter) return;') < pass.indexOf('getSetting<CoverageSettings>'),
+  'before the settings read, not after it — that was the whole bug');
+is(/coverageReadAfter = lastMs \+ gapMs;/.test(pass),
+  'while the plan is running the next read is the gap boundary exactly');
+is(/coverageReadAfter = nowMs \+ COVERAGE_RECHECK_MS;/.test(pass),
+  'and when it is off or finished, a short re-check — so a switch he turns on is still noticed');
+/*
+ * AND THE FINISHED PLAN STOPS ASKING FOR REAL. The old branch re-stamped the
+ * row only when the stamp was a week old, with the gap check as the only
+ * thing in front of it — so one interval after the last search the check
+ * opened and never closed, and every tick from then on read up to a thousand
+ * social_targets rows and rebuilt a 4,543-key Set to re-learn one fact that
+ * cannot change. The comment said "said once, and then it stops asking"; that
+ * was true of the log line only.
+ */
+is(/let coverageDoneSaid = false;/.test(worker), 'the terminal state is held in memory');
+is(!/7 \* 24 \* 3600_000/.test(pass), 'the weekly re-stamp is gone, and with it the NaN that made it permanent');
+is(/if \(!coverageDoneSaid\) \{/.test(pass), 'and the finished line is said once per process, not once a gap');
 
 /* ═══════════════ §5 A FAILED PHRASE IS NOT A LOOP ═══════════════════════ */
 /*
@@ -230,7 +362,50 @@ is(/insert\(\{/.test(pass) && (pass.match(/insert\(/g) ?? []).length === 1, 'and
  */
 is(pass.indexOf('saveWorkerSetting(COVERAGE_SETTING') < pass.indexOf("command: 'discover'"),
   'the step is spent before the search is queued, so a failure costs the interval and not a loop');
-is(/done: \[\.\.\.\(cfg\.done \?\? \[\]\), step\.key\]/.test(pass), 'and the cursor moves with it');
+is(/done: \[\.\.\.new Set\(\[\.\.\.\(fresh\.done \?\? \[\]\), step\.key\]\)\]/.test(pass),
+  'and the cursor moves with it — as a union, so a concurrent write loses nothing and a replay appends nothing twice');
+
+/*
+ * ─── A WALL THAT GOES UP MID-SCROLL IS REPORTED, NOT SWALLOWED ───────────
+ *
+ * The second classifyPage in discoverGroups — the one whose own comment says
+ * Facebook "can answer a search with a security check … by replacing the
+ * page" — was guarded by `if (!found.groups.length)`, which is the one case
+ * it was not needed for. A check interposed after the sixth of thirty scroll
+ * passes leaves 40 cards in hand, so the length is non-zero, so the check was
+ * skipped; the loop then exits quietly (a checkpoint page reports itself at
+ * the bottom and grows no further) and the only trace was `truncated` and the
+ * words "נסו מילה מדויקת יותר". For the automatic pass that is the worst
+ * outcome available: the city is stamped done BEFORE the command is queued,
+ * so it is recorded as scanned off a read Facebook cut short, nothing reaches
+ * the attention flag, and twenty minutes later the next search runs against
+ * an account sitting on an unanswered check. DEEP_PASSES widened the window
+ * from about 17 seconds to about 42.
+ */
+{
+  const session = code('worker/facebook/session.ts');
+  const discover = session.slice(session.indexOf('  async discoverGroups('));
+  const body = discover.slice(0, discover.indexOf('\n  }\n'));
+  is(!/if \(!found\.groups\.length\) \{\n        const after = await classifyPage/.test(body),
+    'the re-check is no longer skipped when cards were found');
+  is(/const after = await classifyPage\(page\);/.test(body), 'it always runs');
+  is(body.indexOf('const after = await classifyPage(page);') < body.indexOf('found.groups.length'),
+    'before anything is decided from how many groups came back');
+  /* The cards already read are real and are kept — this is not a data loss. */
+  is(/return wall \? \{ \.\.\.found, security: wall, truncated: true \} : found;/.test(body),
+    'and with cards in hand the groups are KEPT and the wall is reported beside them');
+  is(/if \(wall && !found\.groups\.length\)/.test(body),
+    'while an empty result behind a wall is still an outright refusal');
+  /* And the worker does the three things silence did not. */
+  const said = worker.slice(worker.indexOf('if (found.security) {'));
+  const branch = said.slice(0, said.indexOf('result = found.security'));
+  is(/state\.attention = found\.security;/.test(branch),
+    'the worker raises attention, which is one of the states autoCommandHold refuses to start in');
+  is(/logActivity\('warn', 'discover_interrupted'/.test(branch), 'writes it where the owner reads his history');
+  is(/ok = false;/.test(branch), 'and does not report the search as a success');
+  is(/discover_interrupted:/.test(code('src/lib/social/activity.ts')), 'and the event has a kind');
+  is(/discover_interrupted:/.test(code('src/lib/social/activity-text.ts')), 'and a Hebrew headline');
+}
 
 /* ═══════════════ §6 A CATEGORY IS WHAT THE NAME SAYS ════════════════════ */
 /*

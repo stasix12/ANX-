@@ -6,7 +6,7 @@ import { JOINED_QUERY, mergeDiscovered, normalizeQuery, type DiscoveredGroup, ty
 import { renderPostText } from '@/lib/social/compose';
 import { planQueue } from '@/lib/social/plan';
 import { catalogLanguage } from '@/lib/social/language';
-import { clampCoveragePerDay, coverageGapMs, detectTopic, nextCoverageStep } from '@/lib/social/coverage';
+import { clampCoveragePerDay, coverageGapMs, coverageLastRun, detectTopic, nextCoverageStep } from '@/lib/social/coverage';
 import { OTHER_CITY, detectCity, regionOf } from '@/lib/social/cities';
 import { PREP_LEAD_MS, accountGapLabel, accountGapSeconds, clampCommentDelay, commentArmCutoff, evaluateQueueItem } from '@/lib/social/rules';
 import { Admission, laneCountFor } from './admission';
@@ -996,7 +996,7 @@ async function tick(state: WorkerState): Promise<void> {
   const limits = await getSetting<LimitsSettings>('limits', DEFAULT_LIMITS);
   const headless = !browser.debugMode;
 
-  await runCommands(state, headless, browser);
+  await runCommands(state, headless, browser, control);
   await heartbeat(state, state.attention ? 'needs_attention' : 'online', browser.debugMode);
   await plan(state);
 
@@ -1263,6 +1263,15 @@ async function tick(state: WorkerState): Promise<void> {
    * note there. This one is different in kind: it QUEUES a Facebook search,
    * so a machine that is paused, rate-limited or waiting for a human must
    * not start new work with the owner's account.
+   *
+   * BUT THIS POSITION IS ONLY HALF OF THAT, AND THE COMMENT USED TO CLAIM IT
+   * WAS ALL OF IT. coveragePass queues a row; the row is EXECUTED by
+   * runCommands, which is the first statement of this tick — above every gate
+   * below. So a command queued on an earlier tick opened Facebook whatever
+   * the machine's state had become since, and a row queued a second before
+   * the app closed ran on the first tick after the next launch, days later,
+   * with the queue still paused. The gate that actually holds it is
+   * autoCommandHold, inside runCommands, keyed on the payload's `auto` mark.
    */
   await coveragePass();
 
@@ -2115,11 +2124,14 @@ const CATALOG_CITY_MAX = 4000;
  *
  * ─── ONE AT A TIME, HOURS APART ──────────────────────────────────────────
  *
- * Six searches a day out of the box, twenty-four at the ceiling, and never
- * two in the same window: the stamp is written before the command is queued,
- * so a failure costs the interval rather than retrying every five seconds.
- * The plan is 4,130 phrases and it is MEANT to take months — the order is
- * what matters, and it starts where he already publishes.
+ * Six searches a day out of the box, SEVENTY-TWO at the ceiling — one every
+ * twenty minutes — and never two in the same window: the stamp is written
+ * before the command is queued, so a failure costs the interval rather than
+ * retrying every five seconds. The plan is 4,543 phrases: the bare name of
+ * all 413 localities first, then ten narrower phrases per city. At the
+ * default that is two years and at the ceiling about nine weeks, which is
+ * why the ORDER is the thing that matters, and it starts where he already
+ * publishes.
  */
 const COVERAGE_SETTING = 'coverage';
 
@@ -2132,15 +2144,54 @@ interface CoverageSettings {
   at?: string;
 }
 
+/**
+ * How long this process waits before READING the coverage setting again.
+ *
+ * ─── WHY THERE IS AN IN-MEMORY GATE IN FRONT OF A SETTINGS READ ──────────
+ *
+ * `done` is an append-only list of `topic|city` keys, one per completed
+ * step, and the finished plan has 4,543 of them. Measured, not guessed: the
+ * 413 city names in cities-data.ts are 5,409 bytes of UTF-8, so eleven
+ * phrases' worth of keys is about 130 KB of JSON in one jsonb value.
+ * getSetting reads `value` whole — there is no projection — and the tick is
+ * five seconds apart. 130 KB × 17,280 ticks is 2.3 GB a day, pulled out of
+ * Supabase to answer "is it time yet", on the account this file elsewhere
+ * calls "already over its storage quota". Switching the feature OFF did not
+ * help, because the read came before the `on` check.
+ *
+ * So the question is asked from memory first. After each read this process
+ * knows the earliest instant a read could change its mind: the gap boundary
+ * when the plan is running, five minutes when it is off or finished. Nothing
+ * is cached except that instant — the setting itself is always read fresh
+ * when it is read at all, so a pace he changes is honoured, and a switch he
+ * turns off takes effect within five minutes at the worst.
+ *
+ * At the ceiling that is 72 reads a day instead of 17,280.
+ */
+let coverageReadAfter = 0;
+const COVERAGE_RECHECK_MS = 5 * 60_000;
+/** The "plan finished" line, once per process rather than once a week. */
+let coverageDoneSaid = false;
+
 async function coveragePass(): Promise<void> {
   const nowMs = Date.now();
+  /* Asked from memory before anything crosses the wire. See coverageReadAfter. */
+  if (nowMs < coverageReadAfter) return;
+
   const cfg = await getSetting<CoverageSettings>(COVERAGE_SETTING, {});
   /* OFF IS THE DEFAULT, and it is checked before anything else is read. */
-  if (!cfg.on) return;
+  if (!cfg.on) {
+    coverageReadAfter = nowMs + COVERAGE_RECHECK_MS;
+    return;
+  }
 
-  const last = Date.parse(cfg.at ?? '');
-  const lastMs = Number.isFinite(last) && last <= nowMs ? last : 0;
-  if (lastMs && nowMs - lastMs < coverageGapMs(clampCoveragePerDay(cfg.perDay))) return;
+  const gapMs = coverageGapMs(clampCoveragePerDay(cfg.perDay));
+  const lastMs = coverageLastRun(cfg.at, nowMs);
+  if (lastMs && nowMs - lastMs < gapMs) {
+    /* Nothing can happen before the gap opens, so nothing is asked until then. */
+    coverageReadAfter = lastMs + gapMs;
+    return;
+  }
 
   const db = await workerDb();
   /*
@@ -2157,9 +2208,30 @@ async function coveragePass(): Promise<void> {
 
   const step = nextCoverageStep(cfg.done ?? [], mine);
   if (!step) {
-    /* THE PLAN IS FINISHED — said once, and then it stops asking. */
-    if (!cfg.at || Date.parse(cfg.at) < nowMs - 7 * 24 * 3600_000) {
-      await saveWorkerSetting(COVERAGE_SETTING, { ...cfg, at: new Date(nowMs).toISOString() });
+    /*
+     * THE PLAN IS FINISHED — and this branch is where it used to stop being
+     * cheap.
+     *
+     * It re-stamped `at` only when the stamp was absent or a week old, and
+     * the gap check in front of it is the only other thing in the way. So one
+     * gap after the last search the check opened and never closed again:
+     * every tick from then on read the setting, read up to a thousand
+     * social_targets rows, rebuilt the 413-city plan and the 4,543-key Set,
+     * found nothing, and returned. Seventeen thousand reads a day, for ever,
+     * to re-learn one fact that cannot change. The old comment — "said once,
+     * and then it stops asking" — was true of the log line only.
+     *
+     * Worse, the weekly test re-parsed the stamp raw: with a stamp that will
+     * not parse, `NaN < x` is false and `!cfg.at` is false, so the re-stamp
+     * and the line never happened at all and the every-tick read became
+     * permanent. coverageLastRun, sixty lines up, guards exactly that.
+     *
+     * Nothing is written now. The terminal state is held in memory, where it
+     * belongs, and the line is said once per process.
+     */
+    coverageReadAfter = nowMs + COVERAGE_RECHECK_MS;
+    if (!coverageDoneSaid) {
+      coverageDoneSaid = true;
       console.log('[worker] 🗺 כיסוי ארצי: כל הערים והנושאים בתוכנית כבר נסרקו.');
     }
     return;
@@ -2176,18 +2248,44 @@ async function coveragePass(): Promise<void> {
    * when the plan comes round in a future version; nothing is lost but the
    * attempt.
    */
+  /*
+   * AND WRITTEN OVER A FRESH READ, NOT OVER THE COPY THE STEP WAS CHOSEN FROM.
+   *
+   * `saveWorkerSetting` is a plain upsert of the whole value, and the settings
+   * screen writes the same row with the same read-modify-write shape. Writing
+   * `{ ...cfg }` here, where `cfg` was read before a target query and a plan
+   * walk, hands back every field as it was at the start — including `on`. So
+   * an owner who turned the switch off in that window had it turned back on
+   * by this write, and the scan carried on against his account with the
+   * screen showing OFF. A kill switch that a background write can undo is not
+   * a kill switch.
+   *
+   * Re-reading costs one round trip and settles it: `on` and `perDay` come
+   * from the newest row, and `done` is the UNION, so neither side's progress
+   * is lost if both write at once. The Set also stops a replayed step from
+   * appending the same key twice.
+   */
+  const fresh = await getSetting<CoverageSettings>(COVERAGE_SETTING, {});
+  if (!fresh.on) {
+    coverageReadAfter = nowMs + COVERAGE_RECHECK_MS;
+    return;
+  }
   await saveWorkerSetting(COVERAGE_SETTING, {
-    ...cfg,
-    done: [...(cfg.done ?? []), step.key],
+    ...fresh,
+    done: [...new Set([...(fresh.done ?? []), step.key])],
     at: new Date(nowMs).toISOString(),
   });
+  coverageReadAfter = nowMs + gapMs;
 
   const { error } = await db.from('social_worker_commands').insert({
     worker_id: null,
     command: 'discover',
     /* `deep` asks the scan to read the whole result list — see DEEP_PASSES.
-       Nobody is watching this one, so the extra screenfuls are free. */
-    payload: { query: step.phrase, deep: '1' },
+       Nobody is watching this one, so the extra screenfuls are free.
+       `auto` is what runCommands holds back while the machine is paused,
+       rate-limited, waiting for a human, or has a publication due — see
+       autoCommandHold. Without it the gates below only stop the QUEUING. */
+    payload: { query: step.phrase, deep: '1', auto: 'coverage' },
   });
   if (error) {
     console.error('[worker] ✗ כיסוי ארצי: לא הצלחנו לתזמן חיפוש:', error.message);
@@ -2832,9 +2930,76 @@ async function syncGroupProfiles(state: WorkerState, headless: boolean): Promise
   }
 }
 
+/**
+ * Ids per `in(...)` statement against social_discovery_groups.
+ *
+ * The same hundred the other three id lists in this project use, and for the
+ * same reason: the list goes in the URL. See recordDiscovered.
+ */
+const DISCOVERY_ID_CHUNK = 100;
+
 /* ----------------------------------------------------------- commands */
 
-async function runCommands(state: WorkerState, headless: boolean, browser: BrowserSettings): Promise<void> {
+/**
+ * Why an AUTOMATIC command may not open Facebook this tick, or '' if it may.
+ *
+ * ─── THE GATES HAVE TO BE WHERE THE WORK HAPPENS ─────────────────────────
+ *
+ * coveragePass sits below four gates — paused, rate-limit freeze, waiting for
+ * a human, disconnected — and a comment there said that meant "a machine in
+ * any of those states never starts new work with the owner's account". It did
+ * not. Those gates stop a search being QUEUED. The search itself runs in
+ * runCommands, the first statement of the tick, above all of them. The
+ * sequence that matters: a tick queues a coverage search, a publishing lane
+ * in the SAME tick reads Facebook's rate-limit notice and writes the freeze,
+ * the idle wait sees a pending row and wakes the loop at once, and the next
+ * tick opens a fresh thirty-pass search against the account Facebook is in
+ * the middle of limiting — and only then returns 'הפרסום מוקפא'.
+ *
+ * So the gate moved to the command loop, where the browser actually opens,
+ * and it holds the row rather than failing it: the step is already marked
+ * done, so dropping the command would lose that city for good. One automatic
+ * command can be pending at a time (coveragePass is itself behind the gates
+ * and queues one per interval), so holding is bounded at one row.
+ *
+ * The due-publication clause is the last one for a reason: it is the only one
+ * that costs a query, it is only asked when an automatic command is actually
+ * waiting, and it is what makes the two sentences on the settings screen —
+ * "ורק כשאין פרסום שממתין" — true. A deep search holds this serial tick for
+ * up to about three minutes before the due-row query is even reached, which
+ * at the new ceiling is a sixth of the day in which a row whose minute has
+ * come cannot be claimed. Publishing comes first; that is the whole order of
+ * priorities in this file.
+ *
+ * A command the OWNER typed is not held by any of this. He asked for it, he
+ * is watching the spinner, and pausing the publishing queue is not an
+ * instruction to break the search box.
+ */
+async function autoCommandHold(state: WorkerState, control: ControlSettings): Promise<string> {
+  if (control.paused) return 'התורים מושהים בלוח הבקרה';
+  if (control.rateLimitedUntil) {
+    const until = new Date(control.rateLimitedUntil);
+    if (Number.isFinite(until.getTime()) && until.getTime() > Date.now()) return 'הפרסום מוקפא אחרי הגבלת קצב מפייסבוק';
+  }
+  if (state.freezeHold) return 'הפרסום מוקפא אחרי הגבלת קצב מפייסבוק';
+  if (state.attention) return 'משהו ממתין לטיפול ידני';
+  if (state.browserState === 'disconnected') return 'אין חיבור לפייסבוק';
+  const db = await workerDb();
+  const { count, error } = await db
+    .from('social_queue')
+    .select('id', { count: 'exact', head: true })
+    .eq('status', 'scheduled')
+    .lte('scheduled_at', new Date().toISOString());
+  /* A failed count holds the command: the cheap answer is the safe one. */
+  if (error) return 'לא הצלחנו לבדוק אם יש פרסום שממתין';
+  if ((count ?? 0) > 0) return 'יש פרסום שממתין';
+  return '';
+}
+
+/** The last reason an automatic command was held, so it is said once. */
+let autoHeldFor = '';
+
+async function runCommands(state: WorkerState, headless: boolean, browser: BrowserSettings, control: ControlSettings): Promise<void> {
   const db = await workerDb();
   const { data } = await db
     .from('social_worker_commands')
@@ -2843,7 +3008,23 @@ async function runCommands(state: WorkerState, headless: boolean, browser: Brows
     .or(`worker_id.eq.${state.id},worker_id.is.null`)
     .order('created_at')
     .limit(5);
-  for (const cmd of (data ?? []) as (WorkerCommand & { payload?: { user?: string; pass?: string; name?: string; query?: string; source?: string ; deep?: string; urls?: unknown[]; url?: string } })[]) {
+  for (const cmd of (data ?? []) as (WorkerCommand & { payload?: { user?: string; pass?: string; name?: string; query?: string; source?: string ; deep?: string; auto?: string; urls?: unknown[]; url?: string } })[]) {
+    /*
+     * AN AUTOMATIC COMMAND WAITS FOR A QUIET MACHINE. See autoCommandHold.
+     * `continue`, not `break`: a held coverage search must not stand in front
+     * of a login the owner is waiting on.
+     */
+    if (cmd.payload?.auto === 'coverage') {
+      const held = await autoCommandHold(state, control);
+      if (held) {
+        if (autoHeldFor !== held) {
+          autoHeldFor = held;
+          console.log(`[worker] 🗺 כיסוי ארצי: החיפוש האוטומטי ממתין — ${held}.`);
+        }
+        continue;
+      }
+      autoHeldFor = '';
+    }
     /*
      * CLAIMING A COMMAND ALSO EMPTIES IT.
      *
@@ -3143,8 +3324,33 @@ async function runCommands(state: WorkerState, headless: boolean, browser: Brows
              * the groups it has no picture for, so the next search for that
              * phrase picks up where this one stopped.
              */
-            const missed = Math.max(0, found.groups.length - (wrote.pictures ?? 0));
-            const rest = wrote.pictures && missed > 0
+            /*
+             * AND IT IS COUNTED FROM THE RIGHT POPULATION.
+             *
+             * It was `found.groups.length - wrote.pictures`, which subtracts
+             * "uploaded in this run" from "every group the search returned" —
+             * two different sets. `found.groups` includes every group that
+             * ALREADY had a stored thumbnail (searchGroups excludes those
+             * from the fetch, never from the list), so the number went UP as
+             * the backlog went down: three hundred groups, a hundred and
+             * twenty pictured each run, and run three promised two hundred
+             * and forty more pictures while nothing at all was outstanding.
+             * It also counted the cards that carried no image address, which
+             * the very next sentence reports separately as `blind`.
+             *
+             * The honest number is: found, had no stored picture before this
+             * search, had an address to fetch, and still has none.
+             *
+             * And it is printed whenever it is non-zero. The old guard
+             * `wrote.pictures && missed > 0` deleted the sentence in exactly
+             * the case the comment above says must never be silent — storage
+             * refusing every upload makes `wrote.pictures` zero, so three
+             * hundred purple letters were reported with no explanation.
+             */
+            const hadPicture = new Set(stored.pictures);
+            const wanted = found.groups.filter((g) => !hadPicture.has(g.externalId)).length;
+            const missed = Math.max(0, wanted - found.pictureless - wrote.pictures);
+            const rest = missed > 0
               ? ` ל-${missed} קבוצות נוספות תמונה תימשך בחיפוש הבא לאותו ביטוי.`
               : '';
             /*
@@ -3177,9 +3383,32 @@ async function runCommands(state: WorkerState, headless: boolean, browser: Brows
             const split = found.offTopic
               ? ` מתוכן ${found.groups.length - found.offTopic} מכילות את המילה במדויק, ו-${found.offTopic} קרובות אליה ומסומנות בהמשך הרשימה.`
               : '';
-            result = found.groups.length
-              ? `נמצאו ${found.groups.length} קבוצות${wrote.fresh ? `, ${wrote.fresh} חדשות` : ''}.${split}${shots}${rest}${blind}${found.truncated ? ' יש עוד — נסו מילה מדויקת יותר.' : ''}`
-              : `לא נמצאו קבוצות עבור "${phrase}".`;
+            /*
+             * ─── A WALL THAT WENT UP MID-SCROLL IS NOT "יש עוד" ───────────
+             *
+             * `security` is set when Facebook replaced the page with a check
+             * or a login AFTER cards had been read. The rows are kept — they
+             * are real — but three things have to happen that silence did
+             * not: the sentence has to name it instead of blaming the
+             * phrase, the attention flag has to go up so autoCommandHold
+             * stops the next automatic search, and the activity log has to
+             * carry it where the owner reads it. Without this the automatic
+             * pass marked a city scanned off a truncated read and went
+             * straight back to Facebook twenty minutes later.
+             */
+            if (found.security) {
+              ok = false;
+              state.attention = found.security;
+              state.attentionAt = Date.now();
+              await logActivity('warn', 'discover_interrupted',
+                `החיפוש "${phrase}" נקטע באמצע: ${found.security} ${found.groups.length} קבוצות שכבר נקראו נשמרו.`,
+                { query: phrase, found: found.groups.length });
+            }
+            result = found.security
+              ? `החיפוש נקטע באמצע — ${found.security} ${found.groups.length} הקבוצות שנקראו עד אז נשמרו.`
+              : found.groups.length
+                ? `נמצאו ${found.groups.length} קבוצות${wrote.fresh ? `, ${wrote.fresh} חדשות` : ''}.${split}${shots}${rest}${blind}${found.truncated ? ' יש עוד — נסו מילה מדויקת יותר.' : ''}`
+                : `לא נמצאו קבוצות עבור "${phrase}".`;
           }
         }
       } else if (cmd.command === 'join') {
@@ -4886,8 +5115,45 @@ async function groupsWithPictures(): Promise<string[]> {
  */
 async function storedDiscovery(): Promise<{ pictures: string[]; facts: string[] }> {
   const db = await workerDb();
-  const { data } = await db.from('social_discovery_groups').select('external_id, image_url, members, privacy');
-  const rows = (data ?? []) as { external_id: string; image_url: string | null; members: number | null; privacy: string | null }[];
+  /*
+   * PAGED, BECAUSE POSTGREST STOPS AT A THOUSAND ROWS WITHOUT SAYING SO.
+   *
+   * This read had no .limit() and no .range(), and catalogFacts — 2,900 lines
+   * up, over the SAME table — pages it in blocks of 500 with that sentence in
+   * its own comment. The silent ceiling has already shipped one bug in this
+   * project. Truncation is not an error, so the deliberately unchecked
+   * `const { data }` could not notice it, and the function's defence — "a
+   * failed read returns nothing, so the search does the full work it used to
+   * do; slower, never destructive" — does not hold for a truncated one: the
+   * missing ids are absent from `pictures`, so their thumbnails are fetched
+   * and UPLOADED again to a bucket already over quota, and absent from
+   * `facts`, so the 450ms-per-card pass stops on cards it has nothing to
+   * learn from — the 18.0s → 37.3s regression `facts` exists to undo.
+   *
+   * It matters more than it did: the table was at 1,377 rows when the catalog
+   * was built, so the cap was ALREADY being hit, and the whole justification
+   * for reading 300 groups while picturing 120 of them is that "the next
+   * search for that phrase picks up where this one stopped" — which is this
+   * list. A truncated list means the picture gap for the rows past the
+   * thousandth never closes, however many times the phrase runs.
+   */
+  const rows: { external_id: string; image_url: string | null; members: number | null; privacy: string | null }[] = [];
+  for (let from = 0; from < CATALOG_READ_MAX; from += CATALOG_READ_PAGE) {
+    const { data, error } = await db
+      .from('social_discovery_groups')
+      .select('external_id, image_url, members, privacy')
+      .order('external_id', { ascending: true })
+      .range(from, from + CATALOG_READ_PAGE - 1);
+    if (error) {
+      /* Unchecked became reported, not fatal: a partial list is still only
+         slower, and a search that cannot read it does the old full work. */
+      console.error('[worker] ✗ קריאת הקבוצות שכבר יש להן תמונה נכשלה:', error.message);
+      break;
+    }
+    const page = (data ?? []) as typeof rows;
+    rows.push(...page);
+    if (page.length < CATALOG_READ_PAGE) break;
+  }
   return {
     pictures: rows.filter((r) => /\/storage\/v1\/object\/public\//.test(r.image_url ?? '')).map((r) => r.external_id),
     facts: rows.filter((r) => r.members !== null && !!r.privacy && r.privacy !== 'unknown').map((r) => r.external_id),
@@ -5027,13 +5293,34 @@ async function recordDiscovered(
    * The upsert already throws on its own error. The read that feeds it has to
    * as well — the standard reconcileJoined in this same file already holds.
    */
-  const { data: existing, error: read } = await db
-    .from('social_discovery_groups')
-    .select('external_id, queries, first_seen_at, members, privacy, membership, name, image_url')
-    .in('external_id', ids);
-  if (read) throw read;
+  /*
+   * AND IT IS CHUNKED, because PostgREST puts the whole `in` list in the URL.
+   *
+   * MAX_GROUPS went from 120 to 300 on 18.11, and three hundred is the exact
+   * figure the other three `in(...)` sites in this project name as the
+   * breaking point — TARGET_ID_CHUNK in plan.ts, withdrawRefusedMemberships
+   * and reconcileJoined both a hundred at a time, each with a comment saying
+   * why. This read was the one that was not batched, and the read above is
+   * deliberately fatal (`if (read) throw read`), so a refused URL did not
+   * degrade: it threw, runCommands marked the command failed, and all three
+   * hundred groups and a hundred and twenty freshly downloaded thumbnails
+   * were discarded. For an automatic search that is worse than it sounds,
+   * because the step was stamped into `done` before the command was queued,
+   * so the city was recorded as covered and never searched again.
+   *
+   * external_id is Facebook's own and can hold anything a vanity name can
+   * (storeDiscoveryPictures hashes it for exactly that reason), so three
+   * hundred of them is not three hundred short numbers.
+   */
   const before = new Map<string, StoredGroup>();
-  for (const row of (existing ?? []) as StoredGroup[]) before.set(row.external_id, row);
+  for (let at = 0; at < ids.length; at += DISCOVERY_ID_CHUNK) {
+    const { data: existing, error: read } = await db
+      .from('social_discovery_groups')
+      .select('external_id, queries, first_seen_at, members, privacy, membership, name, image_url')
+      .in('external_id', ids.slice(at, at + DISCOVERY_ID_CHUNK));
+    if (read) throw read;
+    for (const row of (existing ?? []) as StoredGroup[]) before.set(row.external_id, row);
+  }
 
   const now = new Date().toISOString();
   /* The rules themselves are in lib/social/discovery.ts, where they can be

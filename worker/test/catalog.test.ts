@@ -83,6 +83,30 @@ const slice = (text: string, from: string, to: string) => {
   assert.ok(b > a, `${to} still follows ${from}`);
   return text.slice(a, b);
 };
+/**
+ * ONE FUNCTION'S BODY, AND NOT THE FOUR THAT FOLLOW IT.
+ *
+ * `slice(worker, 'async function tick(', 'async function idle(')` reads like
+ * tick's body and is not: tick starts at line 992, `async function idle(` is
+ * at 1814, and everything between — plan(), applied(), sweepStranded(),
+ * hhmmOf() — came along for the ride. That made the ordering test below
+ * hollow, because a call's POSITION IN THE TEXT stopped implying its position
+ * at runtime: plan() is defined 500 lines after the gates but CALLED nine
+ * lines before them, so moving `await coveragePass()` into plan() left every
+ * assertion passing while a paused queue no longer stopped a real search from
+ * being queued against the owner's account.
+ *
+ * So the body ends where the function ends: the first line that is exactly a
+ * closing brace at column zero.
+ */
+const fnBody = (text: string, signature: string) => {
+  const a = text.indexOf(signature);
+  assert.ok(a >= 0, `${signature} is still in the file`);
+  const end = text.indexOf('\n}\n', a);
+  assert.ok(end > a, `${signature} still closes at column zero`);
+  return text.slice(a, end);
+};
+
 const searchFn = slice(client, 'export async function searchCatalog', 'export async function catalogStats');
 const statsFn = slice(client, 'export async function catalogStats', 'export async function catalogFacets');
 const adoptFn = slice(client, 'export async function adoptCatalogGroups', 'export async function requestGroupRefresh');
@@ -372,11 +396,13 @@ is(!choreTable.includes('catalogSync'), 'the sync is not in the chore table — 
  * catalog at yesterday's number with nothing on screen connecting the two.
  */
 {
-  const tick = slice(worker, 'async function tick(', 'async function idle(');
+  const tick = fnBody(worker, 'async function tick(');
+  /* The slice really is one function now: nothing else opens inside it. */
+  is(!/\nasync function /.test(tick), 'the tick slice is tick alone, not the four functions that follow it');
   const syncAt = tick.indexOf('await catalogSync();');
   const cityAt = tick.indexOf('await catalogCityPass();');
   const coverAt = tick.indexOf('await coveragePass();');
-  is(syncAt > 0 && cityAt > 0, 'both database-only passes run inside the tick');
+  is(syncAt > 0 && cityAt > 0 && coverAt > 0, 'all three passes run inside the tick itself');
   for (const gate of ['if (control.paused) return idle(', 'if (state.attention) return idle(', "if (state.browserState === 'disconnected') return idle("]) {
     const at = tick.indexOf(gate);
     is(at > 0, `the gate ${gate.slice(0, 28)} is still there`);
@@ -389,6 +415,42 @@ is(!choreTable.includes('catalogSync'), 'the sync is not in the chore table — 
      */
     is(coverAt > at, `the national coverage stays BEHIND ${gate.slice(0, 28)} — it queues a real search`);
   }
+
+  /*
+   * ─── AND THE GATE THAT ACTUALLY HOLDS THE SEARCH IS NOT THIS ONE ───────
+   *
+   * Position behind the gates stops coveragePass from QUEUEING a row. It does
+   * not stop the row from RUNNING: runCommands is the first statement of this
+   * tick, above every gate, and it had no paused check, no freeze check, no
+   * attention check and no age filter. A tick that queued a search and then
+   * hit Facebook's rate limit in the same tick opened a fresh thirty-pass
+   * search on the next one — and a row queued a second before the app closed
+   * ran days later with the queue still paused. The comment in the worker
+   * claimed the gates covered this. They did not.
+   */
+  const runAt = tick.indexOf('await runCommands(');
+  is(runAt >= 0 && runAt < tick.indexOf('if (control.paused) return idle('),
+    'the command loop still runs above every gate — which is WHY it needs its own');
+  const loop = fnBody(worker, 'async function runCommands(');
+  is(/cmd\.payload\?\.auto === 'coverage'/.test(loop), 'so the command loop looks for the automatic mark');
+  is(/const held = await autoCommandHold\(state, control\);/.test(loop), 'and asks whether it may run at all');
+  is(/if \(held\) \{/.test(loop) && /continue;/.test(loop),
+    'and HOLDS the row rather than failing it — the step is already spent, so dropping it would lose that city');
+  const hold = fnBody(worker, 'async function autoCommandHold(');
+  for (const [why, probe] of [
+    ['a paused queue', /if \(control\.paused\) return/],
+    ['a rate-limit freeze', /control\.rateLimitedUntil/],
+    ['a freeze still held in memory', /state\.freezeHold/],
+    ['something waiting for a human', /state\.attention/],
+    ['no Facebook connection', /state\.browserState === 'disconnected'/],
+    ['a publication already due', /\.eq\('status', 'scheduled'\)/],
+  ] as const) {
+    is(probe.test(hold), `an automatic search waits for ${why}`);
+  }
+  /* A failed count holds the command: the cheap answer is the safe one. */
+  is(/if \(error\) return/.test(hold), 'and a count it could not read holds it too');
+  /* THE OWNER'S OWN SEARCH IS NOT HELD BY ANY OF THIS. He asked for it. */
+  is(!/payload\?\.auto === 'coverage'/.test(hold), 'the hold itself does not re-test the mark — the loop does, once');
 }
 /* It reads what the PC already knows and nothing else. */
 is(/social_discovery_groups/.test(factsFn), 'it carries over what discovery already found');

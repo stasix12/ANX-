@@ -130,6 +130,8 @@ const TITLE: Record<string, string> = {
   catalog_sync: 'המאגר הארצי סונכרן',
   /* חיפוש אחד של הכיסוי הארצי. הביטוי עצמו נמצא בשורה שמתחת. */
   coverage_search: 'כיסוי ארצי — חיפוש קבוצות',
+  /* פייסבוק החליפה את דף התוצאות באמצע הגלילה. מה שנקרא עד אז נשמר. */
+  discover_interrupted: 'החיפוש נקטע — פייסבוק ביקשה אימות',
   campaign_paused: 'הסבב הושהה',
   /* CHZARA. Two headlines rather than one with a word swapped: this is the
      line in his history that says his account began republishing by itself,

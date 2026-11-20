@@ -1172,6 +1172,27 @@ const eq = (a: unknown, b: unknown, msg: string) => {
   const rebuild = record.slice(0, record.indexOf('const { error }'));
   is(/const \{ data: existing, error: read \}/.test(rebuild), 'the read that feeds the rebuild is checked');
   is(/if \(read\) throw read;/.test(rebuild), 'and a failed read fails the command rather than rewriting every row from nothing');
+  /*
+   * ─── AND IT IS CHUNKED, BECAUSE THE `in` LIST IS A URL ─────────────────
+   *
+   * MAX_GROUPS went 120 → 300 on 18.11, and three hundred is the exact figure
+   * the other three id lists in this project name as the breaking point —
+   * TARGET_ID_CHUNK in plan.ts, withdrawRefusedMemberships and
+   * reconcileJoined, each a hundred at a time with a comment saying why. This
+   * read was the one that was not batched, and because it is deliberately
+   * fatal a refused URL did not degrade: it threw, the command was marked
+   * failed, and all three hundred groups plus a hundred and twenty freshly
+   * downloaded thumbnails went in the bin — with the coverage step already
+   * stamped done, so that city was never searched again.
+   */
+  is(/for \(let at = 0; at < ids\.length; at \+= DISCOVERY_ID_CHUNK\)/.test(rebuild),
+    'and it is read in batches, never three hundred ids in one URL');
+  const chunk = Number(/const DISCOVERY_ID_CHUNK = (\d+);/.exec(worker)?.[1]);
+  is(chunk > 0 && chunk <= 100, `the batch is the same hundred the rest of the project uses (${chunk})`);
+  const capNow = Number(/const MAX_GROUPS = (\d+);/.exec(
+    readFileSync(new URL('../facebook/discover.ts', import.meta.url), 'utf8'),
+  )?.[1]);
+  is(chunk < capNow, `and smaller than a full search of ${capNow}, or the batching would be decorative`);
 
   /*
    * ─── 18.11.2026 · THE TWO CAPS CAME APART, AND THE SENTENCE CLOSES IT ──
@@ -1192,14 +1213,52 @@ const eq = (a: unknown, b: unknown, msg: string) => {
   const groupCap = Number(/const MAX_GROUPS = (\d+);/.exec(reader)?.[1]);
   is(picCap >= 120, `the picture cap is still at least what storage allowed (${picCap})`);
   is(groupCap >= picCap, 'and a search may return at least as many groups as it pictures');
-  is(
-    /const missed = Math\.max\(0, found\.groups\.length - \(wrote\.pictures \?\? 0\)\);/.test(worker),
-    'the worker counts the groups it did NOT picture',
-  );
+  /*
+   * ─── AND IT COUNTS FROM THE RIGHT POPULATION ───────────────────────────
+   *
+   * It was `found.groups.length - wrote.pictures`: "uploaded in this run"
+   * subtracted from "every group the search returned". Different sets.
+   * `found.groups` includes every group that ALREADY had a stored thumbnail
+   * (searchGroups excludes those from the fetch, never from the list), so the
+   * number climbed as the backlog fell — run three promised 240 more pictures
+   * with nothing at all outstanding. And the guard `wrote.pictures && …`
+   * deleted the sentence in the one case the comment says must never be
+   * silent: storage refusing every upload makes `wrote.pictures` zero.
+   */
+  is(!/found\.groups\.length - \(wrote\.pictures/.test(worker),
+    'the old arithmetic is gone — it counted groups that already had a picture');
+  is(/const hadPicture = new Set\(stored\.pictures\);/.test(worker),
+    'the count starts from what was already stored BEFORE this search');
+  is(/const wanted = found\.groups\.filter\(\(g\) => !hadPicture\.has\(g\.externalId\)\)\.length;/.test(worker),
+    'so "wanted" is the groups that actually needed one');
+  is(/const missed = Math\.max\(0, wanted - found\.pictureless - wrote\.pictures\);/.test(worker),
+    'and "missed" takes out the ones with no address at all, which the next sentence reports separately');
+  is(/const rest = missed > 0$/m.test(worker) || /const rest = missed > 0\n/.test(worker),
+    'and it is printed whenever it is non-zero — a refused upload must not be silent');
   is(
     /תמונה תימשך בחיפוש הבא לאותו ביטוי/.test(worker),
     'and the result sentence says so, with what closes the gap — never silence over purple letters',
   );
+
+  /*
+   * ─── AND THE PROMISE THAT JUSTIFIES THE GAP RESTS ON A PAGED READ ──────
+   *
+   * "The next search for that phrase picks up where this one stopped" is the
+   * whole reason picturing 120 of 300 is acceptable, and the list it rests on
+   * is storedDiscovery(). That read had no .limit() and no .range() while
+   * catalogFacts pages the SAME table in blocks of 500 with "PostgREST stops
+   * at 1000" in its own comment. The table was already at 1,377 rows, so the
+   * cap was already being hit: the rows past the thousandth had their
+   * thumbnails re-fetched and re-uploaded on every search, to a bucket
+   * already over quota, and their picture gap never closed.
+   */
+  const stored = worker.slice(worker.indexOf('async function storedDiscovery('));
+  const storedBody = stored.slice(0, stored.indexOf('\n}\n'));
+  is(/\.range\(from, from \+ CATALOG_READ_PAGE - 1\)/.test(storedBody),
+    'storedDiscovery pages the table instead of asking for all of it');
+  is(/if \(page\.length < CATALOG_READ_PAGE\) break;/.test(storedBody), 'and stops at the last short page');
+  is(/console\.error/.test(storedBody),
+    'and a read it could not finish is reported rather than silently short');
 
   /*
    * "שיראה תמונות של קבוצות שאני עוד לא שם."

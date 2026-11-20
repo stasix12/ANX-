@@ -135,8 +135,21 @@ const PASSES = 12;
  * and watching. Measured, not reasoned: worker/test/discovery-complete.test.ts
  * times a 56-result page and caught exactly that.
  *
- * The coverage pass runs once every half hour at most and nobody is watching
- * it, so there the depth is free and the extra screenfuls are real groups.
+ * The coverage pass runs once every TWENTY MINUTES at most — the ceiling went
+ * 24 → 72 a day in the same change that added this constant, so the "half
+ * hour" this comment used to claim was wrong the day it was written — and
+ * nobody is watching it, so there the depth is free and the extra screenfuls
+ * are real groups.
+ *
+ * What the depth is NOT free of is the tick. runCommands is the first
+ * statement of the worker's tick and the due-publication query is some two
+ * hundred lines below it, so a deep search holds a serial tick for up to
+ * about three minutes — 45s of scrolling, up to 120s filling pictures, 25s
+ * fetching them — before a row whose minute has arrived can even be seen. At
+ * one every twenty minutes that is a sixth of the day. That is why
+ * autoCommandHold in the worker will not start an automatic command while
+ * anything is due: the depth is paid out of idle time, never out of
+ * publishing.
  */
 const DEEP_PASSES = 30;
 /** And the ceiling, because a phrase like "קבוצה" matches most of Facebook. */
@@ -192,6 +205,17 @@ export interface SearchOutcome {
    * worker logs both numbers.
    */
   pictureless: number;
+  /**
+   * Facebook interposed a security check or a login wall DURING the scroll,
+   * after cards had already been read.
+   *
+   * Not `problem`, because the cards already in hand are real and the owner
+   * paid for them; not silence either, because the next automatic search must
+   * not run against an account sitting on an unanswered check. The worker
+   * stores what was found, says so, and raises the attention flag — which is
+   * one of the states autoCommandHold refuses to start new automatic work in.
+   */
+  security: string;
 }
 
 /**
@@ -464,6 +488,8 @@ export async function searchGroups(
      */
     offTopic: groups.filter((g) => !g.exact).length,
     pictureless: wanted.size,
+    /* Set by the caller, which is the one that can classify the page. */
+    security: '',
   };
 }
 

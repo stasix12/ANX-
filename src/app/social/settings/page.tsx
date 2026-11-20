@@ -8,7 +8,7 @@ import { SocialShell } from '@/components/social/SocialShell';
 import { LangSwitch } from '@/components/social/LangSwitch';
 import { Button, Card, Field, Loading, Notice, SegmentedControl, SkeletonList, Toggle, inputClass, useToast } from '@/components/social/ui';
 import { CATALOG_LANGUAGE_LABEL } from '@/lib/social/language';
-import { COVERAGE_PER_DAY_MAX, COVERAGE_PER_DAY_MIN, coverageProgress } from '@/lib/social/coverage';
+import { COVERAGE_PER_DAY_MAX, COVERAGE_PER_DAY_MIN, coverageGapLabel, coverageProgress } from '@/lib/social/coverage';
 import { applyPace, catalogCoverage, clearMetaHold, getBrowserSettings, getControl, getCoverage, getLimits, loadAdminPresence, saveCoverage, saveSetting, type CatalogCoverage, type CoverageSettings } from '@/lib/social/client';
 import { DEFAULT_BROWSER, DEFAULT_LIMITS, type AdminPresence, type BrowserSettings, type ControlSettings, type LimitsSettings, type PaceId } from '@/lib/social/types';
 import { accountGapLabel, accountGapSeconds } from '@/lib/social/rules';
@@ -473,10 +473,16 @@ export default function SettingsPage() {
                 on his account, and the card is written for somebody deciding
                 whether to let it.
 
-                The pace is his: six searches a day by default, twenty-four at
-                the ceiling, one at a time with hours between them. There is
-                no faster setting, because the account doing the searching is
-                the one his business publishes from.
+                The pace is his: six searches a day by default — one every
+                four hours — and seventy-two at the ceiling, which is one
+                every twenty minutes. NOT "hours between them": that was this
+                comment's own wording when the ceiling was twenty-four, and
+                the sentence under the input repeated it after the ceiling
+                tripled. The card now computes the interval from the number
+                he actually chose rather than describing it in words that go
+                stale. There is no setting above the ceiling, because the
+                account doing the searching is the one his business publishes
+                from.
               */}
               <Card
                 title={t('כיסוי ארצי')}
@@ -502,7 +508,17 @@ export default function SettingsPage() {
                         }
                       }}
                     />
-                    <Field label={t('כמה חיפושים ביום')} hint={t('חיפוש אחד בכל פעם, עם שעות ביניהם, ורק כשאין פרסום שממתין.')}>
+                    {/* THE INTERVAL IS CALCULATED, NOT DESCRIBED. The words
+                        "עם שעות ביניהם" stayed put while the ceiling went
+                        24 → 72, where the real gap is twenty minutes, so the
+                        screen was understating what it does by a factor of
+                        three at the very value its own `max` offers. The
+                        range is spelled out too, because 100 typed into this
+                        box silently became 72. */}
+                    <Field
+                      label={t('כמה חיפושים ביום')}
+                      hint={`${t('חיפוש אחד בכל פעם, ורק כשאין פרסום שממתין')} — ${coverageGapLabel(plan.perDay)}. ${t('הטווח המותר')}: ${COVERAGE_PER_DAY_MIN}–${COVERAGE_PER_DAY_MAX}.`}
+                    >
                       <input
                         type="number"
                         inputMode="numeric"
@@ -555,12 +571,31 @@ export default function SettingsPage() {
                             {t('חיפושים מתוך')}{' '}
                             <span className="tabular-nums text-mist-300" dir="ltr">{p.total.toLocaleString('he-IL')}</span>
                           </p>
-                          {/* WHAT IT IS DOING RIGHT NOW, in his words: the
-                              country first, the depth after. */}
+                          {/*
+                            WHAT IT IS DOING RIGHT NOW, in his words: the
+                            country first, the depth after.
+
+                            AND ONLY WHEN IT IS DOING ANYTHING. Both branches
+                            open with "כרגע" — a claim about this moment — and
+                            the line was gated on nothing but the cursor's
+                            position. So a tenant who had never touched the
+                            switch was told, directly under an OFF toggle,
+                            that the machine was searching Facebook city by
+                            city right now; and a finished plan was told the
+                            narrow searches were going out when nothing was.
+                            This is the one card whose job is to let somebody
+                            decide whether to allow this, so a sentence
+                            asserting unrequested activity on his account is
+                            the specific thing it must not say.
+                          */}
                           <p className="mt-1 text-[11px] leading-4 text-mist-500">
-                            {p.citiesTouched < p.cities
-                              ? t('כרגע: שם העיר לבדו, עיר אחר עיר, לכל הארץ. זה החיפוש הרחב ביותר לכל עיר.')
-                              : t('כל הערים נסרקו פעם אחת. כרגע: עשרת החיפושים הצרים לכל עיר, לפי הסדר.')}
+                            {!plan.on
+                              ? t('החיפוש האוטומטי כבוי. כשתדליקו אותו, הוא יתחיל משם העיר לבדו — עיר אחר עיר, לכל הארץ.')
+                              : p.done >= p.total
+                                ? t('כל התוכנית הושלמה — כל הערים וכל הנושאים נסרקו. לא יוצאים חיפושים חדשים.')
+                                : p.citiesTouched < p.cities
+                                  ? t('כרגע: שם העיר לבדו, עיר אחר עיר, לכל הארץ. זה החיפוש הרחב ביותר לכל עיר.')
+                                  : t('כל הערים נסרקו פעם אחת. כרגע: עשרת החיפושים הצרים לכל עיר, לפי הסדר.')}
                           </p>
                         </>
                       );
@@ -569,7 +604,8 @@ export default function SettingsPage() {
                       <Notice tone="info">
                         התוכנה מחפשת, קוראת את התוצאות ורושמת אותן. היא לא מצטרפת לשום קבוצה, לא שולחת בקשות הצטרפות, לא כותבת ולא לוחצת
                         על כלום — בדיוק כמו חיפוש שאתם מקלידים במסך גילוי קבוצות. החיפושים יוצאים אחד בכל פעם, רק בזמן שאין פרסום שממתין,
-                        ומתחילים מהערים שאתם כבר מפרסמים בהן.
+                        ומתחילים מהערים שאתם כבר מפרסמים בהן. אם השהיתם את התורים, פייסבוק הגבילה את הקצב, או משהו ממתין לטיפול — החיפוש
+                        האוטומטי ממתין גם הוא, גם אם הוא כבר נכנס לתור.
                       </Notice>
                     </div>
                   </>

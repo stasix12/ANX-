@@ -73,6 +73,14 @@ const KIND: Record<string, ActivityKind> = {
    */
   coverage_search: 'success',
   /*
+   * חיפוש שנקטע באמצע כי פייסבוק החליפה את הדף בבדיקת אבטחה או במסך התחברות
+   * אחרי שכבר נקראו כרטיסים. 'failure' ולא 'success', למרות שהקבוצות שנקראו
+   * כן נשמרו: זו השורה שאומרת שהחשבון יושב על בדיקה שלא טופלה, והיא חייבת
+   * להיראות שונה משורה של חיפוש שהצליח — אחרת היא נקראת כעוד חיפוש בשורה,
+   * וזה בדיוק מה שהיה קודם, כשהקטיעה לא דווחה בכלל.
+   */
+  discover_interrupted: 'failure',
+  /*
    * הצטרפות אוטומטית לקבוצה. 'success' and not 'system': it is the machine
    * doing the thing the owner pressed, on his own account, and the line naming
    * which group is the only record that it happened. A join that did NOT

@@ -472,15 +472,41 @@ export async function getCoverage(): Promise<CoverageSettings> {
  * `at` on the same row every few hours, and writing back a copy this screen
  * read a minute ago would hand the plan back its old position and search the
  * same phrases again.
+ *
+ * ─── AND CHECKED AFTERWARDS, BECAUSE A FRESH READ IS NOT A LOCK ──────────
+ *
+ * The read above closes the minute between opening the screen and tapping
+ * the switch. It does not close the round trip between the read and the
+ * write, and the whole row is upserted, so the worker queueing a step in
+ * that window loses it twice over: the key is gone from the cursor, which
+ * costs one repeated search and nothing else, and `at` goes back to the
+ * previous search's stamp — which is the only pace interlock the worker has,
+ * so the next search is allowed up to a full interval early. On an account
+ * where the point of the interval is not provoking Facebook, that is the
+ * half that matters.
+ *
+ * So the write is verified and, if the cursor moved under it, re-applied
+ * over the newer one. Once: the owner's flags are what this function owns,
+ * the cursor is what the worker owns, and after one re-apply each side holds
+ * its own half. No lock, no version column, no migration — and the losing
+ * case is now "one more round trip", not "a search before its time".
  */
 export async function saveCoverage(next: { on?: boolean; perDay?: number }): Promise<CoverageSettings> {
-  const now = await getCoverage();
-  const merged: CoverageSettings = {
-    ...now,
+  const mine = (over: CoverageSettings): CoverageSettings => ({
+    ...over,
     ...(next.on === undefined ? {} : { on: next.on }),
     ...(next.perDay === undefined ? {} : { perDay: clampCoveragePerDay(next.perDay) }),
-  };
+  });
+
+  let merged = mine(await getCoverage());
   await saveSetting('coverage', merged);
+
+  const after = await getCoverage();
+  /* The worker only ever appends to `done` and moves `at` forward. */
+  if (after.done.length !== merged.done.length || after.at !== merged.at) {
+    merged = mine(after);
+    await saveSetting('coverage', merged);
+  }
   return merged;
 }
 

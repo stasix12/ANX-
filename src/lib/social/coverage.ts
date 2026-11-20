@@ -28,13 +28,22 @@
  *
  * ─── AND IT IS SLOW ON PURPOSE ────────────────────────────────────────────
  *
- * 413 localities × 10 phrases is 4,130 searches. At the default six a day
- * that is years, which is exactly why the order matters more than the size:
- * the cities he already publishes in come first, then the big ones, then the
- * rest. The first fifty cities — where most of the country's groups are — are
- * covered in about eighty days at the default, or three weeks at the ceiling.
- * Faster than that is not a setting this product offers, because the account
- * doing the searching is the one his business publishes from.
+ * 413 localities × 11 phrases is 4,543 searches: at the default six a day
+ * that is two years, at the ceiling of seventy-two about nine weeks. Which is
+ * exactly why the ORDER matters more than the size — and why the order is two
+ * rounds rather than city-by-city (see nextCoverageStep).
+ *
+ * Round 1 is the bare name of all 413 localities: 69 days at the default,
+ * 5.7 days at the ceiling. Only then does any city get its second phrase, so
+ * the fifty cities where most of the country's groups are do not have all
+ * eleven of their phrases until 413 + 500 searches have run — about 152 days
+ * at the default, under 13 at the ceiling. The earlier version of this
+ * comment promised those fifty "in about eighty days", which was true of the
+ * city-major order this file no longer has; the whole-country round comes
+ * first now because that is what was asked for.
+ *
+ * Faster than the ceiling is not a setting this product offers, because the
+ * account doing the searching is the one his business publishes from.
  */
 import { ALL_CITIES, OTHER_CITY, regionOf } from './cities';
 
@@ -192,10 +201,16 @@ export function coverageTotal(mine: readonly string[] = []): number {
 /**
  * ─── THE PACE ─────────────────────────────────────────────────────────────
  *
- * Six a day by default: one search every four hours, in an idle window,
- * never while a publication is due. The ceiling is twenty-four — one an hour
- * — and there is no setting above it, because the account doing the searching
- * is the one his business publishes from.
+ * Six a day by default: one search every four hours, and never while a
+ * publication is due — a promise the worker keeps in runCommands, which holds
+ * an automatic command back until the queue is clear, not merely in
+ * coveragePass, which only decides when to QUEUE one. See autoCommandHold.
+ *
+ * The ceiling is SEVENTY-TWO — one every twenty minutes — raised from
+ * twenty-four on 18.11 at his explicit request; the note on
+ * COVERAGE_PER_DAY_MAX below is the whole of why. There is no setting above
+ * it, because the account doing the searching is the one his business
+ * publishes from.
  */
 export const COVERAGE_PER_DAY_DEFAULT = 6;
 export const COVERAGE_PER_DAY_MIN = 3;
@@ -227,6 +242,56 @@ export function clampCoveragePerDay(n: number | null | undefined): number {
 /** Milliseconds between two searches at this pace. */
 export function coverageGapMs(perDay: number): number {
   return Math.round((24 * 60 * 60_000) / clampCoveragePerDay(perDay));
+}
+
+/**
+ * When the last search was queued, as an instant a caller may compare.
+ *
+ * A STAMP THAT CANNOT BE TRUSTED MEANS "WAIT", NEVER "NEVER RAN".
+ *
+ * The worker had this inline as
+ * `Number.isFinite(last) && last <= nowMs ? last : 0`, and the `: 0` is the
+ * whole bug: a stamp in the future, or one that will not parse, fell through
+ * to zero — and zero skips the gap check entirely, because the check reads
+ * `if (lastMs && …)`. The one case where the conservative answer is obvious
+ * got the least conservative one.
+ *
+ * With one worker that self-heals after a single unpaced search, since the
+ * next write stamps the local clock. With TWO workers sharing the row it does
+ * not: two workers are supported by design (the single-instance check only
+ * rejects a duplicate of the same worker NAME), and if one clock runs an hour
+ * fast they ping-pong — each sees a stamp written against the other's clock,
+ * each decides the gap is open, and a deep Facebook search is queued on every
+ * five-second tick while the screen still says one every twenty minutes.
+ *
+ * Treating an untrustworthy stamp as "just ran" costs one interval and is
+ * self-correcting. It lives here, and not in the worker, so it can be CALLED
+ * by a test instead of grepped for.
+ */
+export function coverageLastRun(at: string | null | undefined, nowMs: number): number {
+  if (!at) return 0;
+  const parsed = Date.parse(at);
+  if (!Number.isFinite(parsed)) return nowMs;
+  return Math.min(parsed, nowMs);
+}
+
+/**
+ * The same interval in the words the settings screen prints — "אחד כל 20 דקות".
+ *
+ * CALCULATED, BECAUSE THE DESCRIPTION WENT STALE. The hint under the input
+ * said "עם שעות ביניהם" and kept saying it when the ceiling went from
+ * twenty-four a day to seventy-two, where the gap is twenty minutes: the
+ * screen understated what it does by three times, at the exact value its own
+ * `max` attribute invites. A sentence derived from the number cannot drift
+ * from it again.
+ */
+export function coverageGapLabel(perDay: number): string {
+  const mins = Math.round(coverageGapMs(perDay) / 60_000);
+  if (mins < 60) return `אחד כל ${mins} דקות`;
+  const hours = mins / 60;
+  if (hours === 1) return 'אחד כל שעה';
+  const said = Number.isInteger(hours) ? String(hours) : hours.toFixed(1);
+  return `אחד כל ${said} שעות`;
 }
 
 /**

@@ -355,13 +355,13 @@ export class BrowserSession {
     query: string,
     opts: { havePictures?: string[]; haveFacts?: string[]; deep?: boolean } = {},
   ): Promise<SearchOutcome> {
-    if (!this.hasProfile()) return { groups: [], pictures: new Map(), unread: [], offTopic: 0, pictureless: 0, problem: 'אין עדיין פרופיל דפדפן — צריך קודם להתחבר לפייסבוק.', truncated: false };
+    if (!this.hasProfile()) return { groups: [], pictures: new Map(), unread: [], offTopic: 0, pictureless: 0, security: '', problem: 'אין עדיין פרופיל דפדפן — צריך קודם להתחבר לפייסבוק.', truncated: false };
     const page = await this.newPage(headless, 'גילוי קבוצות');
     try {
       const kind = await classifyPage(page);
-      if (kind === 'checkpoint') return { groups: [], pictures: new Map(), unread: [], offTopic: 0, pictureless: 0, problem: 'Facebook מציג בדיקת אבטחה — פתחו את הדפדפן וטפלו בה.', truncated: false };
+      if (kind === 'checkpoint') return { groups: [], pictures: new Map(), unread: [], offTopic: 0, pictureless: 0, security: '', problem: 'Facebook מציג בדיקת אבטחה — פתחו את הדפדפן וטפלו בה.', truncated: false };
       if (kind === 'login' || !(await this.hasLoginCookie())) {
-        return { groups: [], pictures: new Map(), unread: [], offTopic: 0, pictureless: 0, problem: 'לא מחובר לפייסבוק — לחצו "התחבר לפייסבוק".', truncated: false };
+        return { groups: [], pictures: new Map(), unread: [], offTopic: 0, pictureless: 0, security: '', problem: 'לא מחובר לפייסבוק — לחצו "התחבר לפייסבוק".', truncated: false };
       }
       const found = await searchGroups(page, query, opts);
       /*
@@ -370,13 +370,38 @@ export class BrowserSession {
        * above comes back with nothing and no error, which is exactly what a
        * phrase with no results looks like. Telling those two apart is the
        * whole of what this second look buys.
+       *
+       * ─── AND IT IS CHECKED WHETHER OR NOT ANYTHING WAS FOUND ────────────
+       *
+       * This used to be guarded by `if (!found.groups.length)`, which is the
+       * one case it was NOT needed for. Facebook interposing a check partway
+       * through the scroll is the case that matters: the cards already read
+       * make the length non-zero, so the check was skipped, and the scroll
+       * loop exits quietly on its own (a checkpoint page reports itself at
+       * the bottom and grows no further), leaving `truncated` and the words
+       * "נסו מילה מדויקת יותר" as the only trace. For the automatic pass that
+       * is the worst outcome available: the city is stamped done before the
+       * command is queued, so it is recorded as scanned off a read Facebook
+       * cut short, nothing reaches the attention flag, and twenty minutes
+       * later the next search runs against an account sitting on an
+       * unanswered security check. Raising the scroll to DEEP_PASSES widened
+       * that window from about 17 seconds to about 42.
+       *
+       * With cards in hand the answer is not `problem` — those groups are
+       * real and the account paid for them — so it is reported in `security`,
+       * which the worker stores, says out loud, and raises as attention.
        */
-      if (!found.groups.length) {
-        const after = await classifyPage(page);
-        if (after === 'checkpoint') return { groups: [], pictures: new Map(), unread: [], offTopic: 0, pictureless: 0, problem: 'Facebook מציג בדיקת אבטחה — פתחו את הדפדפן וטפלו בה.', truncated: false };
-        if (after === 'login') return { groups: [], pictures: new Map(), unread: [], offTopic: 0, pictureless: 0, problem: 'לא מחובר לפייסבוק — לחצו "התחבר לפייסבוק".', truncated: false };
+      const after = await classifyPage(page);
+      const wall = after === 'checkpoint'
+        ? 'Facebook מציג בדיקת אבטחה — פתחו את הדפדפן וטפלו בה.'
+        : after === 'login'
+          ? 'לא מחובר לפייסבוק — לחצו "התחבר לפייסבוק".'
+          : '';
+      if (wall && !found.groups.length) {
+        return { groups: [], pictures: new Map(), unread: [], offTopic: 0, pictureless: 0, security: '', problem: wall, truncated: false };
       }
-      return found;
+      /* Cards were read before the wall went up: keep them, and say so. */
+      return wall ? { ...found, security: wall, truncated: true } : found;
     } finally {
       await page.close().catch(() => undefined);
     }

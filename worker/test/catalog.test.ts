@@ -456,6 +456,23 @@ is(!choreTable.includes('catalogSync'), 'the sync is not in the chore table — 
   }
   /* A failed count holds the command: the cheap answer is the safe one. */
   is(/if \(error\) return/.test(hold), 'and a count it could not read holds it too');
+  /*
+   * AND IT COUNTS THE SAME ROWS THE PUBLISHER WOULD CLAIM.
+   *
+   * The first version asked only status and scheduled_at, while tick's due
+   * query also filters the channel and, once a second account exists,
+   * queueScope. Two queries that disagree about "a publication is due" give a
+   * brake that engages on rows its own publisher would never take — and a row
+   * belonging to another account then holds the automatic search for ever.
+   * Silent, one-directional, and the exact complaint this feature answers.
+   */
+  is(/\.eq\('target\.channel', 'facebook_group'\)/.test(hold),
+    'the hold counts only the groups this worker publishes to');
+  is(/const scope = queueScope\(state\);/.test(hold) && /referencedTable: 'target'/.test(hold),
+    'and only this account\u2019s rows once a second account exists — the same scope the due query uses');
+  for (const probe of [/\.eq\('status', 'scheduled'\)/, /\.lte\('scheduled_at'/, /\.eq\('target\.channel', 'facebook_group'\)/, /queueScope\(state\)/]) {
+    is(probe.test(tick), `and tick\u2019s own due query still uses ${String(probe).slice(0, 34)}`);
+  }
   /* THE OWNER'S OWN SEARCH IS NOT HELD BY ANY OF THIS. He asked for it. */
   is(!/payload\?\.auto === 'coverage'/.test(hold), 'the hold itself does not re-test the mark — the loop does, once');
 }

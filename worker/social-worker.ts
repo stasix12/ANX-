@@ -2985,11 +2985,34 @@ async function autoCommandHold(state: WorkerState, control: ControlSettings): Pr
   if (state.attention) return 'משהו ממתין לטיפול ידני';
   if (state.browserState === 'disconnected') return 'אין חיבור לפייסבוק';
   const db = await workerDb();
-  const { count, error } = await db
+  /*
+   * ─── AND IT COUNTS THE SAME ROWS THE PUBLISHER WOULD CLAIM ─────────────
+   *
+   * The first version of this asked only `status='scheduled'` and
+   * `scheduled_at <= now`, while the due query in tick (the one that actually
+   * claims a row) adds two filters: `target.channel = 'facebook_group'` and,
+   * once a second account exists, queueScope. Two queries that disagree about
+   * what "a publication is due" means give a brake that engages on rows the
+   * brake's own publisher would never take — and the failure is silent and
+   * one-directional: a row belonging to another account, which THIS worker
+   * will never publish, holds the automatic search for ever. "חיפוש שלא רץ
+   * לעולם" is the exact complaint this whole feature exists to answer, so a
+   * fail-safe that produces it is not safe.
+   *
+   * It is a no-op today — queueScope returns null at one account or fewer, so
+   * nothing is narrowed — and that is precisely when to make the two agree,
+   * rather than after a second account has been added and somebody is
+   * wondering why the catalog stopped filling.
+   */
+  const scope = queueScope(state);
+  let due = db
     .from('social_queue')
-    .select('id', { count: 'exact', head: true })
+    .select('id, target:social_targets!inner(channel, account_id)', { count: 'exact', head: true })
     .eq('status', 'scheduled')
+    .eq('target.channel', 'facebook_group')
     .lte('scheduled_at', new Date().toISOString());
+  if (scope) due = due.or(`account_id.eq.${scope},account_id.is.null`, { referencedTable: 'target' });
+  const { count, error } = await due;
   /* A failed count holds the command: the cheap answer is the safe one. */
   if (error) return 'לא הצלחנו לבדוק אם יש פרסום שממתין';
   if ((count ?? 0) > 0) return 'יש פרסום שממתין';

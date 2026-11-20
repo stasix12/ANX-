@@ -102,9 +102,16 @@ const slice = (text: string, from: string, to: string) => {
 const fnBody = (text: string, signature: string) => {
   const a = text.indexOf(signature);
   assert.ok(a >= 0, `${signature} is still in the file`);
-  const end = text.indexOf('\n}\n', a);
-  assert.ok(end > a, `${signature} still closes at column zero`);
-  return text.slice(a, end);
+  /*
+   * The closing brace at column zero — found with an `m` anchor and NOT a
+   * literal '\n}', because the Windows runner that builds the installer reads
+   * these files with CRLF line endings and a bare newline never matches
+   * there. worker/test/package.test.ts refuses the literal form for exactly
+   * that reason, and it caught this function on its first run.
+   */
+  const close = /^\}/m.exec(text.slice(a + signature.length));
+  assert.ok(close, `${signature} still closes at column zero`);
+  return text.slice(a, a + signature.length + (close?.index ?? 0));
 };
 
 const searchFn = slice(client, 'export async function searchCatalog', 'export async function catalogStats');
@@ -398,7 +405,7 @@ is(!choreTable.includes('catalogSync'), 'the sync is not in the chore table — 
 {
   const tick = fnBody(worker, 'async function tick(');
   /* The slice really is one function now: nothing else opens inside it. */
-  is(!/\nasync function /.test(tick), 'the tick slice is tick alone, not the four functions that follow it');
+  is(!/^async function /m.test(tick.slice(1)), 'the tick slice is tick alone, not the four functions that follow it');
   const syncAt = tick.indexOf('await catalogSync();');
   const cityAt = tick.indexOf('await catalogCityPass();');
   const coverAt = tick.indexOf('await coveragePass();');

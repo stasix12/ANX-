@@ -385,8 +385,13 @@ is(/done: \[\.\.\.new Set\(\[\.\.\.\(fresh\.done \?\? \[\]\), step\.key\]\)\]/.t
 {
   const session = code('worker/facebook/session.ts');
   const discover = session.slice(session.indexOf('  async discoverGroups('));
-  const body = discover.slice(0, discover.indexOf('\n  }\n'));
-  is(!/if \(!found\.groups\.length\) \{\n        const after = await classifyPage/.test(body),
+  /* `m` anchors, never a literal newline: the installer is built on Windows,
+     where these files are read with CRLF. See package.test.ts. */
+  const closes = /^  \}/m.exec(discover.slice(24));
+  const body = discover.slice(0, 24 + (closes?.index ?? discover.length));
+  is(!!closes, 'discoverGroups still closes where it can be sliced');
+  is(!/if \(!found\.groups\.length\)\s+const after = await classifyPage/.test(body)
+    && !/if \(!found\.groups\.length\) \{\s+const after = await classifyPage/.test(body),
     'the re-check is no longer skipped when cards were found');
   is(/const after = await classifyPage\(page\);/.test(body), 'it always runs');
   is(body.indexOf('const after = await classifyPage(page);') < body.indexOf('found.groups.length'),

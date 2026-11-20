@@ -1233,8 +1233,13 @@ const eq = (a: unknown, b: unknown, msg: string) => {
     'so "wanted" is the groups that actually needed one');
   is(/const missed = Math\.max\(0, wanted - found\.pictureless - wrote\.pictures\);/.test(worker),
     'and "missed" takes out the ones with no address at all, which the next sentence reports separately');
-  is(/const rest = missed > 0$/m.test(worker) || /const rest = missed > 0\n/.test(worker),
-    'and it is printed whenever it is non-zero — a refused upload must not be silent');
+  /* ANCHORED TO THE STATEMENT, not to the file. The first form of this
+     assertion was `!/wrote.pictures && missed > 0/` over the whole worker, and
+     it matched the COMMENT that explains the old guard — a test that a comment
+     can break is a test that will be deleted the first time it cries wolf. */
+  is(!/const rest = wrote\.pictures/.test(worker),
+    'and the old guard is gone — it is printed whenever it is non-zero, because a refused upload must not be silent');
+  is(/const rest = missed > 0\s/.test(worker), 'the sentence is gated on the number alone');
   is(
     /תמונה תימשך בחיפוש הבא לאותו ביטוי/.test(worker),
     'and the result sentence says so, with what closes the gap — never silence over purple letters',
@@ -1253,7 +1258,10 @@ const eq = (a: unknown, b: unknown, msg: string) => {
    * already over quota, and their picture gap never closed.
    */
   const stored = worker.slice(worker.indexOf('async function storedDiscovery('));
-  const storedBody = stored.slice(0, stored.indexOf('\n}\n'));
+  /* `m` anchor, not a literal newline — the installer is built on Windows. */
+  const storedEnd = /^\}/m.exec(stored.slice(30));
+  const storedBody = stored.slice(0, 30 + (storedEnd?.index ?? stored.length));
+  is(!!storedEnd, 'storedDiscovery still closes where it can be sliced');
   is(/\.range\(from, from \+ CATALOG_READ_PAGE - 1\)/.test(storedBody),
     'storedDiscovery pages the table instead of asking for all of it');
   is(/if \(page\.length < CATALOG_READ_PAGE\) break;/.test(storedBody), 'and stops at the last short page');

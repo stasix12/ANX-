@@ -18,7 +18,7 @@ Saved here so the CAD files survive cloud-session resets.
 | `source/ANX3D_v55_SHORT_one-piece_2-colours.3mf` | User's v55 one-piece two-colour file (source of v65). |
 | `ANX3D_BigMamba_v66_one-piece_glide-lips_2-colours.3mf` | **Big Mamba** v66 = v65 one-piece with glide lips: every edge of the mouth contact face (plane y=-82.63) rounded R 2 mm (`head_rebuild/scripts/round_face.py`), against stripes on the fabric. Opening at the fabric 6.2 -> 9.0 mm, slot throat 4.24 -> 4.41 mm. Only the 2 mm next to the face changed; window + frame fit unchanged. Head 1.1 mm shorter at the tip (rounded knife edge). Parts dropped to the bed. |
 | `ANX3D_BigMamba_v66_HEAD_screw-on_glide-lips.3mf` | Same glide lips on the screw-on head (v63), for handle v60. Print upside down on the thread end. Preview `BigMamba_v66_glide-lips.png`. |
-| `window/` | Perspex 2 mm window (DXF / SVG / 1:1 PDF / stencil) + snap-in frame for the wide head (fits v63 and v65). |
+| `window/` | Perspex 2 mm window (DXF / SVG / 1:1 PDF / stencil) + snap-in frame for the wide head (fits v63 and v65). `window/narrow-88mm/`: the same for the narrow 88 mm head (v55 / v48). |
 | `ANX3D_v48_HEAD_rebuilt.3mf` | Head v48 rebuilt from the v34 source (volume 149755 mm3 = original). Backup. |
 | `v63_vs_v48_head.png`, `v63_window_frame.png` | Old vs new head (front / back / side) and the window frame: original / v62 (stretched) / v63 (proportional). |
 | `source/ANX3D_handle_SHORT_v34_WIDE_print.stl` | One-piece v34 wand (user's file) - source of the head. |

@@ -2,11 +2,12 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { cardImage, inStock, productHref, purchasable } from '@/lib/shop/logic';
+import { cardImage, fromPrice, inStock, productHref, purchasable } from '@/lib/shop/logic';
 import { STATIC_PRODUCT_SLUGS } from '@/lib/shop/static';
 import { actions, useShop } from '@/lib/shop/store';
 import type { Product } from '@/lib/shop/types';
 import { IconCart, IconHeart } from './icons';
+import { MadeInIsrael } from './MadeInIsrael';
 import { Img, Price, Stars, toast } from './ui';
 
 export function FavoriteButton({ product, className = '', size = 'sm' }: { product: Product; className?: string; size?: 'sm' | 'lg' }) {
@@ -60,7 +61,8 @@ export function ProductCard({
   const router = useRouter();
   const href = productHref(product, STATIC_PRODUCT_SLUGS);
   const available = inStock(product);
-  const priced = product.price !== null;
+  const from = fromPrice(product);
+  const priced = from.price !== null;
   // A product with versions to choose (or no price yet) is ordered from its page.
   const direct = purchasable(product) && !product.variants.length;
   const note = product.imageNotes[cardImage(product)];
@@ -70,6 +72,16 @@ export function ProductCard({
       <div className={`pointer-events-none relative overflow-hidden bg-x-soft ${compact ? 'aspect-[1/0.86]' : 'aspect-[1/0.92]'}`}>
         <Img path={cardImage(product)} alt={product.name} eager={priority} className="size-full object-cover transition duration-500 group-hover:scale-[1.04]" />
         <FavoriteButton product={product} className={`pointer-events-auto absolute z-10 ${compact ? 'top-1.5 left-1.5 size-7!' : 'top-2 left-2'}`} />
+        {(product.madeInIsrael || product.badge) && (
+          <span className="absolute top-2 right-2 z-10 flex flex-col items-end gap-1">
+            {product.madeInIsrael && <MadeInIsrael size="sm" />}
+            {product.badge && (
+              <span className="rounded-full bg-linear-to-r from-x-violet to-x-indigo px-1.5 py-0.5 text-[9.5px] font-bold text-white shadow-[0_1px_4px_rgb(0_0_0/0.15)]">
+                ★ {product.badge}
+              </span>
+            )}
+          </span>
+        )}
         {note && (
           <span className="absolute bottom-1.5 left-1.5 rounded-full bg-black/45 px-1.5 py-0.5 text-[9px] font-semibold text-white/90 backdrop-blur-sm">{note}</span>
         )}
@@ -96,7 +108,10 @@ export function ProductCard({
             <IconCart size={compact ? 19 : 21} />
           </button>
           {priced ? (
-            <Price value={product.price as number} className={compact ? 'text-[17px]' : 'text-[19px]'} />
+            <span className="flex flex-col items-end leading-none">
+              {from.varies && <span className={`font-semibold text-x-muted ${compact ? 'text-[10px]' : 'text-[11px]'}`}>החל מ־</span>}
+              <Price value={from.price as number} className={compact ? 'text-[17px]' : 'text-[19px]'} />
+            </span>
           ) : (
             <span className={`font-bold text-x-muted ${compact ? 'text-[11px]' : 'text-[13px]'}`}>מחיר יעודכן</span>
           )}

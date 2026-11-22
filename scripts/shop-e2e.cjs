@@ -1,5 +1,5 @@
 // End-to-end journey test for /shop: home → category → product → color → cart →
-// checkout → order, plus filters, unpriced (WhatsApp) products, search,
+// checkout → order, plus filters, hidden products, search,
 // favorites, auth and admin (incl. a product with a diameter choice).
 // Usage: BASE=http://localhost:3000 node scripts/shop-e2e.cjs <screenshot-dir> [width] [height]
 const { chromium } = require(process.env.PW_CORE || 'playwright-core');
@@ -37,7 +37,7 @@ const assert = (c, m) => { if (!c) throw new Error('ASSERT: ' + m); console.log(
   await page.getByRole('navigation', { name: 'ניווט תחתון' }).getByRole('link', { name: 'קטגוריות' }).click();
   await page.waitForURL('**/shop/categories');
   await shot('02-categories');
-  assert((await page.locator('main ul[dir=ltr] > li').count()) === 6, 'six cleaning categories');
+  assert((await page.locator('main ul[dir=ltr] > li').count()) === 5, 'only categories with live products (5)');
 
   console.log('3 catalog');
   await page.getByRole('link', { name: /^ידיות לניקוי ספות/ }).first().click();
@@ -59,36 +59,34 @@ const assert = (c, m) => { if (!c) throw new Error('ASSERT: ' + m); console.log(
   await go('/shop/p/anaconda');
   await shot('04-product');
   const mainSrc = async () => page.locator('[aria-roledescription="גלריה"] img').first().getAttribute('src');
-  assert((await mainSrc()).includes('anx-anaconda/1'), 'real ANACONDA photo first');
-  await page.getByRole('button', { name: 'שחור', exact: true }).click();
+  assert((await mainSrc()).includes('anx-anaconda/5'), 'black ANACONDA shown by default');
+  await page.getByRole('button', { name: 'ירוק ג׳ונגל', exact: true }).click();
   await page.waitForTimeout(300);
-  assert((await mainSrc()).includes('anx-anaconda/5'), 'black swatch shows the black handle photos');
+  assert((await mainSrc()).includes('anx-anaconda/1'), 'jungle-green swatch shows the green handle photos');
   assert((await page.locator('video').count()) === 1, 'demo video in gallery');
   await page.getByRole('button', { name: 'הוסף כמות' }).click();
   await page.getByRole('button', { name: /הוסף לסל/ }).click();
   await page.waitForTimeout(300);
   assert(await badge(2), 'cart badge shows 2 items');
 
-  console.log('unpriced product');
-  await go('/shop/p/wand-of-troy');
-  assert((await page.getByText('מחיר יעודכן בקרוב').count()) > 0, 'unpriced product says price will be updated');
-  const wa = await page.getByRole('link', { name: /בוואטסאפ/ }).getAttribute('href');
-  assert(wa.startsWith('https://wa.me/') && decodeURIComponent(wa).includes('Wand of Troy'), 'WhatsApp order link carries the product');
-  assert((await page.getByRole('button', { name: /הוסף לסל/ }).count()) === 0, 'no add-to-cart without a price');
-  assert((await page.getByText('תמונה להמחשה').count()) > 0, 'mock-up image is captioned as illustrative');
+  console.log('only live products');
+  const hidden = await page.request.get(BASE + '/shop/p/wand-of-troy');
+  assert(hidden.status() === 404, 'hidden product (no photos) has no page');
+  await go('/shop/c/all');
+  assert((await page.getByText('תמונה להמחשה').count()) === 0, 'no mock-up images left in the catalogue');
 
   console.log('7 favorites');
   await go('/shop/c/all');
-  for (const n of ['ANACONDA', 'Wand of Troy', 'ראש שאיבה לחריצים', 'קופסה למשאבת Shurflo']) {
+  for (const n of ['ANACONDA', 'MINI VIPER', 'BIG MAMBA', 'מחבר מהיר לצינור הזרקה']) {
     await page.getByRole('button', { name: `הוספת ${n} למועדפים` }).first().click();
   }
   await page.getByRole('button', { name: 'הוספת סט קליפסים לצינורות לסל' }).first().click();
-  await page.getByRole('button', { name: 'לפרטים ולהזמנה — Wand of Troy' }).first().click();
-  await page.waitForURL('**/shop/p/wand-of-troy');
+  await page.getByRole('button', { name: 'לפרטים ולהזמנה — ערכת שדרוג TURBO X' }).first().click();
+  await page.waitForURL('**/shop/p/turbo-x');
   await go('/shop/favorites');
   await shot('07-favorites');
   assert((await page.locator('article').count()) === 4, 'favorites shows 4');
-  await page.getByRole('button', { name: 'הסרת ראש שאיבה לחריצים מהמועדפים' }).click();
+  await page.getByRole('button', { name: 'הסרת מחבר מהיר לצינור הזרקה מהמועדפים' }).click();
   assert((await page.locator('article').count()) === 3, 'remove from favorites works');
 
   console.log('5 cart');
@@ -112,7 +110,7 @@ const assert = (c, m) => { if (!c) throw new Error('ASSERT: ' + m); console.log(
   await page.keyboard.press('Enter');
   await page.waitForTimeout(400);
   assert((await page.locator('article').count()) >= 1, 'search results for ידית');
-  await page.getByRole('combobox').fill('שטיחים');
+  await page.getByRole('combobox').fill('קורסים');
   await page.keyboard.press('Enter');
   await page.waitForTimeout(300);
   assert((await page.locator('article').count()) >= 1, 'search by category name');
@@ -130,19 +128,20 @@ const assert = (c, m) => { if (!c) throw new Error('ASSERT: ' + m); console.log(
   await page.getByRole('button', { name: 'המשך לתשלום' }).click();
   await page.waitForTimeout(300);
   await page.getByRole('checkbox').last().check();
-  await page.getByRole('button', { name: /לתשלום מאובטח/ }).click();
-  await page.getByRole('button', { name: 'סירוב (בדיקה)' }).click();
-  assert((await page.getByText(/התשלום נדחה/).count()) > 0, 'declined payment shows error, no success');
-  await page.getByRole('button', { name: /לתשלום מאובטח/ }).click();
-  await page.getByRole('button', { name: 'אישור תשלום (הדגמה)' }).click();
+  await page.getByRole('button', { name: /קבלת מספר הזמנה/ }).click();
   await page.waitForURL('**/shop/order?id=**', { timeout: 5000 });
 
-  console.log('10 success');
-  await page.waitForTimeout(1600);
+  console.log('10 order number + WhatsApp payment');
+  await page.waitForTimeout(800);
   await shot('10-success');
-  assert((await page.getByText('ההזמנה בוצעה בהצלחה!').count()) > 0, 'success screen after approved payment');
+  assert((await page.getByText('ההזמנה נקלטה!').count()) > 0, 'order number screen after placing the order');
+  const num = (await page.locator('p[dir=ltr]').filter({ hasText: '#' }).first().textContent()).trim();
+  assert(/^#\d{6}$/.test(num), 'order gets a 6-digit number: ' + num);
+  const wa = await page.getByRole('link', { name: /שליחת ההזמנה בוואטסאפ/ }).getAttribute('href');
+  const text = decodeURIComponent(wa.split('text=')[1] || '');
+  assert(wa.startsWith('https://wa.me/') && text.includes(num) && text.includes('ANACONDA') && text.includes('Bit'), 'WhatsApp link carries order number, items and payment method');
   assert(await badge(0), 'cart cleared after order');
-  await page.getByRole('link', { name: 'מעקב אחר ההזמנה' }).click();
+  await page.getByRole('link', { name: 'לפרטי ההזמנה' }).click();
   await page.waitForURL('**/shop/track**');
   assert((await page.getByText('ANACONDA').count()) > 0, 'tracking shows ordered items');
   await go('/shop/order?id=nonexistent');

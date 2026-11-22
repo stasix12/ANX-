@@ -10,7 +10,7 @@ interface PageProps {
 export const dynamicParams = false;
 
 export function generateStaticParams() {
-  return SEED_PRODUCTS.map((p) => ({ slug: p.slug }));
+  return SEED_PRODUCTS.filter((p) => p.published).map((p) => ({ slug: p.slug }));
 }
 
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {

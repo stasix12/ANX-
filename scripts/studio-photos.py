@@ -4,7 +4,7 @@ room it was photographed in and set on a soft studio backdrop with a contact
 shadow, in a square frame.
 
     pip install numpy opencv-contrib-python-headless pillow rembg
-    python3 scripts/studio-photos.py
+    python3 scripts/studio-photos.py [slug ...]
 
 The product is not redrawn. Its pixels come from the source photo with two
 clean-up passes so it reads as new, and then a global tone pass (a little
@@ -49,6 +49,10 @@ GALLERIES = {
     ],
     # The black ANACONDA. Its gallery opens with the jungle-green handle
     # (1-4, scripts/product-photos.py), so these are numbered from 5.
+    # BIG MAMBA (pink head, black grip): three-quarter, front, profile, underside.
+    'big-mamba': [
+        'big-mamba-1.jpg', 'big-mamba-2.jpg', 'big-mamba-3.jpg', 'big-mamba-4.jpg',
+    ],
     'anx-anaconda': (5, [
         'anaconda-black-studio-1.jpg', 'anaconda-black-studio-2.jpg', 'anaconda-black-studio-3.jpg',
         'anaconda-black-studio-4.jpg', 'anaconda-black-studio-5.jpg',
@@ -330,7 +334,12 @@ def compose(img, mask):
 
 
 def main():
+    import sys
+    # Optional slugs on the command line limit the run to those galleries.
+    only = set(sys.argv[1:])
     for slug, gallery in GALLERIES.items():
+        if only and slug not in only:
+            continue
         start, gallery = gallery if isinstance(gallery, tuple) else (1, gallery)
         dest = os.path.join(PRODUCTS, slug)
         os.makedirs(dest, exist_ok=True)

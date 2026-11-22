@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { ils } from '@/lib/shop/logic';
+import { orderWhatsappLink, PAYMENT_LABEL } from '@/lib/shop/payments';
 import { ORDER_STATUS_LABEL, useCurrentUser, useShop } from '@/lib/shop/store';
 import type { Order, OrderStatus } from '@/lib/shop/types';
 import { ShopFrame } from '../Chrome';
@@ -36,6 +37,10 @@ export function OrderSuccess({ id }: { id: string | null }) {
 
   if (!s.ready) return <ShopFrame dark header="dark" nav="home">{null}</ShopFrame>;
 
+  if (order?.status === 'pending_payment') {
+    return <AwaitingPayment order={order} shippingName={s.db.settings.shippingMethods.find((m) => m.id === order.shippingMethod)?.name} />;
+  }
+
   if (!order || !CONFIRMED.includes(order.status)) {
     return (
       <ShopFrame dark header="dark" nav="home">
@@ -44,7 +49,7 @@ export function OrderSuccess({ id }: { id: string | null }) {
             <IconClose size={34} />
           </span>
           <h1 className="mt-5 text-[22px] font-black">
-            {!order ? 'ההזמנה לא נמצאה' : order.status === 'pending_payment' ? 'התשלום טרם אושר' : 'ההזמנה בוטלה'}
+            {!order ? 'ההזמנה לא נמצאה' : 'ההזמנה בוטלה'}
           </h1>
           <p className="mt-2 text-white/70">
             {!order ? 'לא מצאנו הזמנה עם המזהה הזה.' : 'ההזמנה לא הושלמה ולא בוצע חיוב. אפשר לחזור לעגלה ולנסות שוב.'}
@@ -104,6 +109,60 @@ export function OrderSuccess({ id }: { id: string | null }) {
   );
 }
 
+/**
+ * The order is placed and has a number; payment is done on WhatsApp with
+ * Bit / PayBox. The button opens a chat prefilled with the full order.
+ */
+function AwaitingPayment({ order, shippingName }: { order: Order; shippingName?: string }) {
+  const wa = orderWhatsappLink(order, shippingName);
+  return (
+    <ShopFrame dark header="dark" nav="home">
+      <div className="mx-auto flex max-w-md flex-col items-center px-6 pt-8 pb-6 text-center lg:pt-14">
+        <span className="grid size-[76px] place-items-center rounded-full bg-linear-to-b from-[#34d36a] to-[#1fa651] text-white [animation:x-pop_0.6s_cubic-bezier(0.34,1.56,0.64,1)_both]">
+          <IconCheck size={40} strokeWidth={2.6} />
+        </span>
+        <h1 className="mt-4 text-[25px] font-black">ההזמנה נקלטה!</h1>
+        <p className="mt-1 text-[15px] text-white/75">מספר ההזמנה שלך:</p>
+        <p dir="ltr" className="mt-2 rounded-2xl border border-white/20 bg-white/10 px-6 py-2 text-[34px] font-black tracking-wider">
+          #{order.number}
+        </p>
+
+        <div className="mt-6 w-full rounded-[20px] bg-white/[0.06] p-4 text-right ring-1 ring-white/10">
+          <p className="text-[16px] font-black">נשאר רק לשלם</p>
+          <p className="mt-1 text-[14px] leading-relaxed text-white/75">
+            שלחו לנו את מספר ההזמנה בוואטסאפ, ונשלח לכם את פרטי התשלום ב-
+            <b className="text-white">{PAYMENT_LABEL[order.paymentMethod]}</b>.
+          </p>
+          <div className="mt-3 flex items-center justify-between border-t border-white/10 pt-3">
+            <span className="text-[14px] text-white/70">סה&quot;כ לתשלום</span>
+            <span className="text-[22px] font-black">{ils(order.total)}</span>
+          </div>
+        </div>
+
+        <a
+          href={wa}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="mt-5 flex h-14 w-full items-center justify-center gap-2.5 rounded-full bg-[#25d366] text-[17px] font-black text-white shadow-[0_8px_22px_rgba(37,211,102,0.35)] transition hover:brightness-105 active:scale-[0.99]"
+        >
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+            <path d="M12 2a10 10 0 0 0-8.6 15.1L2 22l5-1.3A10 10 0 1 0 12 2Zm0 18.2c-1.6 0-3.1-.4-4.4-1.2l-.3-.2-3 .8.8-2.9-.2-.3A8.2 8.2 0 1 1 12 20.2Zm4.5-6.1c-.2-.1-1.5-.7-1.7-.8-.2-.1-.4-.1-.6.1l-.8 1c-.1.2-.3.2-.5.1-.2-.1-1-.4-2-1.2-.7-.6-1.2-1.4-1.3-1.6-.1-.2 0-.4.1-.5l.4-.4.2-.4v-.4l-.8-1.9c-.2-.5-.4-.4-.6-.4h-.5c-.2 0-.4.1-.7.3-.2.2-.9.9-.9 2.2s.9 2.5 1 2.7c.1.2 1.8 2.8 4.4 3.9 1.6.7 2.3.8 3.1.6.5-.1 1.5-.6 1.7-1.2.2-.6.2-1.1.2-1.2-.1-.1-.3-.2-.5-.3Z" />
+          </svg>
+          שליחת ההזמנה בוואטסאפ לתשלום
+        </a>
+        <p className="mt-2 text-[12px] text-white/50">ההודעה כבר כוללת את מספר ההזמנה, המוצרים והסכום</p>
+
+        <Link href={`/shop/track?id=${encodeURIComponent(order.id)}`} className="mt-6 text-[14px] font-bold text-white/80 underline underline-offset-4">
+          לפרטי ההזמנה
+        </Link>
+        <Link href="/shop" className="mt-4 inline-flex h-12 w-full items-center justify-center rounded-full border border-white/30 text-[16px] font-bold text-white hover:bg-white/5">
+          המשך קנייה
+        </Link>
+      </div>
+    </ShopFrame>
+  );
+}
+
 const TIMELINE: OrderStatus[] = ['paid', 'processing', 'shipped', 'delivered'];
 
 export function TrackWithParams() {
@@ -143,6 +202,21 @@ export function OrderDetail({ order }: { order: Order }) {
         <span className="rounded-full bg-x-blue-50 px-3 py-1 text-[13px] font-bold text-x-blue">{ORDER_STATUS_LABEL[order.status]}</span>
       </div>
       <p className="mt-1 text-[13px] text-x-muted">{fmt(order.createdAt)}</p>
+
+      {order.status === 'pending_payment' && (
+        <div className="mt-5 rounded-2xl bg-x-blue-50 p-4">
+          <p className="text-[15px] font-black">ממתינה לתשלום ב-{PAYMENT_LABEL[order.paymentMethod]}</p>
+          <p className="mt-1 text-[13.5px] text-x-ink-2">שלחו לנו את מספר ההזמנה בוואטסאפ ונשלח לכם את פרטי התשלום.</p>
+          <a
+            href={orderWhatsappLink(order)}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="mt-3 flex h-12 items-center justify-center rounded-full bg-[#25d366] text-[15px] font-black text-white"
+          >
+            שליחת ההזמנה בוואטסאפ לתשלום
+          </a>
+        </div>
+      )}
 
       {order.status !== 'cancelled' && order.status !== 'pending_payment' && (
         <ol className="mt-6 space-y-0">
@@ -221,5 +295,5 @@ export function OrderDetail({ order }: { order: Order }) {
 export function useMyOrders() {
   const s = useShop();
   const user = useCurrentUser();
-  return user ? s.db.orders.filter((o) => o.userId === user.id && o.status !== 'pending_payment') : [];
+  return user ? s.db.orders.filter((o) => o.userId === user.id) : [];
 }

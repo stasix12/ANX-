@@ -9,6 +9,7 @@ import { actions, newProductDraft, ORDER_STATUS_LABEL, useCurrentUser, useShop }
 import type { Category, CategoryIcon, ColorOption, Coupon, OrderStatus, Product, ShippingMethod } from '@/lib/shop/types';
 import { CategoryGlyph, IconEdit, IconTrash, IconUpload } from '../icons';
 import { Logo } from '../Logo';
+import { PAYMENT_LABEL } from '@/lib/shop/payments';
 import { btn, Img, inputCls, Swatch, toast } from '../ui';
 
 /**
@@ -251,6 +252,22 @@ function ProductEditor({ initial, onDone }: { initial: Product; onDone: () => vo
             <button type="button" aria-label="הסרה" onClick={() => set('variants', p.variants.filter((_, j) => j !== i))} className="text-x-muted hover:text-x-red">
               <IconTrash size={18} />
             </button>
+            <input
+              aria-label="מחיר לכל אפשרות, מופרדים בפסיק (אופציונלי)"
+              value={(v.prices ?? []).map((x) => (x ?? '')).join(', ')}
+              onChange={(e) =>
+                set(
+                  'variants',
+                  p.variants.map((x, j) =>
+                    j === i
+                      ? { ...x, prices: e.target.value.split(',').map((t) => (t.trim() === '' || isNaN(+t) ? null : +t)) }
+                      : x,
+                  ),
+                )
+              }
+              placeholder="מחיר לכל אפשרות לפי הסדר (אופציונלי), למשל 1170, 2470"
+              className={`${inputCls} col-span-3 h-10`}
+            />
           </div>
         ))}
         <button
@@ -322,6 +339,18 @@ function ProductEditor({ initial, onDone }: { initial: Product; onDone: () => vo
         </label>
         <label className="flex items-center gap-2">
           <input type="checkbox" checked={p.featured} onChange={(e) => set('featured', e.target.checked)} className="size-4 accent-x-blue" /> מוצר נבחר (דף הבית)
+        </label>
+        <label className="flex items-center gap-2">
+          תווית
+          <input
+            value={p.badge ?? ''}
+            onChange={(e) => set('badge', e.target.value || undefined)}
+            placeholder="למשל: הנמכרת ביותר"
+            className="h-9 w-40 rounded-lg border border-x-line px-2 font-normal"
+          />
+        </label>
+        <label className="flex items-center gap-2">
+          <input type="checkbox" checked={!!p.madeInIsrael} onChange={(e) => set('madeInIsrael', e.target.checked)} className="size-4 accent-x-blue" /> מיוצר בישראל
         </label>
         <label className="flex items-center gap-2">
           <input type="checkbox" checked={p.digital} onChange={(e) => set('digital', e.target.checked)} className="size-4 accent-x-blue" /> מוצר דיגיטלי (ללא משלוח)
@@ -427,7 +456,7 @@ function ProductsTab() {
   );
 }
 
-const ICONS: CategoryIcon[] = ['handle', 'wand', 'adapter', 'suction', 'accessory', 'parts'];
+const ICONS: CategoryIcon[] = ['handle', 'wand', 'adapter', 'suction', 'accessory', 'parts', 'course'];
 
 function CategoriesTab() {
   const s = useShop();
@@ -561,7 +590,7 @@ function OrdersTab() {
             {o.lines.map((l) => `${l.name}${l.colorName ? ` (${l.colorName})` : ''}${l.optionsText ? ` [${l.optionsText}]` : ''} ×${l.qty}`).join(' · ')}
           </p>
           <p className="mt-1 text-[12px] text-x-faint">
-            {o.address.street ? `${o.address.street}, ${o.address.city}` : 'ללא משלוח'} · תשלום: {o.paymentMethod} · אסמכתא: {o.paymentRef ?? '—'}
+            {o.address.street ? `${o.address.street}, ${o.address.city}` : 'ללא משלוח'} · תשלום: {PAYMENT_LABEL[o.paymentMethod]} · אסמכתא: {o.paymentRef ?? '—'}
           </p>
         </li>
       ))}
@@ -693,7 +722,10 @@ export function AdminView() {
         <div className="mx-auto flex h-16 max-w-6xl items-center gap-4 px-4">
           <Logo className="text-[26px]" />
           <span className="rounded-full bg-x-blue-50 px-3 py-1 text-[12px] font-bold text-x-blue">ניהול חנות</span>
-          <Link href="/shop" className="ms-auto text-[14px] font-bold text-x-blue">
+          <Link href="/shop/admin/courses" className="ms-auto text-[14px] font-bold text-x-violet">
+            קורסים וקודים
+          </Link>
+          <Link href="/shop" className="text-[14px] font-bold text-x-blue">
             לחנות ←
           </Link>
         </div>

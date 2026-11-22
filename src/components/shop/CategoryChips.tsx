@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { categoryHref } from '@/lib/shop/logic';
+import { categoryHref, visibleCategories } from '@/lib/shop/logic';
 import { STATIC_CATEGORY_SLUGS } from '@/lib/shop/static';
 import { useShop } from '@/lib/shop/store';
 import { CategoryGlyph } from './icons';
@@ -9,7 +9,7 @@ import { CategoryGlyph } from './icons';
 /** Round-square category chips of the home page ("כל המוצרים" first, highlighted). */
 export function CategoryChips({ active = 'all' }: { active?: string }) {
   const s = useShop();
-  const cats = [...s.db.categories].sort((a, b) => a.sortOrder - b.sortOrder);
+  const cats = visibleCategories(s.db.categories, s.db.products);
   const items = [{ slug: 'all', shortName: 'כל המוצרים', icon: 'all' as const }, ...cats];
   return (
     <ul dir="ltr" className="x-noscrollbar -mx-4 flex snap-x gap-[9px] overflow-x-auto px-4 pb-1 lg:mx-0 lg:flex-wrap lg:gap-4 lg:px-0">

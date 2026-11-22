@@ -2,15 +2,17 @@
 
 import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
-import { categoryHref, galleryFor, inStock, maxQty, optionsText, sortProducts } from '@/lib/shop/logic';
+import { categoryHref, fromPrice, galleryFor, inStock, maxQty, optionsText, sortProducts, unitPriceFor } from '@/lib/shop/logic';
 import { orderLink } from '@/lib/site';
 import { STATIC_CATEGORY_SLUGS } from '@/lib/shop/static';
 import { useShop } from '@/lib/shop/store';
 import type { Product } from '@/lib/shop/types';
 import { SampleRibbon, ShopFrame } from '../Chrome';
 import { IconBox, IconCart, IconChevron, IconSearch, IconShield, IconTruck } from '../icons';
+import { MadeInIsrael } from '../MadeInIsrael';
 import { addProductToCart, FavoriteButton, ProductGrid } from '../ProductCard';
 import { btn, EmptyState, Img, Price, QtyStepper, src, Stars, Swatch, toast } from '../ui';
+import { CourseDetail } from './CourseDetail';
 import { ShopFooter } from './HomeView';
 
 export function ProductView({ slug }: { slug: string | null }) {
@@ -31,6 +33,7 @@ export function ProductView({ slug }: { slug: string | null }) {
       </ShopFrame>
     );
   }
+  if (product.bookingOnly) return <CourseDetail key={product.id} product={product} />;
   return <ProductDetail key={product.id} product={product} />;
 }
 
@@ -41,7 +44,7 @@ function ProductDetail({ product }: { product: Product }) {
   const [qty, setQty] = useState(1);
   const [index, setIndex] = useState(0);
   const track = useRef<HTMLDivElement>(null);
-  const photos = galleryFor(product, colorId);
+  const photos = galleryFor(product, colorId, options);
   // The demo clip rides as the last slide, like the play tile in the design.
   const slides: { kind: 'img' | 'video'; src: string }[] = [
     ...photos.map((src) => ({ kind: 'img' as const, src })),
@@ -49,6 +52,11 @@ function ProductDetail({ product }: { product: Product }) {
   ];
   const available = inStock(product);
   const priced = product.price !== null;
+  // A priced option (e.g. with / without pump) sets the price once chosen;
+  // until then the lowest one shows as "החל מ־".
+  const pricedVariant = product.variants.some((v) => v.prices?.some((x) => typeof x === 'number'));
+  const pricePending = pricedVariant && product.variants.some((v) => v.prices && !options[v.id]);
+  const shownPrice = pricePending ? fromPrice(product).price : unitPriceFor(product, options);
   const limit = maxQty(product);
   const standard = s.db.settings.shippingMethods.find((m) => m.id === 'standard');
   const color = product.colors.find((c) => c.id === colorId);
@@ -62,7 +70,7 @@ function ProductDetail({ product }: { product: Product }) {
   useEffect(() => {
     setIndex(0);
     track.current?.scrollTo({ left: 0, behavior: 'instant' as ScrollBehavior });
-  }, [colorId]);
+  }, [colorId, options]);
 
   const go = (i: number) => {
     const n = (i + slides.length) % slides.length;
@@ -202,18 +210,27 @@ function ProductDetail({ product }: { product: Product }) {
               <div className="shrink-0 text-left">
                 {priced ? (
                   <>
-                    {product.compareAtPrice && product.compareAtPrice > (product.price as number) && (
+                    {product.compareAtPrice && product.compareAtPrice > (shownPrice as number) && (
                       <span dir="rtl" className="me-2 text-base text-x-faint line-through">
                         {product.compareAtPrice} ₪
                       </span>
                     )}
-                    <Price value={product.price as number} className="text-[28px] lg:text-4xl" />
+                    {pricePending && <span className="block text-[12px] font-semibold text-x-muted">החל מ־</span>}
+                    <Price value={shownPrice as number} className="text-[28px] lg:text-4xl" />
                   </>
                 ) : (
                   <span className="text-[15px] font-bold text-x-muted">מחיר יעודכן בקרוב</span>
                 )}
               </div>
             </div>
+            {(product.madeInIsrael || product.badge) && (
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                {product.badge && (
+                  <span className="rounded-full bg-linear-to-r from-x-violet to-x-indigo px-2.5 py-1 text-[12.5px] font-bold text-white">★ {product.badge}</span>
+                )}
+                {product.madeInIsrael && <MadeInIsrael />}
+              </div>
+            )}
             <div dir="ltr" className="mt-2 flex items-center justify-between">
               <Stars rating={product.rating} count={product.reviewCount} countLabel="ביקורות" size={19} />
               {available ? (
@@ -223,7 +240,7 @@ function ProductDetail({ product }: { product: Product }) {
                       <path d="m5 12.5 4.5 4.5L19 7.5" />
                     </svg>
                   </span>
-                  {product.digital ? 'זמין להורדה' : product.stock === null ? 'זמין להזמנה' : product.stock <= 5 ? `במלאי · נותרו ${product.stock}` : 'במלאי'}
+                  {product.digital ? (product.categories.includes('courses') ? 'גישה מיידית עם קוד' : 'זמין להורדה') : product.stock === null ? 'זמין להזמנה' : product.stock <= 5 ? `במלאי · נותרו ${product.stock}` : 'במלאי'}
                 </span>
               ) : (
                 <span className="text-[15px] font-bold text-x-red">אזל מהמלאי</span>
@@ -248,7 +265,7 @@ function ProductDetail({ product }: { product: Product }) {
             {product.variants.map((v) => (
               <fieldset key={v.id} className="mt-5">
                 <legend className="mb-3 w-full text-left text-[16px] font-extrabold">{v.label}:</legend>
-                <div dir="ltr" className="grid grid-cols-4 gap-2">
+                <div dir="ltr" className={`grid gap-2 ${v.values.some((x) => x.length > 9) ? 'grid-cols-2' : 'grid-cols-4'}`}>
                   {v.values.map((val) => {
                     const on = options[v.id] === val;
                     return (
@@ -257,7 +274,7 @@ function ProductDetail({ product }: { product: Product }) {
                         type="button"
                         aria-pressed={on}
                         onClick={() => setOptions({ ...options, [v.id]: val })}
-                        className={`h-11 truncate rounded-xl border px-2 text-[14px] font-bold transition ${on ? 'border-x-indigo bg-x-blue-50 text-x-indigo' : 'border-x-line text-x-ink-2 hover:border-x-faint'}`}
+                        className={`min-h-11 rounded-xl border px-2 py-1.5 leading-tight text-[14px] font-bold transition ${on ? 'border-x-indigo bg-x-blue-50 text-x-indigo' : 'border-x-line text-x-ink-2 hover:border-x-faint'}`}
                       >
                         <span dir="rtl">{val}</span>
                       </button>
@@ -293,6 +310,11 @@ function ProductDetail({ product }: { product: Product }) {
               >
                 לבירור מחיר והזמנה בוואטסאפ
               </a>
+            )}
+            {product.categories.includes('courses') && (
+              <Link href="/shop/course" className={`${btn.ghost} mt-3 h-12 w-full text-[15px]`}>
+                כבר רכשתם? כניסה לקורס עם הקוד
+              </Link>
             )}
 
             <ul dir="ltr" className="mt-6 grid grid-cols-3 divide-x divide-x-line border-t border-x-line pt-4">

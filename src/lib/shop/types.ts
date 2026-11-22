@@ -6,7 +6,7 @@
  * same shapes map 1:1 onto supabase/shop-schema.sql.
  */
 
-export type CategoryIcon = 'all' | 'handle' | 'wand' | 'adapter' | 'suction' | 'parts' | 'accessory';
+export type CategoryIcon = 'all' | 'handle' | 'wand' | 'adapter' | 'suction' | 'parts' | 'accessory' | 'course';
 
 export interface Category {
   slug: string;
@@ -33,6 +33,13 @@ export interface VariantGroup {
   id: string;
   label: string;
   values: string[];
+  /**
+   * Optional price per value, aligned with `values`. When the chosen value
+   * has one, it replaces the product price (e.g. kit with / without pump).
+   */
+  prices?: (number | null)[];
+  /** Optional gallery per value, aligned with `values`; replaces the product photos once chosen. */
+  images?: (string[] | null)[];
 }
 
 export interface SpecRow {
@@ -72,6 +79,18 @@ export interface Product {
   rating: number;
   reviewCount: number;
   featured: boolean;
+  /** A featured clip with its own heading (path without extension: .mp4 video, .jpg poster). */
+  /** Longer page copy shown instead of the description (paragraphs; a leading '**' marks a bold line). */
+  story?: string[];
+  demo?: { title: string; highlight?: string; clips: { video: string; badge?: string; duration?: string; label: string }[] };
+  /** Customer clips shown on the page (paths without extension: .mp4 video, .jpg poster). */
+  reels?: string[];
+  /** Not sold through the cart: the page books it by WhatsApp (e.g. a 1-1 course). */
+  bookingOnly?: boolean;
+  /** Short highlight label on the card and product page, e.g. "הנמכרת ביותר". */
+  badge?: string;
+  /** Shows the "מיוצר בישראל" badge on the card and product page. */
+  madeInIsrael?: boolean;
   published: boolean;
   digital: boolean;
   material: string;
@@ -102,7 +121,7 @@ export interface ShippingMethod {
   freeFrom: number | null;
 }
 
-export type PaymentMethodId = 'card' | 'bit' | 'paypal';
+export type PaymentMethodId = 'card' | 'bit' | 'paybox' | 'paypal';
 
 export interface Coupon {
   code: string;

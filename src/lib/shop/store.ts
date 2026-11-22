@@ -1,5 +1,6 @@
 'use client';
 
+import { newOrderNumber } from './payments';
 import { useSyncExternalStore } from 'react';
 import { buildSeedDB, DB_VERSION } from './seed';
 import { inStock, isEmail, isPhone, lineKey, maxQty, priceCart } from './logic';
@@ -177,6 +178,7 @@ export const actions = {
     const p = s.db.products.find((x) => x.id === productId);
     if (!p || !p.published) return fail('המוצר אינו זמין');
     if (p.price === null) return fail('המחיר טרם נקבע — אפשר לברר ולהזמין בוואטסאפ');
+    if (p.bookingOnly) return fail('את המוצר הזה מתאמים ישירות — בוואטסאפ');
     if (!inStock(p)) return fail('המוצר אזל מהמלאי');
     const missing = p.variants.find((v) => !options[v.id]);
     if (missing) return fail(`יש לבחור ${missing.label}`);
@@ -303,8 +305,9 @@ export const actions = {
   /* ----------------------------------------------------------- orders */
   /**
    * Validates the cart against live stock and prices and records the order
-   * as pending_payment. The order is NOT considered placed until the payment
-   * provider confirms it (confirmPayment) — the success screen checks that.
+   * as pending_payment with a random order number, then empties the cart.
+   * The customer sends the number on WhatsApp and pays with Bit / PayBox;
+   * the owner marks it paid (confirmPayment) from the admin.
    */
   createOrder(input: CheckoutInput): Result<Order> {
     const s = get();
@@ -321,7 +324,7 @@ export const actions = {
     const at = now();
     const order: Order = {
       id: uid('o'),
-      number: settings.nextOrderNumber,
+      number: newOrderNumber(s.db.orders.map((o) => o.number)),
       userId: s.userId,
       email: input.email.trim().toLowerCase(),
       customer: { fullName: input.fullName.trim(), phone: input.phone.trim() },
@@ -369,7 +372,8 @@ export const actions = {
         ),
       };
     }
-    commit({ db });
+    // The order is placed; payment follows on WhatsApp (Bit / PayBox).
+    commit({ db, cart: { lines: [], coupon: null } });
     return ok(order);
   },
   /** Called only with a reference the payment provider returned. */
@@ -417,7 +421,22 @@ export const actions = {
       compatibility: clean(p.compatibility),
       specs: p.specs.filter((r) => r.label.trim() && r.value.trim()),
       tags: clean(p.tags),
-      variants: p.variants.map((v) => ({ ...v, values: clean(v.values) })).filter((v) => v.label.trim() && v.values.length),
+      variants: p.variants
+        .map((v) => {
+          // Keep each option's price aligned with it while empty options drop out.
+          const keep = v.values
+            .map((val, i) => ({ val: val.trim(), price: v.prices?.[i] ?? null, images: v.images?.[i] ?? null }))
+            .filter((x) => x.val);
+          const prices = keep.map((x) => x.price);
+          const images = keep.map((x) => x.images);
+          return {
+            ...v,
+            values: keep.map((x) => x.val),
+            prices: prices.some((x) => x !== null) ? prices : undefined,
+            images: images.some((x) => x?.length) ? images : undefined,
+          };
+        })
+        .filter((v) => v.label.trim() && v.values.length),
     };
     const exists = db.products.some((x) => x.id === p.id);
     commit({ db: { ...db, products: exists ? db.products.map((x) => (x.id === p.id ? p : x)) : [...db.products, p] } });

@@ -557,42 +557,7 @@ export function CampaignSchedulePanel({
             <ClockIcon className="h-3.5 w-3.5 text-brand-400" />
           </span>
           <span className="min-w-0 grow">
-            {/*
-              ─── AND THE VALUE SAYS IT TOO, NOT ONLY THE SENTENCE ──────────
-              *
-              * "אני מגדיר שעת הפעלה של הקמפיין ל 11:00 אבל בעמוד הראשי שעת
-              *  התחלה מראה 0:00" — 23.11.2026, with a screenshot of each.
-              *
-              * The fix below this one, in November, changed the SENTENCE so
-              * it stopped claiming "הסבב פותח בשעה הזו" over a round that
-              * opens at no such hour. It left the number. And the number is
-              * what a field called "שעת התחלה" is read by: he read 0:00 as a
-              * setting, could not find where he had made it, and reported the
-              * same desync a second time.
-              *
-              * The number is fabricated. shownSchedule() substitutes
-              * DAY_OPENS for the stored hour whenever the window is off
-              * (campaign-schedule.ts:1188), purely so this picker has a value
-              * to render. CampaignCard already prints 'כל היום' instead of
-              * that constant, for this exact reason and after this exact
-              * complaint one card earlier — "שעת ההתחלה של קמפיינים במסך
-              * קמפיינים לא מסונכרן עם העמוד הראשי". The dashboard panel was
-              * the last surface still showing the bare constant.
-              *
-              * The <input type="time"> cannot render words, and replacing it
-              * would cost the picker campaign-card.test.ts hit-tests. So the
-              * heading carries the answer, where it is read first and where
-              * CampaignCard puts it.
-              */}
-            <span className="block text-[12.5px] font-extrabold leading-4 text-mist-100">
-              {t('שעת התחלה')}
-              {publishesAlways(schedule) && (
-                <>
-                  {' · '}
-                  <span className="font-bold text-mist-300">{t('כל היום')}</span>
-                </>
-              )}
-            </span>
+            <span className="block text-[12.5px] font-extrabold leading-4 text-mist-100">{t('שעת התחלה')}</span>
             {/*
               ─── AND IT ONLY CLAIMS AN OPENING HOUR WHEN THERE IS ONE ───────
               *
@@ -633,6 +598,30 @@ export function CampaignSchedulePanel({
           <TimePick
             aria={`שעת התחלה ב${campaignName}`}
             value={shown.start}
+            /*
+             * ─── AND THE FIELD SAYS SO, BECAUSE THE FIELD IS WHAT HE READS ─
+             *
+             * "אני מגדיר שעת הפעלה של הקמפיין ל 11:00 אבל בעמוד הראשי שעת
+             *  התחלה מראה 0:00", and then, on the build that put the words
+             *  in the HEADING: "עדיין אין חפיפה תראה למטה רשום שעה 14:00
+             *  ומעליו שוב פעם 00:00".
+             *
+             * He is right both times, and the second time is the lesson. The
+             * November fix changed the caption under the number; the fix
+             * before this line changed the heading above it. The NUMBER is
+             * what a field called "שעת התחלה" is read by, and it sat there
+             * saying 0:00 two lines above "הפרסום הבא … בשעה 14:00" on the
+             * same card.
+             *
+             * The number is fabricated: shownSchedule() substitutes DAY_OPENS
+             * for the stored hour whenever the window is off
+             * (campaign-schedule.ts:1188), purely so this picker has
+             * something to render. So when there is no limit the field does
+             * not render an hour at all — it renders the same 'כל היום'
+             * CampaignCard prints, in the same box, and becomes the picker
+             * the moment he taps it to set one.
+             */
+            unset={publishesAlways(schedule)}
             disabled={disabled}
             /* While the wheel moves: the panel's own draft, no write. */
             onDraft={setStartDraft}
@@ -966,12 +955,23 @@ export function CampaignSchedulePanel({
  * step={60} keeps seconds out of the picker: the engine stores minutes and a
  * seconds wheel would offer a precision nothing downstream can keep.
  */
+/**
+ * The one box, so the clock and the words it is replaced by MEASURE THE SAME.
+ *
+ * campaign-card.test.ts hit-tests this control's 40px height, its radius, its
+ * border and its focus ring. Two copies of that string is how one of them
+ * stops matching.
+ */
+const TIME_BOX =
+  'h-10 min-h-10 w-full cursor-pointer appearance-none rounded-xl border border-ink-600 bg-ink-900 px-2 text-center text-[13px] font-extrabold tabular-nums text-mist-100 transition-colors hover:border-brand-300 focus:border-brand-300 focus:outline-none focus:ring-2 focus:ring-brand-300/40 disabled:cursor-not-allowed disabled:opacity-60';
+
 function TimePick({
   aria,
   value,
   onDraft,
   onCommit,
   disabled,
+  unset = false,
 }: {
   aria: string;
   value: string;
@@ -980,6 +980,17 @@ function TimePick({
   /** The field is done — write once, if anything moved. */
   onCommit: () => void;
   disabled?: boolean;
+  /**
+   * NO HOUR WAS EVER CHOSEN, so there is no hour to show.
+   *
+   * `value` is still a well-formed 'HH:MM' in this state — shownSchedule()
+   * resolves the row to DAY_OPENS so this picker has something to open on —
+   * but it is a placeholder, not a setting, and rendering it is how the card
+   * came to say 0:00 two lines above "הפרסום הבא … 14:00". It is reported
+   * twice in this file's history and once more after the heading was fixed
+   * instead of the field.
+   */
+  unset?: boolean;
 }) {
   return (
     /*
@@ -1002,12 +1013,28 @@ function TimePick({
      */
     <span className="relative block w-[128px] shrink-0">
       <span className="sr-only">{t('שעת התחלה')}</span>
+      {/*
+        ─── AND IT IS STILL A CLOCK, SHOWING NO HOUR ─────────────────────────
+        *
+        * The first attempt at this replaced the input with a button reading
+        * 'כל היום'. Two pins said no, and both were right: campaign-card.test
+        * .ts counts ONE FIELD in this block at 360px and found none, and
+        * campaign-schedule.test.ts holds this panel to exactly one piece of
+        * state and found two. The reference draws a field here, and he must
+        * still be able to set an hour by tapping it.
+        *
+        * An empty value is the honest form of the same answer. `<input
+        * type="time">` with value="" renders its own --:-- placeholder: it is
+        * a clock, it is settable, it needs no state, and it does not assert
+        * an hour nobody chose. The sentence beside it already says what the
+        * emptiness means.
+        */}
         <input
           type="time"
           step={60}
           dir="ltr"
           aria-label={aria}
-          value={value}
+          value={unset ? '' : value}
           disabled={disabled}
           onChange={(e) => {
             const v = e.target.value;
@@ -1021,7 +1048,7 @@ function TimePick({
           onKeyDown={(e) => {
             if (e.key === 'Enter') (e.currentTarget as HTMLInputElement).blur();
           }}
-          className="h-10 min-h-10 w-full cursor-pointer appearance-none rounded-xl border border-ink-600 bg-ink-900 px-2 text-center text-[13px] font-extrabold tabular-nums text-mist-100 transition-colors hover:border-brand-300 focus:border-brand-300 focus:outline-none focus:ring-2 focus:ring-brand-300/40 disabled:cursor-not-allowed disabled:opacity-60"
+          className={TIME_BOX}
         />
     </span>
   );

@@ -992,10 +992,28 @@ function ch(v: number): number {
    * replacing it would cost the picker what schedule-panel.test.ts measures.
    */
   const panel = readFileSync(new URL('../../src/components/social/CampaignSchedulePanel.tsx', import.meta.url), 'utf8');
-  is(/\{t\('שעת התחלה'\)\}\s*\n\s*\{publishesAlways\(schedule\) && \(/.test(panel),
-    'the dashboard panel says "כל היום" beside the heading when no hour was ever chosen');
-  is(/<span className="font-bold text-mist-300">\{t\('כל היום'\)\}<\/span>/.test(panel),
-    'in the same words the collapsed card uses, so the two cannot drift apart again');
+  /*
+   * AND IT IS THE FIELD, NOT THE HEADING. The first attempt at this put the
+   * words beside the title and left the number in the box — "עדיין אין חפיפה
+   * תראה למטה רשום שעה 14:00 ומעליו שוב פעם 00:00". A field called
+   * "שעת התחלה" is read by its VALUE.
+   */
+  is(/unset=\{publishesAlways\(schedule\)\}/.test(panel),
+    'the picker is told when no hour was ever chosen');
+  is(/value=\{unset \? '' : value\}/.test(panel),
+    'and then it shows NO hour — not the DAY_OPENS placeholder shownSchedule resolved it to');
+  /*
+   * AND IT IS STILL A CLOCK. The first attempt swapped the input for a button
+   * reading 'כל היום', and two pins refused it: campaign-card.test.ts counts
+   * one field in this block at 360px, and the rule directly above holds this
+   * panel to one piece of state. An empty time input is the same answer
+   * without either cost — the browser draws --:--, he can still tap it, and
+   * the sentence beside it says what the emptiness means.
+   */
+  is(/type="time"/.test(panel), 'the control is still a time field, which the reference requires');
+  is(!/setPicking/.test(panel), 'and it needed no second piece of state to do it');
+  is(!/{t\('שעת התחלה'\)}\s*\n\s*\{publishesAlways/.test(panel),
+    'the heading is NOT also saying it — the screen does not say one thing three times');
   /* The sentence under it stays — the two say the same thing twice, on
      purpose, because he read the number and not the sentence. */
   is(/publishesAlways\(schedule\) \? t\('אין הגבלת שעה/.test(panel),

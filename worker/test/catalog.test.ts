@@ -553,6 +553,68 @@ is(/await catalogSync\(\);\s*\n?\s*await catalogCityPass\(\);/.test(worker.repla
   for (const name of ['קבוצת רכישה ארצית', 'מתכונים וטיפים', 'ל״ג בעומר שמח']) {
     eq(detectCity(name), 'אחר', `"${name}" names no place, and none is invented`);
   }
+
+  /*
+   * ═══ 23.11.2026 · "שיחפש לי גם קבוצות ברוסית לפי ערים" ══════════════════
+   *
+   * The request was for a Russian SEARCH; the first thing the research found
+   * was that Russian groups the Hebrew searches ALREADY bring back were being
+   * read wrong. Every row below was measured with this same detectCity before
+   * it was fixed, and every one is cheaper than a search: nothing here costs
+   * the owner's account anything.
+   */
+  const ruNames = [
+    /* READ AS אחר — the name the city is really written by was not stored. */
+    ['Объявления Тель-Авив', 'תל אביב-יפו'],
+    ['Квартиры в Тель-Авиве', 'תל אביב-יפו'],
+    ['Нетания объявления', 'נתניה'],
+    ['Нетанья работа', 'נתניה'],
+    ['Натания работа', 'נתניה'],
+    /* Нацрат-Илит is what its Russian speakers still call Nof HaGalil, and
+       'Ноф-ха-Галиль' could not even reach "Ноф а-Галиль". */
+    ['Нацрат-Илит объявления', 'נוף הגליל'],
+    ['Ноф а-Галиль чат', 'נוף הגליל'],
+    ['Ноф-ха-Галиль', 'נוף הגליל'],
+    ['Кфар-Саба объявления', 'כפר סבא'],
+    /* Arad: the owner's own city, first in the table, and its Cyrillic
+       alternative had no guards at all. */
+    ['Арад объявления', 'ערד'],
+    ['Работа в Араде', 'ערד'],
+    ['Лехавим объявления', 'להבים'],
+    ['в Омере', 'עומר'],
+    ['Мицпе-Рамон тур', 'מצפה רמון'],
+    /* And the declension handling that already worked, so it stays working. */
+    ['Хайфа', 'חיפה'],
+    ['Беэр-Шева объявления', 'באר שבע'],
+    ['в Ашдоде', 'אשדוד'],
+    ['в Димоне', 'דימונה'],
+    ['Лод объявления', 'לוד'],
+    ['Акко старый город', 'עכו'],
+  ] as const;
+  for (const [name, want] of ruNames) eq(detectCity(name), want, `"${name}" names ${want}`);
+
+  /*
+   * ─── AND A WRONG CITY IS WORSE THAN NONE ───────────────────────────────
+   *
+   * Each of these was read as a REAL city before 23.11.2026, because the
+   * suffix allowance was a flat three letters for every Cyrillic form and
+   * three letters is most of a short word:
+   *
+   *   "Лодка напрокат" → לוד   ·  "Лодзь Польша" → לוד   ·  "Аккорд" → עכו
+   *   "тир" → טירה  ·  "явно" → יבנה  ·  "ярко" → ירכא  ·  "шломо" → שלומי
+   *   "лаки" → לקיה  ·  "Мицпе-Йерихо" → מצפה רמון  ·  "парад" → ערד
+   *
+   * "אחר" is a question somebody can still answer. A wrong city is an answer
+   * nobody will think to re-ask.
+   */
+  for (const word of [
+    'Лодка напрокат', 'Лодзь Польша', 'Аккорд гитара', 'тираж лотереи', 'тир',
+    'явный обман', 'явно', 'яркий свет', 'ярко', 'хурма сладкая', 'шломо', 'шломит',
+    'лаки', 'лакировка', 'Номер телефона', 'номера домов', 'парад в городе', 'барада',
+    'Мицпе-Йерихо группа', 'рахат-лукум', 'ремонт квартир', 'работа в Израиле',
+  ]) {
+    eq(detectCity(word), 'אחר', `"${word}" is not a city, and none is invented for it`);
+  }
 }
 
 /* ══════════ §6 PICKING FROM THE CATALOG INSIDE A CAMPAIGN ════════════════ */

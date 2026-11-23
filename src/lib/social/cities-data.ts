@@ -698,7 +698,10 @@ export const CITY_SPELLINGS: Readonly<Record<string, readonly string[]>> = {
   'כפר אדומים': ['Kfar Adumim'],
   'כפר ברא': ['Kafr Bara', 'כפר בארא'],
   'כפר יונה': ['Kfar Yona', 'Кфар-Йона'],
-  'כפר סבא': ['Kfar Saba', 'Кфар-Сава', 'כ"ס', 'כפר-סבא', 'כ״ס'],
+  /* Кфар-Саба with ב, which is what Israeli Russian classifieds print, beside
+     the Кфар-Сава already here. The stem relaxation cannot bridge an internal
+     letter, so one form cannot stand for the other. */
+  'כפר סבא': ['Kfar Saba', 'Кфар-Саба', 'Кфар-Сава', 'כ"ס', 'כפר-סבא', 'כ״ס'],
   'כפר קאסם': ['Kafr Qasim', 'כפר קאסים', 'כפר קסם'],
   'כפר שמריהו': ['Kfar Shmaryahu', 'Кфар-Шмарьяху'],
   'לוד': ['Lod', 'Лод'],
@@ -713,7 +716,11 @@ export const CITY_SPELLINGS: Readonly<Record<string, readonly string[]>> = {
   'נווה דניאל': ['Neve Daniel', 'נוה דניאל'],
   'נוף איילון': ['Nof Ayalon', 'נוף אילון'],
   'נס ציונה': ['Ness Ziona', 'Нес-Циона', 'נס-ציונה'],
-  'נתניה': ['Netanya', 'Натания', 'נתניה עיר'],
+  /* All three Cyrillic forms. 'Натания' alone compiles to Натани…, which
+     cannot reach "Нетания" (second syllable) or "Нетанья" (soft sign), and
+     those two are what Israeli Russian actually writes. Measured: "Нетания
+     объявления" filed as אחר. */
+  'נתניה': ['Netanya', 'Нетания', 'Нетанья', 'Натания', 'נתניה עיר'],
   'סביון': ['Savyon', 'Савьон'],
   'עופרה': ['Ofra', 'עפרה'],
   'עלי': ['Eli'],
@@ -740,7 +747,11 @@ export const CITY_SPELLINGS: Readonly<Record<string, readonly string[]>> = {
   'שוהם': ['Shoham', 'Шохам', 'שהם'],
   'שילה': ['Shilo'],
   'שערי תקווה': ['Sha\'arei Tikva', 'שערי תקוה'],
-  'תל אביב-יפו': ['Tel Aviv-Yafo', 'Тель-Авив-Яффо', 'יפו', 'ת"א', 'תל אביב', 'תל אביב יפו', 'תל-אביב', 'ת״א'],
+  /* 'Тель-Авив' as well as the full triple name: the row carried four HEBREW
+     short forms and exactly one Cyrillic, so "Объявления Тель-Авив" — the way
+     the name is really written — filed as אחר. Measured with detectCity on
+     23.11.2026, in the country's largest city. */
+  'תל אביב-יפו': ['Tel Aviv-Yafo', 'Тель-Авив', 'Тель-Авив-Яффо', 'יפו', 'ת"א', 'תל אביב', 'תל אביב יפו', 'תל-אביב', 'ת״א'],
   'תל מונד': ['Tel Mond', 'Тель-Монд', 'תל-מונד'],
   'תקוע': ['Tekoa'],
   'אבו סנאן': ['Abu Snan', 'אבו סנן'],
@@ -810,7 +821,13 @@ export const CITY_SPELLINGS: Readonly<Record<string, readonly string[]>> = {
   'מעלות-תרשיחא': ['Ma\'alot-Tarshiha', 'Маалот-Таршиха', 'מעלות', 'מעלות תרשיחא', 'תרשיחא'],
   'משהד': ['Mashhad'],
   'נהריה': ['Nahariya', 'Нагария', 'נהרייה'],
-  'נוף הגליל': ['Nof HaGalil', 'Ноф-ха-Галиль', 'נוף גליל', 'נצרת עילית', 'נצרת עלית'],
+  /* THE NAME ITS RUSSIAN SPEAKERS STILL USE. The row already keeps both old
+     HEBREW names from the 2019 rename — so the file's authors knew it
+     mattered — and updated only the Hebrew column. Нацрат-Илит is what the
+     city is called in Russian to this day, and 'Ноф-ха-Галиль' does not even
+     reach "Ноф а-Галиль": cityPattern collapses separators, never the
+     article. Both measured as אחר on 23.11.2026. */
+  'נוף הגליל': ['Nof HaGalil', 'Нацрат-Илит', 'Ноф-ха-Галиль', 'Ноф а-Галиль', 'נוף גליל', 'נצרת עילית', 'נצרת עלית'],
   'נופית': ['Nofit'],
   'נחף': ['Nahf'],
   'נצרת': ['Nazareth', 'Назарет'],
@@ -851,7 +868,12 @@ export const CITY_SPELLINGS: Readonly<Record<string, readonly string[]>> = {
   'שעב': ['Sha\'ab'],
   'שפרעם': ['Shefa-Amr', 'Шфарам', 'שפרעם'],
   'ינוח-ג\'ת': ['Yanuh-Jat', 'Янух-Джат', 'יאנוח-ג\'ת', 'ינוח', 'ג\'ת הגלילית', 'Yanuh', 'Jat', 'Yanuh Jat', 'يانوح-جت'],
-  'גבע בנימין': ['Geva Binyamin', 'Гева Биньямин (Адам)', 'אדם', 'Adam', 'גבע בנימין (אדם)', 'Adam settlement'],
+  /* NO PARENTHETICAL. 'Гева Биньямин (Адам)' was the only one of the 161
+     Cyrillic forms carrying punctuation, and cityPattern turns the brackets
+     into literal characters — so the form matched nothing, while the name
+     itself was read as בנימינה-גבעת עדה. 'Адам' is deliberately NOT added
+     beside it: it is a given name, and "рав Адам" is not a town. */
+  'גבע בנימין': ['Geva Binyamin', 'Гева-Биньямин', 'אדם', 'Adam', 'גבע בנימין (אדם)', 'Adam settlement'],
   'אליכין': ['Elyachin', 'Эльяхин', 'Elyakhin', 'אליחין', 'Elyahin'],
   'שייח\' דנון': ['Sheikh Dannun', 'Шейх-Даннун', 'שיח\' דנון', 'Sheikh Danun', 'Shaykh Dannun', 'الشيخ دنون', 'ערב אל-סואעד'],
   'אבטין': ['Ibtin', 'Ибтин', 'אבטן', 'إبطن', 'Ebtin'],
@@ -871,6 +893,25 @@ export const CITY_SPELLINGS: Readonly<Record<string, readonly string[]>> = {
  * cities.ts הוא שמשתמש ברשימה; כאן היא יושבת כי אלה שמות של מקומות.
  */
 export const DO_NOT_DETECT: readonly string[] = ['אזור', 'זמר', 'מתן', 'מולדה', 'שדות', 'בארי', 'ניצן', 'מגדל'];
+
+/**
+ * ─── ואותו דין בקירילית, לצורה ולא ליישוב ────────────────────────────────
+ *
+ * חמש מהצורות הרוסיות השמורות כאן הן תחילית של מילה רוסית רגילה, ולכן הן
+ * קוראות קבוצות שאין להן שום קשר ליישוב. נמדד עם detectCity ב-23.11.2026:
+ *
+ *   "тир" (מטווח) → טירה     ·  "явно" (ברור) → יבנה   ·  "ярко" (בהיר) → ירכא
+ *   "шломо" (שם פרטי) → שלומי  ·  "лаки" (לכה) → לקיה
+ *
+ * ההבדל מ-DO_NOT_DETECT למעלה הוא שכאן נפסלת הצורה ולא היישוב: יבנה היא עיר
+ * של חמישים אלף איש ו"יבנה" בעברית נקראת מצוין — רק הצורה הרוסית שלה היא זו
+ * שלא ניתנת לקריאה. קבוצה רוסית ביבנה תיקרא "אחר", וזה נכון: "אחר" היא
+ * שאלה, ועיר שגויה היא תשובה שאיש לא יבדוק שוב.
+ *
+ * הן נשארות במאגר כדי שחיפוש יוכל להשתמש בהן — חיפוש של "Явне" מחזיר קבוצות
+ * של יבנה בלי קשר לשאלה אם אפשר לקרוא את השם בחזרה.
+ */
+export const RU_DO_NOT_DETECT: readonly string[] = ['Тира', 'Явне', 'Ярка', 'Шломи', 'Лакия'];
 
 /**
  * ─── האותיות שהעברית מדביקה לפני שם ──────────────────────────────────────

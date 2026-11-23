@@ -3,14 +3,33 @@
  * Russian spellings; anything unmatched is "אחר". Shared by the dashboard
  * (on load / on add) and the worker (after it fetches the real name).
  */
-import { CITY_REGION, CITY_SPELLINGS, DO_NOT_DETECT, HEBREW_PREFIXES, REGIONS, type Region } from './cities-data';
+import { CITY_REGION, CITY_SPELLINGS, DO_NOT_DETECT, HEBREW_PREFIXES, REGIONS, RU_DO_NOT_DETECT, type Region } from './cities-data';
 
 export { REGIONS, type Region };
 
 export const OTHER_CITY = 'אחר';
 
 const CITY_PATTERNS: [string, RegExp][] = [
-  ['ערד', /ערד|\barad\b|арад/i],
+  /*
+   * THE CYRILLIC ALTERNATIVE CARRIES THE SAME GUARDS AS THE LATIN ONE — AND
+   * NOT WITH \b, WHICH IS THE TRAP THE NOTE BELOW NAMES FOR HEBREW.
+   *
+   * Bare `арад` matched inside "парад" and "барада", and this entry is tried
+   * FIRST, ahead of all four hundred generated patterns, in the owner's own
+   * city. The first fix for it was `\bарад\b` — and that is WORSE than the
+   * bug: \b is defined against [A-Za-z0-9_], so next to Cyrillic it is not a
+   * word boundary at all and "Арад объявления" stopped being detected
+   * entirely. Measured, both ways, with detectCity.
+   *
+   * Lookarounds, like באר שבע below, which is why that entry carries /iu —
+   * PLUS the same declension allowance cityPattern() gives a generated form,
+   * because guarding a hand-tuned entry takes that away. The other Cyrillic
+   * alternatives in this table are bare substrings, so they match "Ашдоде"
+   * and "Димоне" by accident; the moment a guard is added, "Работа в Араде"
+   * stops matching unless the two letters are given back. Measured, again.
+   * Four letters of stem, so two — see the budget in cityPattern().
+   */
+  ['ערד', /ערד|\barad\b|(?<![\p{L}])арад[\u0430-\u044F\u0451]{0,2}(?![\p{L}])/iu],
   // \b does not work next to Hebrew letters (they are not \w), hence the lookarounds.
   ['באר שבע', /באר[\s-]?שבע|(?<![\p{L}])ב["'׳״]?ש(?![\p{L}])|beer[\s-]?sheva|beersheba|b7\b|беэр[\s-]?шев|беэр-шева/iu],
   ['אופקים', /אופקים|ofakim|офаким/i],
@@ -18,12 +37,18 @@ const CITY_PATTERNS: [string, RegExp][] = [
   ['נתיבות', /נתיבות|netivot|нетивот/i],
   ['שדרות', /שדרות|sderot|сдерот/i],
   ['ירוחם', /ירוחם|yeruham|йерухам/i],
-  ['מצפה רמון', /מצפה[\s-]?רמון|mitzpe|мицпе/i],
+  /* THE WHOLE NAME, NOT THE FIRST WORD. Bare `mitzpe`/`мицпе` claimed every
+     other מצפה in the country: "Мицпе-Йерихо группа" filed as מצפה רמון,
+     measured 23.11.2026. מצפה יריחו is its own CITY_REGION row. */
+  ['מצפה רמון', /מצפה[\s-]?רמון|mitzpe[\s-]?ramon|мицпе[\s-]?рамон/i],
   ['אשקלון', /אשקלון|ashkelon|ашкелон/i],
   ['אשדוד', /אשדוד|ashdod|ашдод/i],
   ['קריית גת', /קרי?ית[\s-]?גת|kiryat[\s-]?gat|кирьят[\s-]?гат/i],
-  ['עומר', /(?<![\p{L}])עומר(?![\p{L}])|\bomer\b/iu],
-  ['להבים', /להבים|lehavim/i],
+  /* `омер` IS given the guards and nothing else: "Номер" has a letter in
+     front, so the same lookaround that keeps ל״ג בעומר out keeps it out too.
+     Verified both ways with detectCity. */
+  ['עומר', /(?<![\p{L}])עומר(?![\p{L}])|\bomer\b|(?<![\p{L}])омер[\u0430-\u044F\u0451]{0,2}(?![\p{L}])/iu],
+  ['להבים', /להבים|lehavim|(?<![\p{L}])лехавим[\u0430-\u044F\u0451]{0,2}(?![\p{L}])/iu],
   /* THE PREPOSITION IS ALLOWED IN FRONT OF THESE TWO — "נדלן ברהט",
      "דירות במיתר" — which is how the names are really written. See the note
      on cityPattern() below; the same allowance is why the four hundred
@@ -31,6 +56,11 @@ const CITY_PATTERNS: [string, RegExp][] = [
      עומר above is deliberately NOT given it: "ל״ג בעומר" is a holiday, and
      every group wishing somebody a happy one would be filed in the town. */
   ['מיתר', /(?<![\p{L}])[בלמוהשכ]{0,2}מיתר(?![\p{L}])|meitar/iu],
+  /* רהט gets the Hebrew form and the Latin, and NOT a bare `рахат`:
+     רחת-לוקום — "рахат-лукум" — is a sweet sold in every Israeli market, and
+     the hyphen after it is a non-letter, so a guarded `рахат` matches it.
+     The town keeps its Hebrew and Latin reading; the Russian spelling stays
+     in CITY_SPELLINGS for searching, where a wrong hit costs nothing. */
   ['רהט', /(?<![\p{L}])[בלמוהשכ]{0,2}רהט(?![\p{L}])|rahat/iu],
 ];
 
@@ -119,7 +149,16 @@ function escapeForRegex(text: string): string {
  * test that could never fail — see worker/test/catalog-screen.test.ts.)
  */
 function cityPattern(he: string, spellings: readonly string[]): RegExp {
-  const forms = [he, ...spellings]
+  /*
+   * THE FORMS THAT MAY NOT BE READ COME OUT HERE, NOT OUT OF THE DATA.
+   *
+   * RU_DO_NOT_DETECT holds five Cyrillic spellings that are each a prefix of
+   * an ordinary Russian word — see the note beside it. They stay in
+   * CITY_SPELLINGS, because a SEARCH for "Явне" is perfectly good; it is
+   * reading the name back that cannot be trusted. Dropping them from the
+   * pattern and leaving them in the data is the difference between the two.
+   */
+  const forms = [he, ...spellings.filter((f) => !RU_DO_NOT_DETECT.includes(f))]
     /* A hyphenated or spaced name is written both ways: "תל אביב-יפו",
        "תל אביב", "תל-אביב". One pattern covers all three. */
     .map((f) => escapeForRegex(f).replace(/[\s\u2010-\u2015-]+/g, '[\\s\u2010-\u2015-]?'))
@@ -134,7 +173,37 @@ function cityPattern(he: string, spellings: readonly string[]): RegExp {
      * allowed after the stem, which covers the cases without reaching into
      * another word: the guard after it still requires a non-letter.
      */
-    .map((f) => (/^[\u0400-\u04FF]/.test(f) ? `${f.replace(/[аяыиоеуёюь]$/i, '')}[\\u0430-\\u044F\\u0451]{0,3}` : f))
+    /*
+     * ─── AND HOW MANY LETTERS, BY HOW LONG THE STEM IS ────────────────────
+     *
+     * The allowance used to be a flat three for every Cyrillic form, and on a
+     * three-letter stem three letters is most of a different word. Measured
+     * against the real data on 23.11.2026, with detectCity itself:
+     *
+     *   'Лодка напрокат'   → לוד        (a boat for hire)
+     *   'Лодзь Польша'     → לוד        (the city in Poland)
+     *   'Аккорд гитара'    → עכו        (a guitar chord)
+     *
+     * because 'Лод' and 'Акк' plus three Cyrillic letters reach "Лодка",
+     * "Лодзь" and "Аккорд". Six forms have a stem of three letters — Лод,
+     * Акк, Тир, Явн, Ярк, Хур — and every one of them is a prefix of common
+     * Russian words ("тираж", "явный", "яркий", "хурма"). A group filed under
+     * the wrong city is worse than one filed under none: "אחר" is a question,
+     * a wrong city is an answer nobody will re-ask.
+     *
+     * What the allowance is actually FOR is declension, and declension is
+     * short: Хайфа → Хайфе, Хайфы, Хайфу, Хайфой is one or two letters past
+     * the stem, never three. So the budget follows the stem's length —
+     * one letter on a three-letter stem, two on four, three from five up —
+     * which keeps every real case measured here and drops every false one.
+     */
+    .map((f) => {
+      if (!/^[\u0400-\u04FF]/.test(f)) return f;
+      const stem = f.replace(/[аяыиоеуёюь]$/i, '');
+      const letters = (stem.match(/[\u0400-\u04FF]/g) ?? []).length;
+      const room = letters <= 3 ? 1 : letters === 4 ? 2 : 3;
+      return `${stem}[\\u0430-\\u044F\\u0451]{0,${room}}`;
+    })
     .filter(Boolean);
   const body = `(?:${[...new Set(forms)].join('|')})`;
   /*

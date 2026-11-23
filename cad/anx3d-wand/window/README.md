@@ -4,6 +4,7 @@ The window pocket on the nozzle top already has a seat ledge (5 mm) and a snap g
 
 | File | What |
 |---|---|
+| `ANX3D_window_wide-113mm_PRINT_frame+window.3mf` | Ready-to-print plate: snap frame v5 (flush) + the 2 mm window plate, flat, two objects (window can get a clear filament). Preview `window_print_plates.png`. |
 | `ANX3D_window_perspex-2mm.dxf` / `.svg` | Perspex (acrylic) 2 mm window, 88.8 x 100.1 mm, 0.3 mm clearance to the pocket wall. For laser cutting. |
 | `ANX3D_window_perspex-2mm_TEMPLATE_A4_1to1.pdf` | Same outline on A4 at 1:1 (print at 100 %, check the 100 mm ruler). |
 | `ANX3D_window_perspex-2mm_STENCIL.3mf` | 2 mm printable stencil of the same outline (trace onto the perspex). |

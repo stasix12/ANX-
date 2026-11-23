@@ -559,6 +559,13 @@ export default function SettingsPage() {
                             <span className="tabular-nums text-mist-300" dir="ltr">{p.citiesTouched.toLocaleString('he-IL')}</span>{' '}
                             {t('ערים מתוך')}{' '}
                             <span className="tabular-nums text-mist-300" dir="ltr">{p.cities.toLocaleString('he-IL')}</span>
+                            {p.citiesRussian > 0 && (
+                              <>
+                                {' · '}
+                                <span className="tabular-nums text-mist-300" dir="ltr">{p.citiesRussian.toLocaleString('he-IL')}</span>{' '}
+                                {t('מהן גם ברוסית')}
+                              </>
+                            )}
                             {p.citiesDone > 0 && (
                               <>
                                 {' · '}
@@ -595,7 +602,15 @@ export default function SettingsPage() {
                                 ? t('כל התוכנית הושלמה — כל הערים וכל הנושאים נסרקו. לא יוצאים חיפושים חדשים.')
                                 : p.citiesTouched < p.cities
                                   ? t('כרגע: שם העיר לבדו, עיר אחר עיר, לכל הארץ. זה החיפוש הרחב ביותר לכל עיר.')
-                                  : t('כל הערים נסרקו פעם אחת. כרגע: עשרת החיפושים הצרים לכל עיר, לפי הסדר.')}
+                                  /* ROUND 1b HAS ITS OWN SENTENCE, because it is
+                                     a different language and he asked for it by
+                                     name. Saying "the ten narrow searches" while
+                                     the machine is working through Хайфа and
+                                     Ашдод would be the same class of wrong
+                                     answer the branches above exist to stop. */
+                                  : p.citiesRussian < p.russianCities
+                                    ? t('כל הערים נסרקו בעברית. כרגע: שם העיר ברוסית, לערים שיש להן שם רוסי.')
+                                    : t('כל הערים נסרקו פעם אחת. כרגע: עשרת החיפושים הצרים לכל עיר, לפי הסדר.')}
                           </p>
                         </>
                       );
@@ -604,7 +619,8 @@ export default function SettingsPage() {
                       <Notice tone="info">
                         התוכנה מחפשת, קוראת את התוצאות ורושמת אותן. היא לא מצטרפת לשום קבוצה, לא שולחת בקשות הצטרפות, לא כותבת ולא לוחצת
                         על כלום — בדיוק כמו חיפוש שאתם מקלידים במסך גילוי קבוצות. החיפושים יוצאים אחד בכל פעם, רק בזמן שאין פרסום שממתין,
-                        ומתחילים מהערים שאתם כבר מפרסמים בהן. אם השהיתם את התורים, פייסבוק הגבילה את הקצב, או משהו ממתין לטיפול — החיפוש
+                        ומתחילים מהערים שאתם כבר מפרסמים בהן. אחרי שכל הארץ נסרקה בעברית, אותן ערים נסרקות גם ברוסית — בשם העיר בקירילית,
+                        לערים שיש להן שם כזה. אם השהיתם את התורים, פייסבוק הגבילה את הקצב, או משהו ממתין לטיפול — החיפוש
                         האוטומטי ממתין גם הוא, גם אם הוא כבר נכנס לתור.
                       </Notice>
                     </div>

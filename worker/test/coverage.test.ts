@@ -43,6 +43,7 @@ import {
   COVERAGE_TOPICS,
   clampCoveragePerDay,
   coverageCities,
+  RUSSIAN_TOPIC,
   coverageGapLabel,
   coverageGapMs,
   coverageKey,
@@ -52,6 +53,8 @@ import {
   coverageTotal,
   detectTopic,
   nextCoverageStep,
+  russianCityName,
+  russianCoverageCities,
 } from '../../src/lib/social/coverage';
 import { regionOf } from '../../src/lib/social/cities';
 
@@ -147,6 +150,52 @@ eq(nextCoverageStep([coverageKey('ערד', COVERAGE_TOPICS[0].id)], mine)?.phras
   const progress = coverageProgress(done, mine);
   eq(progress.citiesTouched, cities.length, 'so every city in the country has been read once');
   eq(progress.citiesDone, 0, 'and none of them is finished yet, which the screen says separately');
+  /*
+   * ─── AND THEN THE SAME COUNTRY AGAIN, IN RUSSIAN ───────────────────────
+   *
+   * "שיחפש לי גם קבוצות ברוסית לפי ערים" — 23.11.2026.
+   *
+   * Round 1b comes BEFORE the Hebrew depth, and that is the decision this
+   * block exists to pin. A Russian search reaches groups no Hebrew phrase can
+   * return — the largest Russian-language Haifa group is named "Хайфа" and
+   * nothing else — while the ten narrow Hebrew topics mostly re-find what the
+   * broad round already brought back. 161 steps against the 4,130 it delays.
+   */
+  const ru = nextCoverageStep(done, mine);
+  eq(ru?.city, 'ערד', 'round 1b starts back at the first city');
+  eq(ru?.topic.id, RUSSIAN_TOPIC.id, 'and it is the Russian round, not the Hebrew depth');
+  eq(ru?.phrase, 'Арад', 'whose phrase is the city name in Cyrillic, and nothing else');
+  is(RUSSIAN_TOPIC.word === '', 'the Russian topic carries no word, so nothing is filed under it');
+  is(!COVERAGE_TOPICS.some((t) => t.id === RUSSIAN_TOPIC.id),
+    'and it is NOT in COVERAGE_TOPICS — `[broad, ...narrow]` would bury it inside round 2');
+
+  /* Walk the whole of round 1b, then check the depth begins. */
+  const ruCities = russianCoverageCities(mine);
+  const ruPhrases: string[] = [];
+  for (let i = 0; i < ruCities.length; i += 1) {
+    const step = nextCoverageStep(done, mine);
+    if (!step || step.topic.id !== RUSSIAN_TOPIC.id) break;
+    done.push(step.key);
+    ruPhrases.push(step.phrase);
+  }
+  eq(ruPhrases.length, ruCities.length, 'round 1b is exactly one search per city that HAS a Russian name');
+  is(ruCities.length < cities.length, `and that is fewer cities than the country — ${ruCities.length} of ${cities.length}`);
+  is(ruPhrases.every((p) => /^[\u0400-\u04FF]/.test(p)), 'every phrase in it is Cyrillic');
+  is(ruPhrases.every((p) => !/[\u0590-\u05FF]/.test(p)), 'and none of them carries a Hebrew letter — a mixed phrase matches nothing');
+  eq([...new Set(ruPhrases)].length, ruPhrases.length, 'each city once here too');
+  /* NO MARKER FOR A CITY WITH NO RUSSIAN NAME: a spelling added later simply
+     joins the round, instead of finding its step already spent. */
+  for (const city of cities) {
+    if (russianCityName(city)) continue;
+    is(!done.includes(coverageKey(city, RUSSIAN_TOPIC.id)),
+      `${city} has no Russian name, so no step was written off for it`);
+    break;
+  }
+  const afterRu = coverageProgress(done, mine);
+  eq(afterRu.citiesRussian, ruCities.length, 'the screen can say how many were searched in Russian');
+  eq(afterRu.russianCities, ruCities.length, 'out of how many have a Russian name at all');
+  eq(afterRu.citiesDone, 0, 'and still none is FINISHED — the depth has not started');
+
   /* AND ONLY THEN the depth begins, at the first city. */
   const next = nextCoverageStep(done, mine);
   eq(next?.city, 'ערד', 'round 2 starts back at the first city');
@@ -154,15 +203,70 @@ eq(nextCoverageStep([coverageKey('ערד', COVERAGE_TOPICS[0].id)], mine)?.phras
 }
 const aradDone = COVERAGE_TOPICS.map((t) => coverageKey('ערד', t.id));
 
-eq(coverageTotal(mine), cities.length * COVERAGE_TOPICS.length, 'the plan is every city times every phrase');
+/*
+ * A SUM OVER THE ROUNDS, NOT A PRODUCT. It was `cities × topics`, which was
+ * right while every city had the same number of phrases. Round 1b runs only
+ * for the 161 cities that HAVE a Cyrillic name, so a product either
+ * over-counts by 252 — and then `done >= total` never holds and the
+ * "כל התוכנית הושלמה" line on the settings screen never fires — or leaves the
+ * Russian round out of the owner's progress line altogether.
+ */
+eq(coverageTotal(mine), cities.length * COVERAGE_TOPICS.length + russianCoverageCities(mine).length,
+  'the plan is every city times every Hebrew phrase, PLUS one Russian search per city that has a Russian name');
+is(coverageTotal(mine) > cities.length * COVERAGE_TOPICS.length, 'which is more than it was before the Russian round');
+/* AND THE COMPLETION LINE CAN ACTUALLY FIRE. Walk the whole plan and check
+   the cursor reaches the total exactly — not one short, not one over. */
+{
+  const all: string[] = [];
+  for (let i = 0; i < 6000; i += 1) {
+    const step = nextCoverageStep(all, mine);
+    if (!step) break;
+    all.push(step.key);
+  }
+  eq(all.length, coverageTotal(mine), 'the walk ends exactly on the total, so the plan can be finished');
+  const end = coverageProgress(all, mine);
+  eq(end.done, end.total, 'and the progress line agrees, which is what the completion sentence reads');
+  eq(end.citiesDone, cities.length, 'every city counts as finished, including the 252 with no Russian name');
+  eq(end.citiesRussian, end.russianCities, 'and the Russian round is complete');
+  is(nextCoverageStep(all, mine) === null, 'and nothing more is offered');
+}
+/*
+ * ─── AND "FINISHED" MEANS EVERY PHRASE THAT CITY ACTUALLY HAS ────────────
+ *
+ * Arad has a Russian name, so eleven Hebrew phrases are no longer all of its
+ * plan. Counting it done at eleven would tell the owner a city was covered
+ * while its Russian search was still outstanding — and counting a city that
+ * has NO Russian name as unfinished for ever would stop the completion line
+ * from ever firing. Both halves are pinned here.
+ */
 const aradProgress = coverageProgress(aradDone, mine);
-eq(aradProgress.citiesDone, 1, 'a city counts as covered only when all eleven of its phrases have run');
+eq(aradProgress.citiesDone, 0, 'eleven Hebrew phrases do NOT finish a city that also has a Russian name');
+is(russianCityName('ערד') === 'Арад', 'and Arad is such a city');
+const aradAll = [...aradDone, coverageKey('ערד', RUSSIAN_TOPIC.id)];
+eq(coverageProgress(aradAll, mine).citiesDone, 1, 'with the Russian search too, it is covered');
+/* A city with no Russian name is finished by its eleven alone. */
+{
+  const noRu = coverageCities(mine).find((c) => !russianCityName(c));
+  is(Boolean(noRu), 'the country really does hold cities with no Russian name');
+  const keys = COVERAGE_TOPICS.map((t) => coverageKey(noRu as string, t.id));
+  eq(coverageProgress(keys, mine).citiesDone, 1,
+    `${noRu} has no Russian name, so its eleven Hebrew phrases finish it`);
+}
 eq(aradProgress.citiesTouched, 1, 'and as touched once its broad page has been read');
 eq(aradProgress.done, COVERAGE_TOPICS.length, 'and the step count is the cursor itself');
 /* THE PLAN ENDS. A cursor that can never finish is a machine that searches
    for ever. */
-const everything = cities.flatMap((c) => COVERAGE_TOPICS.map((t) => coverageKey(c, t.id)));
+const everything = [
+  ...cities.flatMap((c) => COVERAGE_TOPICS.map((t) => coverageKey(c, t.id))),
+  /* …including the Russian round, for the cities that have one. Without this
+     the walk still has 161 steps left, which is the point: the plan grew. */
+  ...russianCoverageCities(mine).map((c) => coverageKey(c, RUSSIAN_TOPIC.id)),
+];
 eq(nextCoverageStep(everything, mine), null, 'when every phrase has run, there is no next step');
+/* AND THE HEBREW PHRASES ALONE ARE NOT EVERY PHRASE ANY MORE. */
+const hebrewOnly = cities.flatMap((c) => COVERAGE_TOPICS.map((t) => coverageKey(c, t.id)));
+eq(nextCoverageStep(hebrewOnly, mine)?.topic.id, RUSSIAN_TOPIC.id,
+  'with only the Hebrew plan spent, what is left is the Russian round');
 
 /* ═══════════════ §2 A PHRASE IS A PHRASE ════════════════════════════════ */
 /*
@@ -433,6 +537,22 @@ is(card.includes('לא שולחת בקשות הצטרפות'), 'and sends no joi
 is(/COVERAGE_PER_DAY_MIN/.test(settings) && /COVERAGE_PER_DAY_MAX/.test(settings), 'the pace field is bounded on the screen too');
 is(/getCoverage\(\)/.test(settings), 'and the screen reads the real stored value rather than guessing');
 is(/coverageProgress/.test(settings), 'and shows how far the plan has got');
+/*
+ * ─── AND THE SCREEN KNOWS THE RUSSIAN ROUND EXISTS ───────────────────────
+ *
+ * The "כרגע" line is a claim about what the machine is doing at this moment.
+ * While it works through Хайфа and Ашдод, saying "the ten narrow searches"
+ * is the same class of wrong answer as the branches that were added when the
+ * line claimed a switched-off plan was running.
+ */
+is(/p\.citiesRussian < p\.russianCities/.test(settings), 'the "כרגע" line has a branch for the Russian round');
+is(/כל הערים נסרקו בעברית\. כרגע: שם העיר ברוסית/.test(settings), 'which says, in his words, what it is doing');
+is(/מהן גם ברוסית/.test(settings), 'and the counter says how many cities were searched in Russian');
+/* Every one of those sentences has a Russian of its own — the screen the
+   feature is about must itself be readable in the language it searches in. */
+for (const line of ['מהן גם ברוסית', 'כל הערים נסרקו בעברית. כרגע: שם העיר ברוסית, לערים שיש להן שם רוסי.']) {
+  is(code('src/lib/social/i18n.ts').includes(`'${line}':`), `"${line.slice(0, 24)}" is translated`);
+}
 
 /* ═══════════════ §8 WHAT ONE SEARCH IS WORTH ════════════════════════════ */
 /*

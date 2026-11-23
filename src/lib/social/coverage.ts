@@ -46,6 +46,7 @@
  * account doing the searching is the one his business publishes from.
  */
 import { ALL_CITIES, OTHER_CITY, regionOf } from './cities';
+import { CITY_SPELLINGS } from './cities-data';
 
 /** One kind of group, as a phrase that really opens their names. */
 export interface CoverageTopic {
@@ -54,6 +55,14 @@ export interface CoverageTopic {
   word: string;
   /** Other spellings of the same thing, for reading a name. */
   also?: readonly string[];
+  /**
+   * The phrase is the city's RUSSIAN name, not the Hebrew one.
+   *
+   * coveragePhrase() substitutes a different name-form for these; see
+   * RUSSIAN_TOPIC and russianCityName(). A topic with no `word` and no `ru`
+   * is the Hebrew bare name.
+   */
+  ru?: boolean;
 }
 
 /**
@@ -90,8 +99,59 @@ export const COVERAGE_TOPICS: readonly CoverageTopic[] = [
   { id: 'הורים', word: 'הורים', also: ['גן ילדים', 'חוגים'] },
 ];
 
-/** The phrase the machine will search: "יד שנייה באר שבע". */
+/**
+ * ─── כיסוי ארצי ברוסית — שם העיר בקירילית, ותו לא ────────────────────────
+ *
+ * "שיחפש לי גם קבוצות ברוסית לפי ערים" — 23.11.2026.
+ *
+ * ONE PHRASE, AND IT IS THE CITY'S OWN NAME. Sixteen agents researched the
+ * Russian topic words — объявления, работа, квартиры, барахолка, отдам даром,
+ * обо всём — and the critics killed most of them: a facebook.com-restricted
+ * search for "Отдам даром" Израиль returns Kramatorsk, Yaroslavl, Moscow and
+ * Khanty-Mansiysk and nothing Israeli, and the same for Барахолка. What
+ * survived all three independent tracks is the bare name: the largest
+ * Russian-language Haifa group is called simply "Хайфа", about fifty thousand
+ * members.
+ *
+ * AND THE WORD ORDER IS WHY THE REST WAITS. Russian is not Hebrew here:
+ * "Работа в Араде" and "Квартиры в Хайфе" need a preposition and an inflected
+ * city, and "Арад - обо всём" needs the city FIRST — `${word} ${city}` cannot
+ * produce any of them, and "обо всём Арад" is a phrase nobody writes. A topic
+ * word added to this table before the builder understands case would spend 161
+ * unrepeatable searches on phrases that match nothing. So the narrow Russian
+ * topics are a separate piece of work, after this round shows what it returns.
+ *
+ * IT IS DELIBERATELY NOT IN COVERAGE_TOPICS. nextCoverageStep destructures
+ * that array as `[broad, ...narrow]`, so an eleventh entry would be buried
+ * inside round 2 — behind 413 Hebrew searches and then city by city — which is
+ * the opposite of what a broad sweep is for.
+ */
+export const RUSSIAN_TOPIC: CoverageTopic = { id: 'העיר ברוסית', word: '', ru: true };
+
+/**
+ * The Cyrillic name this product will search for, or '' if it has none.
+ *
+ * THE FIRST CYRILLIC FORM, AND THE ORDER IN THE DATA IS THE ANSWER. Several
+ * rows carry more than one — נתניה has Нетания, Нетанья and Натания — and the
+ * one real groups are named with is written FIRST, deliberately, by the
+ * 23.11.2026 audit. One search per city, not three.
+ *
+ * A form in RU_DO_NOT_DETECT is still searched: that list is about READING a
+ * name back, which is a different risk. See its note in cities-data.ts.
+ */
+export function russianCityName(city: string): string {
+  for (const form of CITY_SPELLINGS[city] ?? []) if (/^[\u0400-\u04FF]/.test(form)) return form;
+  return '';
+}
+
+/** Every city this product can search for in Russian, in the plan's order. */
+export function russianCoverageCities(mine: readonly string[] = []): string[] {
+  return coverageCities(mine).filter((c) => russianCityName(c) !== '');
+}
+
+/** The phrase the machine will search: "יד שנייה באר שבע", or "Хайфа". */
 export function coveragePhrase(city: string, topic: CoverageTopic): string {
+  if (topic.ru) return russianCityName(city);
   return `${topic.word} ${city}`.trim();
 }
 
@@ -182,6 +242,31 @@ export function nextCoverageStep(
     return { city, topic: broad, phrase: coveragePhrase(city, broad), key };
   }
 
+  /*
+   * ─── ROUND 1b: THE COUNTRY AGAIN, IN RUSSIAN ──────────────────────────
+   *
+   * "שיחפש לי גם קבוצות ברוסית לפי ערים."
+   *
+   * BEFORE the Hebrew depth, and that is the whole decision. A Russian search
+   * reaches a population of groups no Hebrew phrase will ever return — the
+   * largest Russian-language Haifa group is named "Хайфа" and nothing else,
+   * so "חיפה" cannot find it at any depth. The ten narrow Hebrew topics, by
+   * contrast, mostly re-find groups the broad round already brought back.
+   * Breadth before depth is the rule this file already follows; a second
+   * language is the broadest breadth there is.
+   *
+   * It costs 161 steps rather than 413 — only the cities that HAVE a Cyrillic
+   * name are searched, and no marker is written for the ones that do not, so
+   * a spelling added later simply joins the round. At the ceiling that is 2.2
+   * days; the Hebrew depth it delays is 4,130 steps, i.e. 57 days.
+   */
+  for (const city of cities) {
+    if (!russianCityName(city)) continue;
+    const key = coverageKey(city, RUSSIAN_TOPIC.id);
+    if (finished.has(key)) continue;
+    return { city, topic: RUSSIAN_TOPIC, phrase: coveragePhrase(city, RUSSIAN_TOPIC), key };
+  }
+
   /* Round 2: the depth, city by city. */
   for (const city of cities) {
     for (const topic of narrow) {
@@ -193,9 +278,18 @@ export function nextCoverageStep(
   return null;
 }
 
-/** How many steps the plan holds in total, for an honest progress line. */
+/**
+ * How many steps the plan holds in total, for an honest progress line.
+ *
+ * A SUM OVER THE ROUNDS, NOT A PRODUCT. It was `cities × topics`, which was
+ * right while every city had the same number of phrases. Round 1b runs only
+ * for the cities that have a Cyrillic name — 161 of 413 — so a product either
+ * over-counts by 252 (and the "כל התוכנית הושלמה" line never fires) or
+ * under-counts by the whole Russian round.
+ */
 export function coverageTotal(mine: readonly string[] = []): number {
-  return coverageCities(mine).length * COVERAGE_TOPICS.length;
+  const cities = coverageCities(mine);
+  return cities.length * COVERAGE_TOPICS.length + russianCoverageCities(mine).length;
 }
 
 /**
@@ -325,6 +419,10 @@ export function coverageProgress(done: readonly string[], mine: readonly string[
   citiesTouched: number;
   /** Cities whose eleven phrases have all run — round 2. */
   citiesDone: number;
+  /** Cities whose Russian name has been searched — round 1b. */
+  citiesRussian: number;
+  /** Cities that HAVE a Russian name at all, which is the round's size. */
+  russianCities: number;
 } {
   const cities = coverageCities(mine);
   const finished = new Set(done);
@@ -337,16 +435,31 @@ export function coverageProgress(done: readonly string[], mine: readonly string[
    */
   let citiesTouched = 0;
   let citiesDone = 0;
+  let citiesRussian = 0;
+  let russianCities = 0;
   for (const city of cities) {
     if (finished.has(coverageKey(city, COVERAGE_TOPICS[0].id))) citiesTouched += 1;
-    if (COVERAGE_TOPICS.every((t) => finished.has(coverageKey(city, t.id)))) citiesDone += 1;
+    /*
+     * EVERY TOPIC THIS CITY ACTUALLY HAS — not every topic there is. A city
+     * with no Cyrillic name has no round-1b step, so requiring one would hold
+     * 252 cities at "not finished" for ever and the completion line would
+     * never fire.
+     */
+    const hasRu = russianCityName(city) !== '';
+    if (hasRu) russianCities += 1;
+    if (hasRu && finished.has(coverageKey(city, RUSSIAN_TOPIC.id))) citiesRussian += 1;
+    const topicsHere = hasRu ? [...COVERAGE_TOPICS, RUSSIAN_TOPIC] : COVERAGE_TOPICS;
+    if (topicsHere.every((t) => finished.has(coverageKey(city, t.id)))) citiesDone += 1;
   }
   return {
     done: finished.size,
-    total: cities.length * COVERAGE_TOPICS.length,
+    /* Summed from the lists already in hand, not by re-resolving the plan. */
+    total: cities.length * COVERAGE_TOPICS.length + russianCities,
     cities: cities.length,
     citiesTouched,
     citiesDone,
+    citiesRussian,
+    russianCities,
   };
 }
 

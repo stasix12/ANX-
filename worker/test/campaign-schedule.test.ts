@@ -975,6 +975,33 @@ function ch(v: number): number {
     "the collapsed card's hour chip resolves through shownSchedule, so it cannot disagree with the panel inside the same card",
   );
   is(!/schedule\.start === '00:00'/.test(card), 'and it compares against DAY_OPENS rather than a second copy of midnight');
+
+  /*
+   * ─── AND THE DASHBOARD PANEL, WHICH WAS THE LAST SURFACE ───────────────
+   *
+   * "אני מגדיר שעת הפעלה של הקמפיין ל 11:00 אבל בעמוד הראשי שעת התחלה
+   *  מראה 0:00" — 23.11.2026. The THIRD report of this one desync: first the
+   * campaigns screen against the dashboard, then the collapsed chip against
+   * its own panel, now the panel's number against the sentence directly
+   * under it.
+   *
+   * Each earlier fix treated the surface in front of it. This one is pinned
+   * by shape rather than by place: a field headed "שעת התחלה" must not
+   * present the fabricated constant as the hour, and the heading is where
+   * the answer goes because <input type="time"> cannot render words and
+   * replacing it would cost the picker what schedule-panel.test.ts measures.
+   */
+  const panel = readFileSync(new URL('../../src/components/social/CampaignSchedulePanel.tsx', import.meta.url), 'utf8');
+  is(/\{t\('שעת התחלה'\)\}\s*\n\s*\{publishesAlways\(schedule\) && \(/.test(panel),
+    'the dashboard panel says "כל היום" beside the heading when no hour was ever chosen');
+  is(/<span className="font-bold text-mist-300">\{t\('כל היום'\)\}<\/span>/.test(panel),
+    'in the same words the collapsed card uses, so the two cannot drift apart again');
+  /* The sentence under it stays — the two say the same thing twice, on
+     purpose, because he read the number and not the sentence. */
+  is(/publishesAlways\(schedule\) \? t\('אין הגבלת שעה/.test(panel),
+    'and the sentence that was the previous fix is still there');
+  /* NOT a second copy of midnight, here either. */
+  is(!/start === '00:00'/.test(panel), 'the panel compares through publishesAlways, never against a literal midnight');
 }
 
 console.log(`campaign schedule tests OK — ${checks} assertions`);

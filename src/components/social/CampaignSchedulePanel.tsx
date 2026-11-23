@@ -557,7 +557,42 @@ export function CampaignSchedulePanel({
             <ClockIcon className="h-3.5 w-3.5 text-brand-400" />
           </span>
           <span className="min-w-0 grow">
-            <span className="block text-[12.5px] font-extrabold leading-4 text-mist-100">{t('שעת התחלה')}</span>
+            {/*
+              ─── AND THE VALUE SAYS IT TOO, NOT ONLY THE SENTENCE ──────────
+              *
+              * "אני מגדיר שעת הפעלה של הקמפיין ל 11:00 אבל בעמוד הראשי שעת
+              *  התחלה מראה 0:00" — 23.11.2026, with a screenshot of each.
+              *
+              * The fix below this one, in November, changed the SENTENCE so
+              * it stopped claiming "הסבב פותח בשעה הזו" over a round that
+              * opens at no such hour. It left the number. And the number is
+              * what a field called "שעת התחלה" is read by: he read 0:00 as a
+              * setting, could not find where he had made it, and reported the
+              * same desync a second time.
+              *
+              * The number is fabricated. shownSchedule() substitutes
+              * DAY_OPENS for the stored hour whenever the window is off
+              * (campaign-schedule.ts:1188), purely so this picker has a value
+              * to render. CampaignCard already prints 'כל היום' instead of
+              * that constant, for this exact reason and after this exact
+              * complaint one card earlier — "שעת ההתחלה של קמפיינים במסך
+              * קמפיינים לא מסונכרן עם העמוד הראשי". The dashboard panel was
+              * the last surface still showing the bare constant.
+              *
+              * The <input type="time"> cannot render words, and replacing it
+              * would cost the picker campaign-card.test.ts hit-tests. So the
+              * heading carries the answer, where it is read first and where
+              * CampaignCard puts it.
+              */}
+            <span className="block text-[12.5px] font-extrabold leading-4 text-mist-100">
+              {t('שעת התחלה')}
+              {publishesAlways(schedule) && (
+                <>
+                  {' · '}
+                  <span className="font-bold text-mist-300">{t('כל היום')}</span>
+                </>
+              )}
+            </span>
             {/*
               ─── AND IT ONLY CLAIMS AN OPENING HOUR WHEN THERE IS ONE ───────
               *

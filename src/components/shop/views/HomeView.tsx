@@ -188,10 +188,9 @@ export function ShopFooter() {
           </ul>
         </div>
         <div>
-          <p className="mb-3 font-bold">החשבון שלי</p>
+          <p className="mb-3 font-bold">קניות</p>
           <ul className="space-y-2 text-x-muted">
-            <li><Link href="/shop/account" className="hover:text-x-blue">אזור אישי</Link></li>
-            <li><Link href="/shop/account/orders" className="hover:text-x-blue">ההזמנות שלי</Link></li>
+            <li><Link href="/shop/cart" className="hover:text-x-blue">עגלת קניות</Link></li>
             <li><Link href="/shop/favorites" className="hover:text-x-blue">מועדפים</Link></li>
           </ul>
         </div>

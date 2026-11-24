@@ -236,15 +236,6 @@ export function CheckoutView() {
                     שמירת הכתובת בחשבון שלי
                   </label>
                 )}
-                {!user && (
-                  <p className="rounded-2xl bg-x-soft px-4 py-3 text-[13px] text-x-muted">
-                    יש לך חשבון?{' '}
-                    <Link href="/shop/login?next=/shop/checkout" className="font-bold text-x-blue">
-                      התחברות
-                    </Link>{' '}
-                    לשמירת ההזמנה וכתובות. אפשר גם להמשיך כאורח.
-                  </p>
-                )}
                 <button type="submit" className={`${btn.primary} mt-3 h-14 w-full text-[18px]`}>
                   המשך לתשלום
                 </button>

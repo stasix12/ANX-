@@ -173,16 +173,16 @@ export function TrackWithParams() {
 export function TrackOrder({ id }: { id: string | null }) {
   const s = useShop();
   const order = id ? s.db.orders.find((o) => o.id === id) : undefined;
-  if (!s.ready) return <ShopFrame nav="profile" back="/shop/account/orders">{null}</ShopFrame>;
+  if (!s.ready) return <ShopFrame nav="home" back="/">{null}</ShopFrame>;
   if (!order) {
     return (
-      <ShopFrame nav="profile" back="/shop/account/orders">
-        <EmptyState icon={<IconOrders size={34} />} title="ההזמנה לא נמצאה" action={{ label: 'להזמנות שלי', href: '/shop/account/orders' }} />
+      <ShopFrame nav="home" back="/">
+        <EmptyState icon={<IconOrders size={34} />} title="ההזמנה לא נמצאה" action={{ label: 'לדף הבית', href: '/' }} />
       </ShopFrame>
     );
   }
   return (
-    <ShopFrame nav="profile" back="/shop/account/orders">
+    <ShopFrame nav="home" back="/">
       <div className="mx-auto max-w-2xl px-4 lg:pt-8">
         <OrderDetail order={order} />
       </div>

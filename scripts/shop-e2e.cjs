@@ -147,26 +147,17 @@ const assert = (c, m) => { if (!c) throw new Error('ASSERT: ' + m); console.log(
   await go('/shop/order?id=nonexistent');
   assert((await page.getByText('ההזמנה לא נמצאה').count()) > 0, 'fake order id shows no success');
 
-  console.log('11 account');
-  await go('/shop/account');
-  await page.waitForURL('**/shop/login**');
-  await page.getByRole('tab', { name: 'הרשמה' }).click();
-  await page.getByPlaceholder('שם מלא').fill('סטס');
-  await page.getByPlaceholder('אימייל').fill('stas@example.com');
-  await page.getByPlaceholder(/סיסמה/).fill('password123');
-  await page.getByRole('button', { name: 'יצירת חשבון' }).click();
-  await page.waitForURL('**/shop/account');
-  await shot('11-account');
-  await page.getByRole('button', { name: 'התנתק' }).click();
-  await page.waitForURL(BASE + '/');
+  console.log('11 no customer accounts');
+  assert((await page.request.get(BASE + '/shop/account')).status() === 404, 'account page removed');
+  await go('/');
+  assert((await page.getByRole('link', { name: 'פרופיל' }).count()) === 0, 'no profile entry in nav');
 
   console.log('admin');
   await go('/shop/login');
   await page.getByPlaceholder('אימייל').fill('admin@anx3d.demo');
   await page.getByPlaceholder('סיסמה').fill('anx3d-admin');
   await page.getByRole('button', { name: 'התחברות', exact: true }).last().click();
-  await page.waitForURL('**/shop/account');
-  await go('/shop/admin');
+  await page.waitForURL('**/shop/admin');
   await shot('12-admin');
   await page.getByRole('button', { name: '+ מוצר חדש' }).click();
   await page.locator('label:has-text("שם המוצר") input').fill('מתאם בדיקה');

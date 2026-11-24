@@ -16,7 +16,6 @@ import {
   IconHome,
   IconMenu,
   IconSearch,
-  IconUser,
 } from './icons';
 import { Logo } from './Logo';
 import { Toaster } from './ui';
@@ -67,7 +66,6 @@ export function ShopHeader({
   const router = useRouter();
   const pathname = usePathname();
   const count = useCartCount();
-  const user = useCurrentUser();
   // Only the dark pages (course, order result) keep a dark bar; the rest use the
   // light card header from the home design.
   const dark = tone === 'dark';
@@ -168,9 +166,6 @@ export function ShopHeader({
           <Link href="/shop/favorites" aria-label="מועדפים" className={dark ? 'grid size-11 place-items-center rounded-full hover:bg-white/10' : `${tile} size-11!`}>
             <IconHeart size={24} />
           </Link>
-          <Link href={user ? '/shop/account' : '/shop/login'} aria-label="פרופיל" className={dark ? 'grid size-11 place-items-center rounded-full hover:bg-white/10' : `${tile} size-11!`}>
-            <IconUser size={24} />
-          </Link>
           <Link href="/shop/cart" aria-label={`עגלת קניות, ${count} פריטים`} className={dark ? 'relative grid size-11 place-items-center rounded-full hover:bg-white/10' : `relative ${tile} size-11!`}>
             {dark ? (
               <span className="relative">
@@ -192,24 +187,22 @@ export function ShopHeader({
 
 /* ----------------------------------------------------------- bottom nav */
 
-export type NavKey = 'home' | 'categories' | 'favorites' | 'cart' | 'profile';
+export type NavKey = 'home' | 'categories' | 'favorites' | 'cart';
 
 export function BottomNav({ active }: { active?: NavKey }) {
   const count = useCartCount();
-  const user = useCurrentUser();
   const items: { key: NavKey; href: string; label: string; Icon: typeof IconHome }[] = [
     { key: 'home', href: '/', label: 'בית', Icon: IconHome },
     { key: 'categories', href: '/shop/categories', label: 'קטגוריות', Icon: IconGrid },
     { key: 'favorites', href: '/shop/favorites', label: 'מועדפים', Icon: IconHeart },
     { key: 'cart', href: '/shop/cart', label: 'עגלה', Icon: IconCart },
-    { key: 'profile', href: user ? '/shop/account' : '/shop/login', label: 'פרופיל', Icon: IconUser },
   ];
   return (
     <nav
       aria-label="ניווט תחתון"
       className="fixed inset-x-0 bottom-0 z-40 rounded-t-[22px] border-t border-x-line/70 bg-white/97 pb-[env(safe-area-inset-bottom)] shadow-[0_-6px_24px_rgb(15_17_21/0.06)] backdrop-blur-md lg:hidden"
     >
-      <ul dir="ltr" className="mx-auto grid h-[66px] max-w-3xl grid-cols-5 px-2">
+      <ul dir="ltr" className="mx-auto grid h-[66px] max-w-3xl grid-cols-4 px-2">
         {items.map(({ key, href, label, Icon }) => {
           const on = key === active;
           return (

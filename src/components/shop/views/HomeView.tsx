@@ -42,16 +42,16 @@ export function HomeView() {
               <span className="h-[3px] w-6 shrink-0 rounded-full bg-[#1f45ff] lg:w-10" />
               <Logo upright className="shrink-0 text-[18px] tracking-[-0.02em] lg:text-[28px]" />
               <span aria-hidden="true" className="h-4 w-px shrink-0 bg-[#0d1b4c]/40 lg:h-6" />
-              <span dir="rtl" className="text-[10.5px] leading-tight font-bold text-[#0d1b4c] [text-shadow:0_0_4px_#fff,0_0_8px_#fff,0_0_2px_#fff] lg:text-[15px]">
+              <span dir="rtl" className="text-[10.75px] leading-tight font-bold text-[#0d1b4c] [text-shadow:0_0_4px_#fff,0_0_8px_#fff,0_0_2px_#fff] lg:text-[15px]">
                 נוצר על ידי מנקי ספות בשביל מנקי ספות
               </span>
             </p>
-            <h1 dir="rtl" className="mt-1 text-left text-[26px] leading-[1.06] font-black lg:mt-3 lg:text-[54px] lg:leading-[1.1]">
+            <h1 dir="rtl" className="mt-0.5 text-left text-[25.5px] leading-[1.03] font-black lg:mt-3 lg:text-[54px] lg:leading-[1.1]">
               <span className="text-[#0a1640]">הדור הבא של</span>
               <br />
-              <span className="text-[#1f45ff]">ציוד הניקוי המקצועי</span>
+              <span className="text-[#0a2cff]">ציוד הניקוי המקצועי</span>
             </h1>
-            <p dir="rtl" className="mt-1 text-left text-[14px] leading-[1.28] font-semibold text-[#14234f] lg:mt-4 lg:text-lg lg:leading-[1.5]">
+            <p dir="rtl" className="mt-1.5 text-left text-[13.4px] leading-[1.38] font-semibold text-[#14234f] lg:mt-4 lg:text-lg lg:leading-[1.5]">
               אביזרים חדשניים לניקוי ספות ושטיחים,
               <br />
               המיוצרים בטכנולוגיית הדפסת תלת־ממד.
@@ -59,7 +59,7 @@ export function HomeView() {
             <Link
               href="/shop/c/all"
               dir="rtl"
-              className="relative mt-2 inline-flex h-[30px] items-center gap-2.5 rounded-full bg-linear-to-r from-[#2a4dff] to-[#1736e6] px-[20px] text-[14.5px] font-extrabold text-white shadow-[0_5px_14px_rgb(31_69_255/0.35)] transition after:absolute after:inset-x-0 after:-inset-y-[7px] after:content-[''] hover:brightness-110 lg:mt-6 lg:h-14 lg:px-9 lg:text-lg"
+              className="relative mt-[7px] inline-flex h-[30px] items-center gap-2 rounded-full bg-[#041cfc] px-[15px] text-[14.5px] font-extrabold text-white shadow-[0_5px_14px_rgb(4_28_252/0.35)] transition after:absolute after:inset-x-0 after:-inset-y-[7px] after:content-[''] hover:brightness-110 lg:mt-6 lg:h-14 lg:px-9 lg:text-lg"
             >
               לצפייה במוצרים
               <IconArrow dir="right" size={16} />
@@ -67,14 +67,14 @@ export function HomeView() {
           </div>
 
           {/* Benefits row */}
-          <ul dir="ltr" className="mt-2.5 grid grid-cols-3 lg:mt-14 lg:mr-auto lg:max-w-xl">
+          <ul dir="ltr" className="mt-[10px] grid grid-cols-3 lg:mt-14 lg:mr-auto lg:max-w-xl">
             {[
               { Icon: IconShield, title: 'עמידות גבוהה', text: 'בשימוש יומיומי' },
               { Icon: IconCog, title: 'עיצוב ארגונומי', text: 'נוחות מקסימלית' },
               { Icon: IconBox, title: 'הדפסת תלת־ממד', text: 'פתרונות מותאמים' },
             ].map(({ Icon, title, text }) => (
               <li key={title} dir="rtl" className="flex flex-col items-center text-center">
-                <span className="grid size-[29px] place-items-center rounded-full border-[1.5px] border-[#1f45ff] bg-white/70 text-[#1f45ff] lg:size-12">
+                <span className="grid size-[29px] place-items-center rounded-full border-[1.5px] border-[#0a3cfd] bg-white/70 text-[#0a3cfd] lg:size-12">
                   <Icon size={16} />
                 </span>
                 <span className="mt-1 text-[11px] leading-[14px] font-extrabold text-[#0a1640] lg:text-[15px]">{title}</span>

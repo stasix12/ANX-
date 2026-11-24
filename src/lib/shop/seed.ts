@@ -80,7 +80,7 @@ export const SEED_PRODUCTS: Product[] = [
     name: 'ANACONDA',
     subtitle: 'ידית מקצועית לניקוי ספות',
     description:
-      'ANX ANACONDA היא ידית השאיבה שלנו לניקוי ספות וריפודים. הגוף מיוצר בישראל מחומרים חזקים ועמידים במיוחד לחום ולשחיקה של עבודה יומיומית, עם אטם קצף היקפי סביב פתח השאיבה שנצמד לבד ושומר על ואקום מלא לאורך המשיכה. ההדק מאפשר לשלוט בהתזה תוך כדי עבודה בלי להוריד את היד מהידית, והחיבור המהיר בבסיס מתחבר ומתנתק בלי כלים.',
+      'ANX ANACONDA היא ידית השאיבה שלנו לניקוי ספות וריפודים. הגוף מיוצר בישראל מחומרים חזקים ועמידים במיוחד לחום ולשחיקה של עבודה יומיומית. ההדק מאפשר לשלוט בהתזה תוך כדי עבודה בלי להוריד את היד מהידית, והחיבור המהיר בבסיס מתחבר ומתנתק בלי כלים.',
     categories: ['handles'],
     price: 850,
     images: [...anacondaBlack, ...anacondaGreen],
@@ -94,14 +94,12 @@ export const SEED_PRODUCTS: Product[] = [
       'צורה ארגונומית שמותאמת לשעות ארוכות של עבודה',
       'גוף עמיד לחום ולשחיקה, מיוצר בישראל',
       'מתחברת בקלות לכל מכונות Sabrina — מיני ומקסי',
-      'אטם קצף היקפי סביב פתח השאיבה — ואקום מלא לאורך כל המשיכה',
       'הדק לשליטה בהתזה תוך כדי עבודה, בלי להוריד את היד מהידית',
       'חיבור מהיר — מתחברת ומתנתקת בלי כלים',
     ],
     specs: [
       { label: 'צבעים', value: 'Black galaxy · Green jungle' },
       { label: 'ייצור', value: 'מיוצר בישראל · עמיד לחום ולשחיקה' },
-      { label: 'אטימה', value: 'אטם קצף היקפי' },
       { label: 'שליטה', value: 'הדק התזה מובנה' },
       { label: 'אחיזה', value: '3 מצבי אחיזה · צורה ארגונומית' },
       { label: 'תאימות', value: 'Sabrina Mini · Sabrina Maxi' },
@@ -639,7 +637,7 @@ const DEMO_ADMIN: User = {
 };
 
 /** Bumped when the seed changes shape, so browsers drop the old demo catalogue. */
-export const DB_VERSION = 37;
+export const DB_VERSION = 38;
 
 export function buildSeedDB(): ShopDB {
   return {

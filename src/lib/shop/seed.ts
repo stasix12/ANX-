@@ -641,7 +641,7 @@ const DEMO_ADMIN: User = {
 };
 
 /** Bumped when the seed changes shape, so browsers drop the old demo catalogue. */
-export const DB_VERSION = 41;
+export const DB_VERSION = 42;
 
 export function buildSeedDB(): ShopDB {
   return {
@@ -654,9 +654,8 @@ export function buildSeedDB(): ShopDB {
       sampleDataNotice: false,
       // Delivery options and coupons are placeholders to edit in the admin.
       shippingMethods: [
-        { id: 'standard', name: 'משלוח רגיל', eta: '1-3 ימי עסקים', price: 15, freeFrom: null },
-        { id: 'express', name: 'משלוח מהיר', eta: 'יום עסקים אחד', price: 35, freeFrom: null },
-        { id: 'pickup', name: 'איסוף עצמי', eta: 'בתיאום מראש', price: 0, freeFrom: null },
+        // The one delivery option the owner offers (id kept as 'standard', the default everywhere).
+        { id: 'standard', name: 'משלוח אקספרס עד הבית', eta: '3-7 ימי עסקים', price: 49, freeFrom: null },
       ],
       coupons: [],
       nextOrderNumber: 10245,

@@ -93,9 +93,9 @@ const assert = (c, m) => { if (!c) throw new Error('ASSERT: ' + m); console.log(
   await go('/shop/cart');
   await page.getByRole('button', { name: 'הפחת כמות' }).first().click();
   await shot('05-cart');
-  assert((await page.locator('main').getByText(/1144/).count()) > 0, 'total 850 + 279 + 15 shipping = 1144');
+  assert((await page.locator('main').getByText(/1178/).count()) > 0, 'total 850 + 279 + 49 shipping = 1178');
   await page.getByRole('button', { name: 'הוסף כמות' }).nth(1).click();
-  assert((await page.locator('main').getByText(/1423/).count()) > 0, 'qty change recalculates (850 + 558 + 15 = 1423)');
+  assert((await page.locator('main').getByText(/1457/).count()) > 0, 'qty change recalculates (850 + 558 + 49 = 1457)');
   await page.getByRole('button', { name: 'הפחת כמות' }).nth(1).click();
   await page.getByLabel('קוד קופון').fill('BADCODE');
   await page.getByRole('button', { name: 'הפעל' }).click();

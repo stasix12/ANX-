@@ -118,7 +118,7 @@ export function CheckoutView() {
 
   const pay = () => {
     setFormError(null);
-    if (!agree) return setFormError('יש לאשר את התקנון, מדיניות הביטולים ומדיניות הפרטיות');
+    if (!agree) return setFormError('יש לאשר את תנאי הרכישה והביטולים ואת מדיניות הפרטיות');
     const r = actions.createOrder(form);
     if (!r.ok) return setFormError(r.error);
     // The order number screen hands the order to WhatsApp for Bit / PayBox.
@@ -292,12 +292,8 @@ export function CheckoutView() {
                   <input type="checkbox" checked={agree} onChange={(e) => setAgree(e.target.checked)} className="mt-1 size-4 accent-x-blue" />
                   <span>
                     קראתי ואני מסכים/ה ל
-                    <Link href="/shop/legal/terms" target="_blank" className="font-bold text-x-blue underline">
-                      תקנון
-                    </Link>
-                    , ל
                     <Link href="/shop/legal/returns" target="_blank" className="font-bold text-x-blue underline">
-                      מדיניות הביטולים
+                      תנאי הרכישה והביטולים
                     </Link>{' '}
                     ול
                     <Link href="/shop/legal/privacy" target="_blank" className="font-bold text-x-blue underline">

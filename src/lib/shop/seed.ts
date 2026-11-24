@@ -90,18 +90,23 @@ export const SEED_PRODUCTS: Product[] = [
     ],
     video: { webm: '/video/anaconda-demo.webm', mp4: '/video/anaconda-demo.mp4', poster: '/video/anaconda-demo-poster.jpg' },
     highlights: [
-      'אטם קצף היקפי סביב פתח השאיבה',
-      'הדק לשליטה בהתזה תוך כדי עבודה',
-      'חיבור מהיר — מתחבר ומתנתק בלי כלים',
+      '3 מצבי אחיזה — אוחזים בדרך שנוחה לכל סוג עבודה וזווית',
+      'צורה ארגונומית שמותאמת לשעות ארוכות של עבודה',
       'גוף עמיד לחום ולשחיקה, מיוצר בישראל',
+      'מתחברת בקלות לכל מכונות Sabrina — מיני ומקסי',
+      'אטם קצף היקפי סביב פתח השאיבה — ואקום מלא לאורך כל המשיכה',
+      'הדק לשליטה בהתזה תוך כדי עבודה, בלי להוריד את היד מהידית',
+      'חיבור מהיר — מתחברת ומתנתקת בלי כלים',
     ],
     specs: [
       { label: 'צבעים', value: 'Black galaxy · Green jungle' },
       { label: 'ייצור', value: 'מיוצר בישראל · עמיד לחום ולשחיקה' },
       { label: 'אטימה', value: 'אטם קצף היקפי' },
       { label: 'שליטה', value: 'הדק התזה מובנה' },
+      { label: 'אחיזה', value: '3 מצבי אחיזה · צורה ארגונומית' },
+      { label: 'תאימות', value: 'Sabrina Mini · Sabrina Maxi' },
     ],
-    compatibility: ['Sabrina — ידית שאיבה לניקוי ספות וריפודים'],
+    compatibility: ['Sabrina Mini', 'Sabrina Maxi'],
     featured: true,
     tags: ['anaconda', 'handle', 'ידית', 'שאיבה', 'הזרקה', 'ספות', 'ריפודים', 'sabrina', 'סברינה'],
     badge: 'הנמכרת ביותר',
@@ -634,7 +639,7 @@ const DEMO_ADMIN: User = {
 };
 
 /** Bumped when the seed changes shape, so browsers drop the old demo catalogue. */
-export const DB_VERSION = 36;
+export const DB_VERSION = 37;
 
 export function buildSeedDB(): ShopDB {
   return {

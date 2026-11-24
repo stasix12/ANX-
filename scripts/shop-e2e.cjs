@@ -37,7 +37,7 @@ const assert = (c, m) => { if (!c) throw new Error('ASSERT: ' + m); console.log(
   await page.getByRole('navigation', { name: 'ניווט תחתון' }).getByRole('link', { name: 'קטגוריות' }).click();
   await page.waitForURL('**/shop/categories');
   await shot('02-categories');
-  assert((await page.locator('main ul[dir=ltr] > li').count()) === 5, 'only categories with live products (5)');
+  assert((await page.locator('main ul[dir=ltr] > li').count()) === 4, 'only categories with live products (4)');
 
   console.log('3 catalog');
   await page.getByRole('link', { name: /^ידיות לניקוי ספות/ }).first().click();
@@ -110,7 +110,7 @@ const assert = (c, m) => { if (!c) throw new Error('ASSERT: ' + m); console.log(
   await page.keyboard.press('Enter');
   await page.waitForTimeout(400);
   assert((await page.locator('article').count()) >= 1, 'search results for ידית');
-  await page.getByRole('combobox').fill('קורסים');
+  await page.getByRole('combobox').fill('מתאמים');
   await page.keyboard.press('Enter');
   await page.waitForTimeout(300);
   assert((await page.locator('article').count()) >= 1, 'search by category name');

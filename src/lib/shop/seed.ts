@@ -362,6 +362,8 @@ export const SEED_PRODUCTS: Product[] = [
   {
     ...base,
     id: 'p-mattress-course',
+    // Draft: taken off the site by the owner; flip to true to bring the course page back.
+    published: false,
     slug: 'mattress-cleaning-course',
     name: 'קורס ניקוי מזרנים',
     subtitle: 'עם סטס מ"הפתרון המבריק" – שהביא את השיטה המיוחדת עם הריאקציה המדוברת',
@@ -641,7 +643,7 @@ const DEMO_ADMIN: User = {
 };
 
 /** Bumped when the seed changes shape, so browsers drop the old demo catalogue. */
-export const DB_VERSION = 42;
+export const DB_VERSION = 43;
 
 export function buildSeedDB(): ShopDB {
   return {

@@ -6,6 +6,7 @@ import { useEffect, useState } from 'react';
 import { categoryHref, visibleCategories } from '@/lib/shop/logic';
 import { STATIC_CATEGORY_SLUGS } from '@/lib/shop/static';
 import { LEGAL_DOCS } from '@/lib/shop/legal';
+import { A11yWidget } from './A11yWidget';
 import { useCurrentUser, useShop } from '@/lib/shop/store';
 import {
   CategoryGlyph,
@@ -370,6 +371,7 @@ export function ShopFrame({
       {nav !== false && <BottomNav active={nav} />}
       <Drawer open={menu} onClose={close} />
       <Toaster />
+      <A11yWidget />
     </div>
   );
 }

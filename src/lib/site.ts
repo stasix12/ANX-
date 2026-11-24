@@ -23,6 +23,8 @@ export const site = {
     businessId: '',
     address: '',
     email: '',
+    /** Name of the accessibility coordinator (accessibility statement). */
+    accessibilityContact: '',
   },
 } as const;
 

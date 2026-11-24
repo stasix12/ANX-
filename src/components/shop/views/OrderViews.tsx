@@ -151,6 +151,12 @@ function AwaitingPayment({ order, shippingName }: { order: Order; shippingName?:
           שליחת ההזמנה בוואטסאפ לתשלום
         </a>
         <p className="mt-2 text-[12px] text-white/50">ההודעה כבר כוללת את מספר ההזמנה, המוצרים והסכום</p>
+        <p className="mt-3 text-[12px] text-white/60">
+          פרטי העסק, תנאי האספקה, האחריות וביטול העסקה:{' '}
+          <Link href="/shop/legal/returns" className="font-bold text-white underline underline-offset-2">
+            תנאי רכישה וביטולים
+          </Link>
+        </p>
 
         <Link href={`/shop/track?id=${encodeURIComponent(order.id)}`} className="mt-6 text-[14px] font-bold text-white/80 underline underline-offset-4">
           לפרטי ההזמנה

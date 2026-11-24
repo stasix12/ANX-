@@ -40,9 +40,13 @@ export function HomeView() {
         <div className="absolute inset-x-0 top-0 -z-10 hidden h-28 bg-linear-to-b from-black/45 to-transparent lg:block" />
         <div className="mx-auto max-w-7xl px-5 pt-[156px] sm:pt-36 sm:pb-10 lg:px-8 lg:pt-44 lg:pb-20">
           <div dir="ltr" className="mr-auto max-w-[262px] animate-x-fade sm:max-w-md lg:max-w-xl">
-            <p className="flex items-center gap-2.5">
-              <span className="h-[3px] w-6 rounded-full bg-[#3b5bff] lg:w-10" />
-              <Logo tone="light" upright className="text-[18px] tracking-[-0.02em] lg:text-[28px]" />
+            <p className="flex items-center gap-2.5 whitespace-nowrap">
+              <span className="h-[3px] w-6 shrink-0 rounded-full bg-[#3b5bff] lg:w-10" />
+              <Logo tone="light" upright className="shrink-0 text-[18px] tracking-[-0.02em] lg:text-[28px]" />
+              <span aria-hidden="true" className="h-4 w-px shrink-0 bg-white/40 lg:h-6" />
+              <span dir="rtl" className="text-[10.5px] leading-tight font-semibold text-white [text-shadow:0_1px_4px_rgb(0_0_0/0.85)] lg:text-[15px] lg:text-white/85">
+                נוצר על ידי מנקי ספות בשביל מנקי ספות
+              </span>
             </p>
             <h1 dir="rtl" className="mt-0.5 text-left text-[25px] leading-[1] font-black lg:mt-3 lg:text-[52px] lg:leading-[1.1]">
               הדור הבא של

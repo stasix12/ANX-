@@ -76,7 +76,7 @@ export const SEED_PRODUCTS: Product[] = [
     ...base,
     id: 'p-anaconda',
     slug: 'anaconda',
-    callouts: ['לחץ שאיבה מוגבר', 'לחץ התזה מוגבר'],
+    callouts: ['לחץ שאיבה|מוגבר', 'לחץ התזה|מוגבר'],
     cardChoices: true,
     name: 'ANACONDA',
     subtitle: 'ידית מקצועית לניקוי ספות',
@@ -150,6 +150,7 @@ export const SEED_PRODUCTS: Product[] = [
     ...base,
     id: 'p-big-mamba',
     slug: 'big-mamba',
+    callouts: ['לחץ שאיבה|מוגבר', 'לחץ התזה|מוגבר', 'פטנט ויסות עוצמת השאיבה|הגברה והנמכה ישירות מהידית'],
     cardChoices: true,
     name: 'BIG MAMBA',
     subtitle: 'ידית עם ראש שאיבה רחב לניקוי ספות',
@@ -640,7 +641,7 @@ const DEMO_ADMIN: User = {
 };
 
 /** Bumped when the seed changes shape, so browsers drop the old demo catalogue. */
-export const DB_VERSION = 39;
+export const DB_VERSION = 40;
 
 export function buildSeedDB(): ShopDB {
   return {

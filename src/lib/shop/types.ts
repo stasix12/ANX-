@@ -82,7 +82,7 @@ export interface Product {
   /** A featured clip with its own heading (path without extension: .mp4 video, .jpg poster). */
   /** Longer page copy shown instead of the description (paragraphs; a leading '**' marks a bold line). */
   story?: string[];
-  /** Big highlighted selling points under the title (e.g. boosted suction). */
+  /** Big highlighted selling points under the title: 'top line|accent line' (e.g. 'לחץ שאיבה|מוגבר'). */
   callouts?: string[];
   /** Show the colors / single version group as a check-box picker on the product card. */
   cardChoices?: boolean;

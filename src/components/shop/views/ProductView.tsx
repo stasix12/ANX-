@@ -10,6 +10,7 @@ import type { Product } from '@/lib/shop/types';
 import { SampleRibbon, ShopFrame } from '../Chrome';
 import { IconCart, IconChevron, IconSearch, IconShield, IconTruck } from '../icons';
 import { MadeInIsrael } from '../MadeInIsrael';
+import { BenefitCards } from '../BenefitCards';
 import { addProductToCart, FavoriteButton, ProductGrid } from '../ProductCard';
 import { btn, EmptyState, Img, Price, QtyStepper, src, Swatch, toast } from '../ui';
 import { CourseDetail } from './CourseDetail';
@@ -223,25 +224,7 @@ function ProductDetail({ product }: { product: Product }) {
                 )}
               </div>
             </div>
-            {!!product.callouts?.length && (
-              <ul className="mt-3 grid grid-cols-2 gap-2">
-                {product.callouts.map((c, i, all) => (
-                  <li
-                    key={c}
-                    className={`${all.length % 2 === 1 && i === all.length - 1 ? 'col-span-2' : ''} flex items-center gap-2 rounded-[14px] bg-linear-to-l from-[#2f5dfb] to-[#5a3be8] px-3 py-2.5 text-[17px] leading-[1.15] font-black text-white shadow-[0_6px_16px_rgb(47_93_251/0.35)] lg:text-lg`}
-                  >
-                    <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" className="shrink-0 text-[#ffd84d]">
-                      <path d="M13 2 4.5 13.5H11L10 22l8.5-11.5H12z" />
-                    </svg>
-                    {/* 'top|accent': the accent line in yellow, e.g. "לחץ שאיבה / מוגבר". */}
-                    <span className="min-w-0">
-                      <span className="block">{c.split('|')[0]}</span>
-                      {c.includes('|') && <span className="block text-[#ffd84d]">{c.split('|')[1]}</span>}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            )}
+            {!!product.callouts?.length && <BenefitCards items={product.callouts} />}
             {(product.madeInIsrael || product.badge) && (
               <div className="mt-2 flex flex-wrap items-center gap-2">
                 {product.badge && (

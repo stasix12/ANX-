@@ -8,10 +8,10 @@ import { STATIC_CATEGORY_SLUGS } from '@/lib/shop/static';
 import { useShop } from '@/lib/shop/store';
 import type { Product } from '@/lib/shop/types';
 import { SampleRibbon, ShopFrame } from '../Chrome';
-import { IconBox, IconCart, IconChevron, IconSearch, IconShield, IconTruck } from '../icons';
+import { IconCart, IconChevron, IconSearch, IconShield, IconTruck } from '../icons';
 import { MadeInIsrael } from '../MadeInIsrael';
 import { addProductToCart, FavoriteButton, ProductGrid } from '../ProductCard';
-import { btn, EmptyState, Img, Price, QtyStepper, src, Stars, Swatch, toast } from '../ui';
+import { btn, EmptyState, Img, Price, QtyStepper, src, Swatch, toast } from '../ui';
 import { CourseDetail } from './CourseDetail';
 import { ShopFooter } from './HomeView';
 
@@ -250,8 +250,7 @@ function ProductDetail({ product }: { product: Product }) {
                 {product.madeInIsrael && <MadeInIsrael />}
               </div>
             )}
-            <div dir="ltr" className="mt-2 flex items-center justify-between">
-              <Stars rating={product.rating} count={product.reviewCount} countLabel="ביקורות" size={19} />
+            <div dir="ltr" className="mt-2 flex items-center justify-end">
               {available ? (
                 <span dir="rtl" className="inline-flex items-center gap-1.5 text-[15px] font-bold text-x-green">
                   <span className="grid size-[18px] place-items-center rounded-full bg-x-green text-white">
@@ -336,10 +335,9 @@ function ProductDetail({ product }: { product: Product }) {
               </Link>
             )}
 
-            <ul dir="ltr" className="mt-6 grid grid-cols-3 divide-x divide-x-line border-t border-x-line pt-4">
+            <ul dir="ltr" className="mt-6 grid grid-cols-2 divide-x divide-x-line border-t border-x-line pt-4">
               <Feature icon={<IconTruck size={26} />} title="משלוח מהיר" text={standard?.eta ?? ''} />
               <Feature icon={<IconShield size={26} />} title="איכות מובטחת" text="הדפסה מקצועית" />
-              <Feature icon={<IconBox size={26} />} title="תמיכה מלאה" text="שירות לקוחות" />
             </ul>
 
             <div className="mt-6 space-y-2">

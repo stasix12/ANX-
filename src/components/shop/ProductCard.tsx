@@ -9,7 +9,7 @@ import { actions, useShop } from '@/lib/shop/store';
 import type { Product } from '@/lib/shop/types';
 import { IconCart, IconHeart } from './icons';
 import { MadeInIsrael } from './MadeInIsrael';
-import { Img, Price, Stars, toast } from './ui';
+import { Img, Price, toast } from './ui';
 
 export function FavoriteButton({ product, className = '', size = 'sm' }: { product: Product; className?: string; size?: 'sm' | 'lg' }) {
   const s = useShop();
@@ -102,9 +102,6 @@ export function ProductCard({
       <div className={`pointer-events-none relative flex flex-1 flex-col ${compact ? 'px-2 pt-2 pb-2' : 'px-3 pt-2.5 pb-3'}`}>
         <h3 className={`truncate font-extrabold text-x-ink ${compact ? 'text-[13px]' : 'text-[15px]'}`}>{product.name}</h3>
         {product.subtitle && <p className={`truncate font-semibold text-x-ink-2 ${compact ? 'text-[12px]' : 'text-[14px]'}`}>{product.subtitle}</p>}
-        <div className="mt-1">
-          <Stars rating={product.rating} count={product.reviewCount} size={compact ? 11 : 13} />
-        </div>
         {choices.length > 0 && (
           <div
             role="radiogroup"

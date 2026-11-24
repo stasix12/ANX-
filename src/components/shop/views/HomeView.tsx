@@ -25,66 +25,65 @@ export function HomeView() {
 
   return (
     <ShopFrame nav="home" header="light" uprightLogo>
-      {/* Hero — black ANACONDA before a waving Israeli flag on a light studio
-          backdrop (scripts/shop-hero-light-asset.py). All copy is live HTML. */}
-      <section className="relative isolate -mt-[16px] min-h-[420px] overflow-hidden bg-[#eef2f8] text-[#0d1b4c] sm:min-h-[480px] lg:-mt-[26px] lg:min-h-[600px]">
-        <Img
-          path="/shop/img2/hero-anaconda-light.webp"
-          alt="ידית ANACONDA שחורה לניקוי ספות לפני דגל ישראל"
-          eager
-          className="absolute inset-x-0 top-[16px] -z-20 h-auto w-full sm:inset-x-0 sm:top-[16px] sm:bottom-0 sm:h-[calc(100%-16px)] sm:object-cover sm:object-[70%_40%] lg:top-[26px] lg:right-0 lg:left-auto lg:h-[calc(100%-26px)] lg:w-[62%] lg:object-[60%_45%] lg:[mask-image:linear-gradient(90deg,transparent,#000_20%)]"
-        />
-        {/* Soft white wash behind the copy only, for contrast. */}
-        <div className="absolute top-[178px] left-0 -z-10 h-[150px] w-[82%] bg-[radial-gradient(85%_75%_at_22%_50%,rgba(255,255,255,0.78),rgba(255,255,255,0.45)_55%,rgba(255,255,255,0)_85%)] sm:hidden" />
-        <div className="mx-auto max-w-7xl px-[22px] pt-[161px] sm:pt-36 sm:pb-10 lg:px-8 lg:pt-44 lg:pb-20">
-          <div dir="ltr" className="mr-auto max-w-[300px] animate-x-fade sm:max-w-md lg:max-w-xl">
-            <p className="flex items-center gap-2 whitespace-nowrap">
-              <span className="h-[3px] w-6 shrink-0 rounded-full bg-[#1f45ff] lg:w-10" />
-              <Logo upright className="shrink-0 text-[18px] tracking-[-0.02em] lg:text-[28px]" />
-              <span aria-hidden="true" className="h-4 w-px shrink-0 bg-[#0d1b4c]/40 lg:h-6" />
-              <span dir="rtl" className="text-[10.75px] leading-tight font-bold text-[#0d1b4c] [text-shadow:0_0_4px_#fff,0_0_8px_#fff,0_0_2px_#fff] lg:text-[15px]">
-                נוצר על ידי מנקי ספות בשביל מנקי ספות
-              </span>
-            </p>
-            <h1 dir="rtl" className="mt-0.5 text-left text-[25.5px] leading-[1.03] font-black lg:mt-3 lg:text-[54px] lg:leading-[1.1]">
-              <span className="text-[#0a1640]">הדור הבא של</span>
-              <br />
-              <span className="text-[#0a2cff]">ציוד הניקוי המקצועי</span>
-            </h1>
-            <p dir="rtl" className="mt-1.5 text-left text-[13.4px] leading-[1.38] font-semibold text-[#14234f] lg:mt-4 lg:text-lg lg:leading-[1.5]">
-              אביזרים חדשניים לניקוי ספות ושטיחים,
-              <br />
-              המיוצרים בטכנולוגיית הדפסת תלת־ממד.
-            </p>
-            <Link
-              href="/shop/c/all"
-              dir="rtl"
-              className="relative mt-[7px] inline-flex h-[30px] items-center gap-2 rounded-full bg-[#041cfc] px-[15px] text-[14.5px] font-extrabold text-white shadow-[0_5px_14px_rgb(4_28_252/0.35)] transition after:absolute after:inset-x-0 after:-inset-y-[7px] after:content-[''] hover:brightness-110 lg:mt-6 lg:h-14 lg:px-9 lg:text-lg"
-            >
-              לצפייה במוצרים
-              <IconArrow dir="right" size={16} />
-            </Link>
-          </div>
+      {/* Hero — photo (black ANACONDA before the Israeli flag, scripts/shop-hero-light-asset.py)
+          on top, centred copy below it. All copy is live HTML. */}
+      <section className="relative isolate -mt-[16px] bg-[#f6f8fd] pb-[44px] text-center text-[#0b1020] lg:-mt-[26px] lg:pb-20">
+        <div className="mx-auto max-w-[900px] pt-[12px] sm:[mask-image:linear-gradient(90deg,transparent,#000_10%,#000_90%,transparent)] lg:max-w-[760px] lg:pt-[26px]">
+          <Img
+            path="/shop/img2/hero-anaconda-light.webp"
+            alt="ידית ANACONDA שחורה לניקוי ספות לפני דגל ישראל"
+            eager
+            className="block h-auto w-full"
+          />
+        </div>
+        <div className="relative mx-auto -mt-[16px] max-w-xl px-[28px] animate-x-fade lg:-mt-6">
+          <p dir="ltr" className="flex items-center gap-[9px] whitespace-nowrap">
+            <span className="h-[2.5px] w-[14px] shrink-0 rounded-full bg-[#0068fa]" />
+            <Logo upright className="shrink-0 text-[17px] tracking-[-0.02em] lg:text-[24px]" />
+            <span aria-hidden="true" className="ms-[2px] h-[13px] w-px shrink-0 bg-[#0b1020]/70" />
+            <span dir="rtl" className="ms-[2px] text-[10.4px] leading-tight font-semibold text-[#0b1020] lg:text-[14px]">
+              נוצר על ידי מנקי ספות בשביל מנקי ספות
+            </span>
+          </p>
+          <h1 className="mt-[10px] font-black">
+            <span className="block text-[31.5px] leading-[1.05] lg:text-[46px]">הדור הבא של</span>
+            <span className="relative mx-auto mt-0 block w-[302px] max-w-full lg:w-[440px]">
+              <span aria-hidden="true" className="absolute inset-0 -skew-x-[14deg] rounded-[9px] bg-[#0168fa]" />
+              <span className="relative block py-[1.5px] text-[29px] leading-[1.1] whitespace-nowrap text-white lg:text-[42px]">ציוד הניקוי המקצועי</span>
+            </span>
+          </h1>
+          <p className="mx-auto mt-[2px] text-[14.85px] leading-[1.22] font-medium text-[#0e213d] lg:text-lg">
+            אביזרים חדשניים לניקוי ספות ושטיחים,
+            <br />
+            המיוצרים בטכנולוגיית הדפסת תלת־ממד.
+          </p>
+          <Link
+            href="/shop/c/all"
+            className="relative mt-[8px] inline-flex h-[31px] w-[168px] items-center justify-center gap-[14px] rounded-full bg-[#004ee7] text-[15px] font-extrabold text-white shadow-[0_6px_16px_rgb(0_78_231/0.28)] transition after:absolute after:inset-x-0 after:-inset-y-[7px] after:content-[''] hover:brightness-110 lg:h-12 lg:w-56 lg:text-lg"
+          >
+            לצפייה במוצרים
+            <IconArrow dir="right" size={15} />
+          </Link>
 
           {/* Benefits row */}
-          <ul dir="ltr" className="mt-[10px] grid grid-cols-3 lg:mt-14 lg:mr-auto lg:max-w-xl">
+          <ul dir="ltr" className="mx-auto mt-[15px] grid max-w-[362px] grid-cols-3 lg:max-w-md">
             {[
               { Icon: IconShield, title: 'עמידות גבוהה', text: 'בשימוש יומיומי' },
               { Icon: IconCog, title: 'עיצוב ארגונומי', text: 'נוחות מקסימלית' },
               { Icon: IconBox, title: 'הדפסת תלת־ממד', text: 'פתרונות מותאמים' },
-            ].map(({ Icon, title, text }) => (
-              <li key={title} dir="rtl" className="flex flex-col items-center text-center">
-                <span className="grid size-[29px] place-items-center rounded-full border-[1.5px] border-[#0a3cfd] bg-white/70 text-[#0a3cfd] lg:size-12">
-                  <Icon size={16} />
+            ].map(({ Icon, title, text }, i) => (
+              <li key={title} dir="rtl" className={`relative flex flex-col items-center ${i ? "before:absolute before:top-[27px] before:left-0 before:h-[32px] before:w-px before:bg-[#cdd0d8] before:content-['']" : ''}`}>
+                <span className="grid size-[31px] place-items-center rounded-full border-[1.6px] border-[#0653e0] text-[#0653e0] lg:size-11">
+                  <Icon size={18} />
                 </span>
-                <span className="mt-1 text-[11px] leading-[14px] font-extrabold text-[#0a1640] lg:text-[15px]">{title}</span>
-                <span className="text-[10px] leading-[13px] font-medium text-[#3a4566] lg:text-[13px]">{text}</span>
+                <span className="mt-[5px] text-[13.8px] leading-[1.1] font-extrabold whitespace-nowrap text-[#0b1020] lg:text-[15px]">{title}</span>
+                <span className="mt-[3px] text-[11.4px] leading-[1.1] whitespace-nowrap text-[#1f2c53] lg:text-[13px]">{text}</span>
               </li>
             ))}
           </ul>
-          <div aria-hidden="true" dir="ltr" className="mt-1.5 flex justify-center gap-1.5 lg:hidden">
-            <span className="size-[5px] rounded-full bg-[#1f45ff]" />
-            <span className="size-[5px] rounded-full border border-[#0d1b4c]/60" />
+          <div aria-hidden="true" dir="ltr" className="mt-[12px] flex justify-center gap-[8px] lg:hidden">
+            <span className="size-[5.5px] rounded-full bg-[#005bf3]" />
+            <span className="size-[5.5px] rounded-full bg-[#c5c8d0]" />
           </div>
         </div>
       </section>

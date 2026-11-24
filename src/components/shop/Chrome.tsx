@@ -23,11 +23,11 @@ import { Toaster } from './ui';
 
 /* ---------------------------------------------------------------- badge */
 
-function CartBadge({ count, dark }: { count: number; dark?: boolean }) {
-  if (!count) return null;
+function CartBadge({ count, dark, always }: { count: number; dark?: boolean; always?: boolean }) {
+  if (!count && !always) return null;
   return (
     <span
-      className={`absolute -top-1.5 -right-2 grid h-[18px] min-w-[18px] place-items-center rounded-full bg-x-violet px-1 text-[10px] font-bold leading-none text-white ring-2 ${dark ? 'ring-x-night' : 'ring-white'}`}
+      className={`absolute -top-1.5 -right-2 grid h-[18px] min-w-[18px] place-items-center rounded-full px-1 text-[10px] font-bold leading-none text-white ring-2 ${always ? 'bg-x-blue' : 'bg-x-violet'} ${dark ? 'ring-x-night' : 'ring-white'}`}
     >
       {count > 99 ? '99+' : count}
     </span>
@@ -50,35 +50,6 @@ const DESKTOP_LINKS = [
   { href: '/shop/favorites', label: 'מועדפים' },
 ];
 
-/** Thin running strip above the header, as on retail sites. */
-const ANNOUNCEMENT = 'משלוחים מהירים לכל חלקי הארץ';
-
-function AnnouncementBar() {
-  const group = (hidden: boolean) => (
-    <div aria-hidden={hidden || undefined} className="flex shrink-0 items-center">
-      {Array.from({ length: 4 }, (_, i) => (
-        <span key={i} dir="rtl" className="flex items-center gap-2 px-6">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.9} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-            <path d="M3 6.5h11v9H3zM14 9.5h3.6l3.4 3.4v2.6h-7" />
-            <circle cx="7" cy="17.5" r="1.8" />
-            <circle cx="17" cy="17.5" r="1.8" />
-          </svg>
-          {ANNOUNCEMENT}
-        </span>
-      ))}
-    </div>
-  );
-  return (
-    <div dir="ltr" className="h-8 overflow-hidden bg-linear-to-l from-[#1d4fe0] via-x-blue to-[#1d4fe0] text-[13px] leading-8 font-bold text-white">
-      <p className="sr-only">{ANNOUNCEMENT}</p>
-      <div dir="ltr" className="x-marquee flex w-max">
-        {group(true)}
-        {group(true)}
-      </div>
-    </div>
-  );
-}
-
 export function ShopHeader({
   tone = 'light',
   back,
@@ -97,8 +68,14 @@ export function ShopHeader({
   const pathname = usePathname();
   const count = useCartCount();
   const user = useCurrentUser();
-  const dark = tone !== 'light';
+  // Only the dark pages (course, order result) keep a dark bar; the rest use the
+  // light card header from the home design.
+  const dark = tone === 'dark';
   const iconCls = dark ? 'text-white' : 'text-x-ink';
+  // Rounded-square icon button of the header design: white rim, soft shadow.
+  const tile = dark
+    ? 'grid size-10 place-items-center text-white'
+    : 'grid size-[38px] place-items-center rounded-[11px] border-[1.5px] border-white bg-linear-to-b from-[#fbfcfe] to-[#eef0f5] text-x-ink shadow-[0_4px_12px_rgb(16_24_48/0.10),0_1px_2px_rgb(16_24_48/0.06)] transition active:scale-95';
 
   const goBack = () => {
     if (window.history.length > 1 && document.referrer.startsWith(window.location.origin)) router.back();
@@ -106,26 +83,22 @@ export function ShopHeader({
     else router.back();
   };
 
-  const bar =
-    tone === 'overlay'
-      ? 'absolute inset-x-0 top-0 bg-transparent'
-      : tone === 'dark'
-        ? 'sticky top-0 bg-x-night/90 backdrop-blur-md'
-        : 'sticky top-0 bg-white/92 backdrop-blur-md lg:border-b lg:border-x-line';
+  const bar = dark
+    ? 'sticky top-0 bg-x-night/90 backdrop-blur-md'
+    : 'sticky top-0 rounded-b-[16px] bg-[#f3f4f8] shadow-[0_6px_18px_rgb(16_24_48/0.10)] lg:rounded-b-[26px]';
 
   return (
     <header className={`${bar} z-40 pt-[env(safe-area-inset-top)]`}>
-      <AnnouncementBar />
       {/* Mobile / tablet: menu|back · wordmark · search + cart — positions as in the design. */}
-      <div dir="ltr" className="mx-auto grid h-14 max-w-3xl grid-cols-[1fr_auto_1fr] items-center px-4 lg:hidden">
+      <div dir="ltr" className={`mx-auto grid max-w-3xl grid-cols-[1fr_auto_1fr] items-center lg:hidden ${dark ? 'h-14 px-4' : 'h-[54px] px-3'}`}>
         <div className="flex">
           {back ? (
-            <button type="button" onClick={goBack} aria-label="חזרה" className={`-ml-2 grid size-10 place-items-center ${iconCls}`}>
-              <IconChevron dir="left" size={26} />
+            <button type="button" onClick={goBack} aria-label="חזרה" className={dark ? `-ml-2 ${tile}` : tile}>
+              <IconChevron dir="left" size={dark ? 26 : 22} />
             </button>
           ) : (
-            <button type="button" onClick={onMenu} aria-label="תפריט" className={`-ml-2 grid size-10 place-items-center ${iconCls}`}>
-              <IconMenu size={26} />
+            <button type="button" onClick={onMenu} aria-label="תפריט" className={dark ? `-ml-2 ${tile}` : tile}>
+              <IconMenu size={dark ? 26 : 23} />
             </button>
           )}
         </div>
@@ -135,19 +108,26 @@ export function ShopHeader({
               {title}
             </span>
           ) : (
-            <Logo tone={dark ? 'light' : 'dark'} upright className="text-[30px] tracking-[-0.02em]" />
+            <Logo tone={dark ? 'light' : 'dark'} upright className={dark ? 'text-[30px] tracking-[-0.02em]' : 'text-[34px] tracking-[-0.02em]'} />
           )}
         </Link>
-        <div className="flex items-center justify-end gap-1">
-          <Link href="/shop/search" aria-label="חיפוש" className={`grid size-10 place-items-center ${iconCls}`}>
-            <IconSearch size={24} />
+        <div className={`flex items-center justify-end ${dark ? 'gap-1' : 'gap-2'}`}>
+          <Link href="/shop/search" aria-label="חיפוש" className={tile}>
+            <IconSearch size={dark ? 24 : 21} />
           </Link>
-          <Link href="/shop/cart" aria-label={`עגלת קניות, ${count} פריטים`} className={`relative -mr-1 grid size-10 place-items-center ${iconCls}`}>
-            <span className="relative">
-              <IconCart size={26} />
-              <CartBadge count={count} dark={dark} />
-            </span>
-          </Link>
+          {dark ? (
+            <Link href="/shop/cart" aria-label={`עגלת קניות, ${count} פריטים`} className={`relative -mr-1 ${tile}`}>
+              <span className="relative">
+                <IconCart size={26} />
+                <CartBadge count={count} dark />
+              </span>
+            </Link>
+          ) : (
+            <Link href="/shop/cart" aria-label={`עגלת קניות, ${count} פריטים`} className={`relative ${tile}`}>
+              <IconCart size={23} />
+              <CartBadge count={count} always />
+            </Link>
+          )}
         </div>
       </div>
 
@@ -179,23 +159,30 @@ export function ShopHeader({
             const q = new FormData(e.currentTarget).get('q');
             router.push(`/shop/search?q=${encodeURIComponent(String(q ?? ''))}`);
           }}
-          className="ms-auto flex h-11 w-80 items-center gap-2 rounded-full bg-x-soft px-4 text-x-muted focus-within:ring-2 focus-within:ring-x-blue-100"
+          className={`ms-auto flex h-11 w-80 items-center gap-2 rounded-full px-4 ${dark ? 'bg-x-soft' : 'border border-white bg-white shadow-[0_2px_8px_rgb(16_24_48/0.06)]'} text-x-muted focus-within:ring-2 focus-within:ring-x-blue-100`}
         >
           <IconSearch size={20} />
           <input name="q" placeholder="חיפוש מוצרים, קטגוריות..." className="w-full bg-transparent text-sm text-x-ink outline-none placeholder:text-x-faint" />
         </form>
-        <div className={`flex items-center gap-1 ${iconCls}`}>
-          <Link href="/shop/favorites" aria-label="מועדפים" className={`grid size-11 place-items-center rounded-full ${dark ? 'hover:bg-white/10' : 'hover:bg-x-soft'}`}>
+        <div className={`flex items-center ${dark ? `gap-1 ${iconCls}` : 'gap-2.5'}`}>
+          <Link href="/shop/favorites" aria-label="מועדפים" className={dark ? 'grid size-11 place-items-center rounded-full hover:bg-white/10' : `${tile} size-11!`}>
             <IconHeart size={24} />
           </Link>
-          <Link href={user ? '/shop/account' : '/shop/login'} aria-label="פרופיל" className={`grid size-11 place-items-center rounded-full ${dark ? 'hover:bg-white/10' : 'hover:bg-x-soft'}`}>
+          <Link href={user ? '/shop/account' : '/shop/login'} aria-label="פרופיל" className={dark ? 'grid size-11 place-items-center rounded-full hover:bg-white/10' : `${tile} size-11!`}>
             <IconUser size={24} />
           </Link>
-          <Link href="/shop/cart" aria-label={`עגלת קניות, ${count} פריטים`} className={`relative grid size-11 place-items-center rounded-full ${dark ? 'hover:bg-white/10' : 'hover:bg-x-soft'}`}>
-            <span className="relative">
-              <IconCart size={26} />
-              <CartBadge count={count} dark={dark} />
-            </span>
+          <Link href="/shop/cart" aria-label={`עגלת קניות, ${count} פריטים`} className={dark ? 'relative grid size-11 place-items-center rounded-full hover:bg-white/10' : `relative ${tile} size-11!`}>
+            {dark ? (
+              <span className="relative">
+                <IconCart size={26} />
+                <CartBadge count={count} dark />
+              </span>
+            ) : (
+              <>
+                <IconCart size={24} />
+                <CartBadge count={count} always />
+              </>
+            )}
           </Link>
         </div>
       </div>

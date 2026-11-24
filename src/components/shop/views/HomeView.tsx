@@ -24,10 +24,10 @@ export function HomeView() {
   const newest = handlesFirst(sortProducts(published, 'newest'));
 
   return (
-    <ShopFrame nav="home" header="overlay" uprightLogo>
+    <ShopFrame nav="home" header="light" uprightLogo>
       {/* Hero — dark stage, dragon on the left, copy on the right. */}
       {/* Hero — black ANACONDA on the sofa (scripts/shop-hero-asset.py), copy on the left. */}
-      <section className="relative isolate min-h-[calc(412px+env(safe-area-inset-top))] overflow-hidden bg-[#0b1226] text-white sm:min-h-[480px] lg:min-h-[600px]">
+      <section className="relative isolate -mt-[16px] min-h-[412px] lg:-mt-[26px] overflow-hidden bg-[#0b1226] text-white sm:min-h-[480px] lg:min-h-[600px]">
         <Img
           path="/shop/img2/hero-anaconda.webp"
           alt="ידית ANACONDA שחורה לניקוי ספות על ספה"
@@ -38,7 +38,7 @@ export function HomeView() {
         <div className="absolute inset-0 -z-10 hidden bg-[linear-gradient(90deg,#0b1226_0%,rgba(11,18,38,0.85)_30%,rgba(11,18,38,0)_60%)] sm:block" />
         <div className="absolute inset-x-0 bottom-0 -z-10 h-24 bg-linear-to-t from-[#0b1226]/60 to-transparent" />
         <div className="absolute inset-x-0 top-0 -z-10 hidden h-28 bg-linear-to-b from-black/45 to-transparent lg:block" />
-        <div className="mx-auto max-w-7xl px-5 pt-[calc(156px+env(safe-area-inset-top))] sm:pt-36 sm:pb-10 lg:px-8 lg:pt-44 lg:pb-20">
+        <div className="mx-auto max-w-7xl px-5 pt-[156px] sm:pt-36 sm:pb-10 lg:px-8 lg:pt-44 lg:pb-20">
           <div dir="ltr" className="mr-auto max-w-[262px] animate-x-fade sm:max-w-md lg:max-w-xl">
             <p className="flex items-center gap-2.5">
               <span className="h-[3px] w-6 rounded-full bg-[#3b5bff] lg:w-10" />

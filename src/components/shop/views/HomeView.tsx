@@ -1,7 +1,6 @@
 'use client';
 
 import Link from 'next/link';
-import { LEGAL_DOCS } from '@/lib/shop/legal';
 import { sortProducts } from '@/lib/shop/logic';
 import type { Product } from '@/lib/shop/types';
 import { useShop } from '@/lib/shop/store';
@@ -173,7 +172,7 @@ function IconCog({ size = 24 }: { size?: number }) {
 export function ShopFooter() {
   return (
     <footer className="mt-6 hidden border-t border-x-line bg-x-soft-2 lg:block">
-      <div className="mx-auto grid max-w-7xl grid-cols-4 gap-8 px-8 py-12 text-sm">
+      <div className="mx-auto grid max-w-7xl grid-cols-3 gap-8 px-8 py-12 text-sm">
         <div>
           <p className="text-2xl font-black">
             ANX<span className="text-x-blue">3D</span>
@@ -193,16 +192,6 @@ export function ShopFooter() {
           <ul className="space-y-2 text-x-muted">
             <li><Link href="/shop/cart" className="hover:text-x-blue">עגלת קניות</Link></li>
             <li><Link href="/shop/favorites" className="hover:text-x-blue">מועדפים</Link></li>
-          </ul>
-        </div>
-        <div>
-          <p className="mb-3 font-bold">מידע</p>
-          <ul className="space-y-2 text-x-muted">
-            {LEGAL_DOCS.map((d) => (
-              <li key={d.slug}>
-                <Link href={`/shop/legal/${d.slug}`} className="hover:text-x-blue">{d.short}</Link>
-              </li>
-            ))}
           </ul>
         </div>
       </div>

@@ -284,12 +284,6 @@ function Drawer({ open, onClose }: { open: boolean; onClose: () => void }) {
                 <CategoryGlyph icon={c.icon} size={22} /> {c.name}
               </Link>
             ))}
-            <p className="mt-4 mb-1 px-3 text-xs font-bold text-x-faint">מידע</p>
-            {LEGAL_DOCS.map((d) => (
-              <Link key={d.slug} href={`/shop/legal/${d.slug}`} className={`${row} py-2.5 text-[14px] text-x-ink-2`}>
-                {d.short}
-              </Link>
-            ))}
             {user?.role === 'admin' && (
               <>
                 <p className="mt-4 mb-1 px-3 text-xs font-bold text-x-faint">ניהול</p>
@@ -307,6 +301,26 @@ function Drawer({ open, onClose }: { open: boolean; onClose: () => void }) {
         </div>
       </div>
     </div>
+  );
+}
+
+/** Required policies, at the very bottom of every page. */
+function LegalFooter() {
+  return (
+    <footer className="mx-auto mt-8 max-w-7xl border-t border-x-line px-4 pt-4 text-center lg:px-8">
+      <nav aria-label="מידע משפטי">
+        <ul className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-[12.5px] font-semibold text-x-muted">
+          {LEGAL_DOCS.map((d) => (
+            <li key={d.slug}>
+              <Link href={`/shop/legal/${d.slug}`} className="underline-offset-2 hover:text-x-blue hover:underline">
+                {d.short}
+              </Link>
+            </li>
+          ))}
+        </ul>
+      </nav>
+      <p className="mt-1.5 text-[11.5px] text-x-faint">© {new Date().getFullYear()} ANX3D</p>
+    </footer>
   );
 }
 
@@ -351,6 +365,7 @@ export function ShopFrame({
       {!hideHeader && <ShopHeader tone={header} back={back} title={title} onMenu={() => setMenu(true)} />}
       <main id="main" className={nav === false ? 'pb-8' : 'pb-[calc(92px+env(safe-area-inset-bottom))] lg:pb-16'}>
         {children}
+        <LegalFooter />
       </main>
       {nav !== false && <BottomNav active={nav} />}
       <Drawer open={menu} onClose={close} />

@@ -57,7 +57,7 @@ export function CatalogView({ slug, cat, sortParam }: { slug: string; cat?: stri
         <nav aria-label="פירורי לחם" className="pt-1 text-[13px] text-x-muted lg:pt-6">
           <ol className="flex items-center gap-1.5">
             <li>
-              <Link href="/shop" className="hover:text-x-blue">
+              <Link href="/" className="hover:text-x-blue">
                 בית
               </Link>
             </li>

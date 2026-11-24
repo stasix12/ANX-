@@ -705,7 +705,7 @@ export function AdminView() {
     return (
       <div className="mx-auto max-w-sm px-6 py-20 text-center">
         <p className="text-lg font-bold">אין הרשאת ניהול לחשבון הזה.</p>
-        <Link href="/shop" className={`${btn.blue} mt-6 h-12 w-full`}>
+        <Link href="/" className={`${btn.blue} mt-6 h-12 w-full`}>
           לחנות
         </Link>
       </div>
@@ -725,7 +725,7 @@ export function AdminView() {
           <Link href="/shop/admin/courses" className="ms-auto text-[14px] font-bold text-x-violet">
             קורסים וקודים
           </Link>
-          <Link href="/shop" className="text-[14px] font-bold text-x-blue">
+          <Link href="/" className="text-[14px] font-bold text-x-blue">
             לחנות ←
           </Link>
         </div>

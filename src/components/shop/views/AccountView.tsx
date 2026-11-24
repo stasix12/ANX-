@@ -55,7 +55,7 @@ export function AccountView() {
   const user = useRequireUser('/shop/account');
   const router = useRouter();
   return (
-    <ShopFrame nav="profile" back="/shop">
+    <ShopFrame nav="profile" back="/">
       {user && (
         <div className="mx-auto max-w-2xl px-4 lg:pt-8">
           <h1 className="sr-only">אזור אישי</h1>
@@ -89,7 +89,7 @@ export function AccountView() {
             type="button"
             onClick={() => {
               actions.logout();
-              router.replace('/shop');
+              router.replace('/');
             }}
             className="mt-6 h-13 w-full rounded-2xl border border-x-line text-[16px] font-bold text-x-red hover:bg-[#fdeced]"
           >

@@ -158,7 +158,7 @@ const assert = (c, m) => { if (!c) throw new Error('ASSERT: ' + m); console.log(
   await page.waitForURL('**/shop/account');
   await shot('11-account');
   await page.getByRole('button', { name: 'התנתק' }).click();
-  await page.waitForURL(BASE + '/shop');
+  await page.waitForURL(BASE + '/');
 
   console.log('admin');
   await go('/shop/login');

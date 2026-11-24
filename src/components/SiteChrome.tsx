@@ -28,7 +28,7 @@ export function SiteChrome({ children }: { children: React.ReactNode }) {
 
   if (isStandaloneApp) return <main id="main">{children}</main>;
   // The 3D-print store renders its own header, <main> and bottom nav.
-  if (inSegment('/shop')) return <>{children}</>;
+  if (pathname === '/' || inSegment('/shop')) return <>{children}</>;
 
   return (
     <OrderListProvider>

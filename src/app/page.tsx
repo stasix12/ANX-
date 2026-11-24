@@ -1,67 +1,21 @@
-import { CoursePromo } from '@/components/CoursePromo';
-import { Faq, faqItems } from '@/components/Faq';
-import { Hero } from '@/components/Hero';
-import { HowToOrder } from '@/components/HowToOrder';
-import { ProductGrid } from '@/components/ProductGrid';
-import { Section } from '@/components/Section';
-import { TrustStrip } from '@/components/TrustStrip';
-import { fetchPublishedProducts } from '@/lib/products';
-import { site } from '@/lib/site';
+import type { Metadata } from 'next';
+import { HomeView } from '@/components/shop/views/HomeView';
 
-const businessJsonLd = {
-  '@context': 'https://schema.org',
-  '@type': 'Store',
-  name: site.name,
-  description: site.description,
-  url: site.url,
-  telephone: `+${site.whatsappNumber}`,
-  areaServed: 'IL',
+/**
+ * The ANX3D store opens straight at the domain root (anx3d.co.il); /shop keeps
+ * serving the same home so older links still work.
+ */
+export const metadata: Metadata = {
+  title: { absolute: 'ANX3D — הדור הבא של ציוד הניקוי המקצועי' },
+  description:
+    'ANX3D: ידיות לניקוי ספות, טולים לניקוי שטיחים, מתאמים, מחברים ואביזרי שאיבה לאנשי מקצוע — מיוצרים בהדפסת תלת־ממד.',
+  alternates: { canonical: '/' },
 };
 
-/** FAQ rich result — lets the answers surface directly in search. */
-const faqJsonLd = {
-  '@context': 'https://schema.org',
-  '@type': 'FAQPage',
-  mainEntity: faqItems.map((item) => ({
-    '@type': 'Question',
-    name: item.question,
-    acceptedAnswer: { '@type': 'Answer', text: item.answer },
-  })),
-};
-
-export default async function HomePage() {
-  const products = await fetchPublishedProducts();
-  const course = products.find((p) => p.category === 'courses');
-
+export default function Home() {
   return (
-    <>
-      <Hero />
-      <TrustStrip />
-
-      <Section
-        id="products"
-        titleAs="h2"
-        eyebrow="הקטלוג"
-        title="המוצרים שלנו"
-        description="ידיות שאיבה, צינורות ומתאמים למכונות Sabrina. בוחרים דגם, מוסיפים להזמנה ושולחים הכל בהודעה אחת."
-      >
-        <ProductGrid initialProducts={products} />
-      </Section>
-
-      {course ? <CoursePromo course={course} /> : null}
-
-      <HowToOrder />
-
-      <Faq />
-
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(businessJsonLd) }}
-      />
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(faqJsonLd) }}
-      />
-    </>
+    <div className="shop-theme min-h-dvh overflow-x-clip">
+      <HomeView />
+    </div>
   );
 }

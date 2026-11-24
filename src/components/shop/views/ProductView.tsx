@@ -21,9 +21,9 @@ export function ProductView({ slug }: { slug: string | null }) {
 
   if (!product) {
     // During prerender of /shop/item the slug is unknown until the client reads it.
-    if (!s.ready && !slug) return <ShopFrame nav={false} back="/shop" >{null}</ShopFrame>;
+    if (!s.ready && !slug) return <ShopFrame nav={false} back="/" >{null}</ShopFrame>;
     return (
-      <ShopFrame nav="categories" back="/shop">
+      <ShopFrame nav="categories" back="/">
         <EmptyState
           icon={<IconSearch size={34} />}
           title="המוצר לא נמצא"
@@ -92,11 +92,11 @@ function ProductDetail({ product }: { product: Product }) {
   ).slice(0, 4);
 
   return (
-    <ShopFrame nav={false} back={primaryCat ? categoryHref(primaryCat.slug, STATIC_CATEGORY_SLUGS) : '/shop'}>
+    <ShopFrame nav={false} back={primaryCat ? categoryHref(primaryCat.slug, STATIC_CATEGORY_SLUGS) : '/'}>
       <div className="mx-auto max-w-7xl lg:px-8 lg:pt-6">
         {primaryCat && (
           <nav aria-label="פירורי לחם" className="hidden text-[13px] text-x-muted lg:block">
-            <Link href="/shop" className="hover:text-x-blue">
+            <Link href="/" className="hover:text-x-blue">
               בית
             </Link>
             <span className="mx-1.5">›</span>

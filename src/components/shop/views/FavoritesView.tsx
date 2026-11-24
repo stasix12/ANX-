@@ -12,7 +12,7 @@ export function FavoritesView() {
     .map((id) => s.db.products.find((p) => p.id === id && p.published))
     .filter((p): p is NonNullable<typeof p> => !!p);
   return (
-    <ShopFrame nav="favorites" back="/shop">
+    <ShopFrame nav="favorites" back="/">
       <div className="mx-auto max-w-7xl px-4 lg:px-8 lg:pt-8">
         <h1 className="mb-4 text-center text-[24px] font-black lg:text-start lg:text-3xl">
           מועדפים {s.ready && <span>({list.length})</span>}

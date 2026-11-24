@@ -101,7 +101,7 @@ export function OrderSuccess({ id }: { id: string | null }) {
         <Link href={`/shop/track?id=${encodeURIComponent(order.id)}`} className={`${btn.primary} mt-8 h-14 w-full rounded-full from-[#8a4efc]! to-[#6c46fb]! text-[17px]`}>
           מעקב אחר ההזמנה
         </Link>
-        <Link href="/shop" className="mt-3 inline-flex h-14 w-full items-center justify-center rounded-full border border-white/30 text-[17px] font-bold text-white hover:bg-white/5">
+        <Link href="/" className="mt-3 inline-flex h-14 w-full items-center justify-center rounded-full border border-white/30 text-[17px] font-bold text-white hover:bg-white/5">
           המשך קנייה
         </Link>
       </div>
@@ -155,7 +155,7 @@ function AwaitingPayment({ order, shippingName }: { order: Order; shippingName?:
         <Link href={`/shop/track?id=${encodeURIComponent(order.id)}`} className="mt-6 text-[14px] font-bold text-white/80 underline underline-offset-4">
           לפרטי ההזמנה
         </Link>
-        <Link href="/shop" className="mt-4 inline-flex h-12 w-full items-center justify-center rounded-full border border-white/30 text-[16px] font-bold text-white hover:bg-white/5">
+        <Link href="/" className="mt-4 inline-flex h-12 w-full items-center justify-center rounded-full border border-white/30 text-[16px] font-bold text-white hover:bg-white/5">
           המשך קנייה
         </Link>
       </div>

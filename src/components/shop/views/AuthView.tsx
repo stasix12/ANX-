@@ -37,7 +37,7 @@ export function LoginView({ next = null }: { next?: string | null }) {
 
   if (s.ready && user) {
     return (
-      <ShopFrame nav="profile" back="/shop">
+      <ShopFrame nav="profile" back="/">
         <div className="mx-auto max-w-sm px-6 py-16 text-center">
           <p className="text-lg font-bold">את/ה כבר מחובר/ת כ-{user.name}</p>
           <Link href={safeNext(next)} className={`${btn.blue} mt-6 h-12 w-full`}>
@@ -49,7 +49,7 @@ export function LoginView({ next = null }: { next?: string | null }) {
   }
 
   return (
-    <ShopFrame nav="profile" back="/shop">
+    <ShopFrame nav="profile" back="/">
       <div className="mx-auto max-w-md px-5 pt-4 lg:pt-12">
         <div className="text-center">
           <Logo className="text-[38px]" />

@@ -44,7 +44,7 @@ function useCartCount() {
 export type HeaderTone = 'light' | 'dark' | 'overlay';
 
 const DESKTOP_LINKS = [
-  { href: '/shop', label: 'בית' },
+  { href: '/', label: 'בית' },
   { href: '/shop/categories', label: 'קטגוריות' },
   { href: '/shop/c/all', label: 'כל המוצרים' },
   { href: '/shop/favorites', label: 'מועדפים' },
@@ -129,7 +129,7 @@ export function ShopHeader({
             </button>
           )}
         </div>
-        <Link href="/shop" aria-label="ANX3D — דף הבית" className="justify-self-center">
+        <Link href="/" aria-label="ANX3D — דף הבית" className="justify-self-center">
           {title ? (
             <span dir="rtl" className={`text-[22px] font-extrabold ${dark ? 'text-white' : 'text-x-ink'}`}>
               {title}
@@ -153,12 +153,12 @@ export function ShopHeader({
 
       {/* Desktop: a real top bar instead of a stretched phone header. */}
       <div className="mx-auto hidden h-18 max-w-7xl items-center gap-8 px-8 lg:flex">
-        <Link href="/shop" aria-label="ANX3D — דף הבית">
+        <Link href="/" aria-label="ANX3D — דף הבית">
           <Logo tone={dark ? 'light' : 'dark'} upright className="text-[32px] tracking-[-0.02em]" />
         </Link>
         <nav aria-label="ניווט ראשי" className="flex items-center gap-1">
           {DESKTOP_LINKS.map((l) => {
-            const active = l.href === '/shop' ? pathname === '/shop' : pathname?.startsWith(l.href);
+            const active = l.href === '/' ? (pathname === '/' || pathname === '/shop') : pathname?.startsWith(l.href);
             return (
               <Link
                 key={l.href}
@@ -211,7 +211,7 @@ export function BottomNav({ active }: { active?: NavKey }) {
   const count = useCartCount();
   const user = useCurrentUser();
   const items: { key: NavKey; href: string; label: string; Icon: typeof IconHome }[] = [
-    { key: 'home', href: '/shop', label: 'בית', Icon: IconHome },
+    { key: 'home', href: '/', label: 'בית', Icon: IconHome },
     { key: 'categories', href: '/shop/categories', label: 'קטגוריות', Icon: IconGrid },
     { key: 'favorites', href: '/shop/favorites', label: 'מועדפים', Icon: IconHeart },
     { key: 'cart', href: '/shop/cart', label: 'עגלה', Icon: IconCart },
@@ -282,7 +282,7 @@ function Drawer({ open, onClose }: { open: boolean; onClose: () => void }) {
         </div>
         <div className="px-3 pb-6">
           <nav aria-label="תפריט ראשי">
-            <Link href="/shop" className={row}>
+            <Link href="/" className={row}>
               <IconHome size={22} /> דף הבית
             </Link>
             <Link href="/shop/c/all" className={row}>

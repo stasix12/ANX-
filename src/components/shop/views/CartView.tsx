@@ -19,7 +19,7 @@ export function CartView() {
   const blocked = totals.lines.some((l) => l.problem);
 
   return (
-    <ShopFrame nav="cart" back="/shop">
+    <ShopFrame nav="cart" back="/">
       <div className="mx-auto max-w-6xl px-4 lg:px-8 lg:pt-8">
         <h1 dir="ltr" className="mb-4 text-[26px] font-black lg:text-3xl">
           <span dir="rtl">העגלה שלי</span>

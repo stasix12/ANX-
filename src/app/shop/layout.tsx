@@ -12,7 +12,7 @@ export const metadata: Metadata = {
   },
   description:
     'ANX3D: ידיות לניקוי ספות, טולים לניקוי שטיחים, מתאמים, מחברים ואביזרי שאיבה לאנשי מקצוע — מיוצרים בהדפסת תלת־ממד.',
-  alternates: { canonical: '/shop' },
+  alternates: { canonical: '/' },
   openGraph: {
     type: 'website',
     locale: 'he_IL',

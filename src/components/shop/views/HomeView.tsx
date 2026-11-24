@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { LEGAL_DOCS } from '@/lib/shop/legal';
 import { sortProducts } from '@/lib/shop/logic';
 import type { Product } from '@/lib/shop/types';
 import { useShop } from '@/lib/shop/store';
@@ -195,8 +196,14 @@ export function ShopFooter() {
           </ul>
         </div>
         <div>
-          <p className="mb-3 font-bold">תשלום מאובטח</p>
-          <p className="text-x-muted">פרטי אשראי לא נשמרים באתר — התשלום מתבצע בעמוד המאובטח של חברת הסליקה.</p>
+          <p className="mb-3 font-bold">מידע</p>
+          <ul className="space-y-2 text-x-muted">
+            {LEGAL_DOCS.map((d) => (
+              <li key={d.slug}>
+                <Link href={`/shop/legal/${d.slug}`} className="hover:text-x-blue">{d.short}</Link>
+              </li>
+            ))}
+          </ul>
         </div>
       </div>
     </footer>

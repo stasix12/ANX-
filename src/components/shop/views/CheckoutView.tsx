@@ -118,7 +118,7 @@ export function CheckoutView() {
 
   const pay = () => {
     setFormError(null);
-    if (!agree) return setFormError('יש לאשר את תנאי השימוש ומדיניות הפרטיות');
+    if (!agree) return setFormError('יש לאשר את התקנון, מדיניות הביטולים ומדיניות הפרטיות');
     const r = actions.createOrder(form);
     if (!r.ok) return setFormError(r.error);
     // The order number screen hands the order to WhatsApp for Bit / PayBox.
@@ -290,7 +290,20 @@ export function CheckoutView() {
                 </div>
                 <label className="flex items-start gap-2 text-[14px]">
                   <input type="checkbox" checked={agree} onChange={(e) => setAgree(e.target.checked)} className="mt-1 size-4 accent-x-blue" />
-                  <span>קראתי ואני מסכים/ה לתנאי השימוש ולמדיניות הפרטיות</span>
+                  <span>
+                    קראתי ואני מסכים/ה ל
+                    <Link href="/shop/legal/terms" target="_blank" className="font-bold text-x-blue underline">
+                      תקנון
+                    </Link>
+                    , ל
+                    <Link href="/shop/legal/returns" target="_blank" className="font-bold text-x-blue underline">
+                      מדיניות הביטולים
+                    </Link>{' '}
+                    ול
+                    <Link href="/shop/legal/privacy" target="_blank" className="font-bold text-x-blue underline">
+                      מדיניות הפרטיות
+                    </Link>
+                  </span>
                 </label>
                 {formError && (
                   <p role="alert" className="rounded-xl bg-[#fdeced] px-4 py-3 text-[14px] font-semibold text-x-red">

@@ -5,6 +5,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { categoryHref, visibleCategories } from '@/lib/shop/logic';
 import { STATIC_CATEGORY_SLUGS } from '@/lib/shop/static';
+import { LEGAL_DOCS } from '@/lib/shop/legal';
 import { useCurrentUser, useShop } from '@/lib/shop/store';
 import {
   CategoryGlyph,
@@ -281,6 +282,12 @@ function Drawer({ open, onClose }: { open: boolean; onClose: () => void }) {
             {cats.map((c) => (
               <Link key={c.slug} href={categoryHref(c.slug, STATIC_CATEGORY_SLUGS)} className={row}>
                 <CategoryGlyph icon={c.icon} size={22} /> {c.name}
+              </Link>
+            ))}
+            <p className="mt-4 mb-1 px-3 text-xs font-bold text-x-faint">מידע</p>
+            {LEGAL_DOCS.map((d) => (
+              <Link key={d.slug} href={`/shop/legal/${d.slug}`} className={`${row} py-2.5 text-[14px] text-x-ink-2`}>
+                {d.short}
               </Link>
             ))}
             {user?.role === 'admin' && (

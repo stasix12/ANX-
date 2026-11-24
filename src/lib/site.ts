@@ -13,6 +13,17 @@ export const site = {
   instagram: 'https://instagram.com/anx3d',
   tiktok: 'https://tiktok.com/@anx3d',
   shippingNote: 'משלוחים לכל הארץ',
+  /**
+   * Business identity shown in the terms, privacy and accessibility pages
+   * (Consumer Protection Law, s.14C disclosure). Empty fields are not shown —
+   * fill them with the owner's real details.
+   */
+  legal: {
+    businessName: 'ANX3D',
+    businessId: '',
+    address: '',
+    email: '',
+  },
 } as const;
 
 /**

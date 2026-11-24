@@ -23,11 +23,15 @@ export const COLORS = {
   black: { id: 'black', name: 'שחור', swatch: ['#1d1f24'] },
   blue: { id: 'blue', name: 'כחול', swatch: ['#2f6bff', '#121419'] },
   green: { id: 'green', name: 'ירוק', swatch: ['#22b04b', '#121419'] },
-  jungle: { id: 'jungle', name: 'ירוק ג׳ונגל', swatch: ['#c9e83a'] },
   red: { id: 'red', name: 'אדום', swatch: ['#ef3b3f', '#a3191d'] },
   pink: { id: 'pink', name: 'ורוד-שחור', swatch: ['#f2707b', '#1d1f24'] },
   purple: { id: 'purple', name: 'סגול', swatch: ['#7d4cf2', '#121419'] },
   white: { id: 'white', name: 'לבן', swatch: ['#f5f5f7'] },
+  // Handle finishes, named as the owner sells them.
+  galaxy: { id: 'galaxy', name: 'Black galaxy', swatch: ['#1d1f24', '#4a3f7a'] },
+  greenJungle: { id: 'jungle', name: 'Green jungle', swatch: ['#c9e83a'] },
+  coldWhite: { id: 'cold-white', name: 'Cold white', swatch: ['#eef3f8'] },
+  blackPurple: { id: 'black-purple', name: 'Black purple', swatch: ['#1d1f24', '#b04ad0'] },
 } satisfies Record<string, ColorOption>;
 
 export const COLOR_LIST: ColorOption[] = Object.values(COLORS);
@@ -72,6 +76,7 @@ export const SEED_PRODUCTS: Product[] = [
     ...base,
     id: 'p-anaconda',
     slug: 'anaconda',
+    cardChoices: true,
     name: 'ANACONDA',
     subtitle: 'ידית מקצועית לניקוי ספות',
     description:
@@ -80,8 +85,8 @@ export const SEED_PRODUCTS: Product[] = [
     price: 850,
     images: [...anacondaBlack, ...anacondaGreen],
     colors: [
-      { ...COLORS.black, images: anacondaBlack },
-      { ...COLORS.jungle, images: anacondaGreen },
+      { ...COLORS.galaxy, images: anacondaBlack },
+      { ...COLORS.greenJungle, images: anacondaGreen },
     ],
     video: { webm: '/video/anaconda-demo.webm', mp4: '/video/anaconda-demo.mp4', poster: '/video/anaconda-demo-poster.jpg' },
     highlights: [
@@ -91,7 +96,7 @@ export const SEED_PRODUCTS: Product[] = [
       'גוף עמיד לחום ולשחיקה, מיוצר בישראל',
     ],
     specs: [
-      { label: 'צבעים', value: 'ירוק ג׳ונגל · שחור' },
+      { label: 'צבעים', value: 'Black galaxy · Green jungle' },
       { label: 'ייצור', value: 'מיוצר בישראל · עמיד לחום ולשחיקה' },
       { label: 'אטימה', value: 'אטם קצף היקפי' },
       { label: 'שליטה', value: 'הדק התזה מובנה' },
@@ -108,6 +113,7 @@ export const SEED_PRODUCTS: Product[] = [
     ...base,
     id: 'p-viper',
     slug: 'viper',
+    cardChoices: true,
     name: 'MINI VIPER',
     subtitle: 'ידית קומפקטית לעבודות דיוק',
     description:
@@ -115,7 +121,8 @@ export const SEED_PRODUCTS: Product[] = [
     categories: ['handles'],
     price: 950,
     images: [1, 2, 3, 4].map((n) => real('anx-pro-handle', n)),
-    colors: [{ ...COLORS.black }],
+    // Photos show Black galaxy; Cold white has none yet, so it keeps the same gallery.
+    colors: [{ ...COLORS.galaxy }, { ...COLORS.coldWhite }],
     video: { webm: '/video/viper-demo.webm', mp4: '/video/viper-demo.mp4', poster: '/video/viper-demo-poster.jpg' },
     highlights: [
       'ידית קטנה במיוחד — מגיעה לכל מקום',
@@ -137,6 +144,7 @@ export const SEED_PRODUCTS: Product[] = [
     ...base,
     id: 'p-big-mamba',
     slug: 'big-mamba',
+    cardChoices: true,
     name: 'BIG MAMBA',
     subtitle: 'ידית עם ראש שאיבה רחב לניקוי ספות',
     description:
@@ -144,7 +152,8 @@ export const SEED_PRODUCTS: Product[] = [
     categories: ['handles'],
     price: 1050,
     images: [1, 2, 3, 4].map((n) => real('big-mamba', n)),
-    colors: [{ ...COLORS.pink }],
+    // Photos show Black purple; Black galaxy has none yet, so it keeps the same gallery.
+    colors: [{ ...COLORS.blackPurple }, { ...COLORS.galaxy }],
     video: { webm: '/video/big-mamba-demo.webm', mp4: '/video/big-mamba-demo.mp4', poster: '/video/big-mamba-demo-poster.jpg' },
     highlights: [
       'ראש שאיבה רחב — פייה ברוחב 113 מ״מ',
@@ -526,6 +535,7 @@ export const SEED_PRODUCTS: Product[] = [
     ...base,
     id: 'p-anaconda-set',
     slug: 'anaconda-set',
+    cardChoices: true,
     name: 'סט ANACONDA — צינור בתוך צינור',
     subtitle: 'צינור שאיבה והזרקה משולב, עם ידית או בלי',
     description:
@@ -624,7 +634,7 @@ const DEMO_ADMIN: User = {
 };
 
 /** Bumped when the seed changes shape, so browsers drop the old demo catalogue. */
-export const DB_VERSION = 35;
+export const DB_VERSION = 36;
 
 export function buildSeedDB(): ShopDB {
   return {

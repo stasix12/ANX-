@@ -60,7 +60,7 @@ const assert = (c, m) => { if (!c) throw new Error('ASSERT: ' + m); console.log(
   await shot('04-product');
   const mainSrc = async () => page.locator('[aria-roledescription="גלריה"] img').first().getAttribute('src');
   assert((await mainSrc()).includes('anx-anaconda/5'), 'black ANACONDA shown by default');
-  await page.getByRole('button', { name: 'ירוק ג׳ונגל', exact: true }).click();
+  await page.getByRole('button', { name: 'Green jungle', exact: true }).click();
   await page.waitForTimeout(300);
   assert((await mainSrc()).includes('anx-anaconda/1'), 'jungle-green swatch shows the green handle photos');
   assert((await page.locator('video').count()) === 1, 'demo video in gallery');

@@ -2,7 +2,8 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { cardImage, fromPrice, inStock, productHref, purchasable } from '@/lib/shop/logic';
+import { useState } from 'react';
+import { cardImage, fromPrice, galleryFor, inStock, productHref, purchasable, unitPriceFor } from '@/lib/shop/logic';
 import { STATIC_PRODUCT_SLUGS } from '@/lib/shop/static';
 import { actions, useShop } from '@/lib/shop/store';
 import type { Product } from '@/lib/shop/types';
@@ -61,16 +62,25 @@ export function ProductCard({
   const router = useRouter();
   const href = productHref(product, STATIC_PRODUCT_SLUGS);
   const available = inStock(product);
-  const from = fromPrice(product);
+  // Choices shown right on the card: a single version group (e.g. with / without
+  // handle) or, failing that, the colors when there is more than one.
+  const group = product.cardChoices && product.variants.length === 1 ? product.variants[0] : null;
+  const choices = !product.cardChoices ? [] : group ? group.values : product.colors.length > 1 ? product.colors.map((c) => c.name) : [];
+  const [pick, setPick] = useState(0);
+  const colorId = group ? (product.colors[0]?.id ?? null) : (product.colors[choices.length ? pick : 0]?.id ?? null);
+  const options = group ? { [group.id]: group.values[pick] } : {};
+  const from = group ? { price: unitPriceFor(product, options), varies: false } : fromPrice(product);
   const priced = from.price !== null;
-  // A product with versions to choose (or no price yet) is ordered from its page.
-  const direct = purchasable(product) && !product.variants.length;
-  const note = product.imageNotes[cardImage(product)];
+  // Products whose only choices are on the card go straight into the cart;
+  // anything else (several version groups, no price yet) is ordered from its page.
+  const direct = purchasable(product) && (!product.variants.length || !!group);
+  const image = choices.length ? (galleryFor(product, colorId, options)[0] ?? cardImage(product)) : cardImage(product);
+  const note = product.imageNotes[image];
   return (
     <article dir="rtl" className="group relative flex flex-col overflow-hidden rounded-[14px] bg-white shadow-x-card ring-1 ring-x-line/60 transition hover:shadow-x-pop">
       <Link href={href} className="absolute inset-0 z-0" aria-label={product.name} />
       <div className={`pointer-events-none relative overflow-hidden bg-x-soft ${compact ? 'aspect-[1/0.86]' : 'aspect-[1/0.92]'}`}>
-        <Img path={cardImage(product)} alt={product.name} eager={priority} className="size-full object-cover transition duration-500 group-hover:scale-[1.04]" />
+        <Img path={image} alt={product.name} eager={priority} className="size-full object-cover transition duration-500 group-hover:scale-[1.04]" />
         <FavoriteButton product={product} className={`pointer-events-auto absolute z-10 ${compact ? 'top-1.5 left-1.5 size-7!' : 'top-2 left-2'}`} />
         {(product.madeInIsrael || product.badge) && (
           <span className="absolute top-2 right-2 z-10 flex flex-col items-end gap-1">
@@ -95,12 +105,51 @@ export function ProductCard({
         <div className="mt-1">
           <Stars rating={product.rating} count={product.reviewCount} size={compact ? 11 : 13} />
         </div>
+        {choices.length > 0 && (
+          <div
+            role="radiogroup"
+            aria-label={group ? group.label : `בחירת צבע — ${product.name}`}
+            className={`pointer-events-auto relative z-10 mt-2 space-y-1 rounded-[10px] border border-x-line bg-x-soft-2 ${compact ? 'p-1' : 'p-1.5'}`}
+          >
+            {choices.map((label, i) => {
+              const on = i === pick;
+              return (
+                <button
+                  key={label}
+                  type="button"
+                  role="radio"
+                  aria-checked={on}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setPick(i);
+                  }}
+                  className={`flex w-full items-center rounded-[7px] py-1 text-start leading-tight font-bold transition ${compact ? 'gap-1 px-1 text-[10px] tracking-[-0.01em]' : 'gap-1.5 px-1.5 text-[12px]'} ${
+                    on ? 'bg-white text-x-ink shadow-[0_1px_3px_rgb(0_0_0/0.08)]' : 'text-x-ink-2'
+                  }`}
+                >
+                  <span
+                    aria-hidden="true"
+                    className={`grid shrink-0 place-items-center rounded-[4px] border-[1.5px] ${compact ? 'size-3.5' : 'size-4'} ${on ? 'border-x-blue bg-x-blue text-white' : 'border-x-faint bg-white'}`}
+                  >
+                    {on && (
+                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={3.5} strokeLinecap="round" strokeLinejoin="round">
+                        <path d="m5 12.5 4.5 4.5L19 7.5" />
+                      </svg>
+                    )}
+                  </span>
+                  <span dir="auto" className="min-w-0 flex-1 break-words">{label}</span>
+                </button>
+              );
+            })}
+          </div>
+        )}
         <div className="mt-auto flex items-end justify-between pt-2">
           <button
             type="button"
             disabled={!available}
             aria-label={direct ? `הוספת ${product.name} לסל` : `לפרטים ולהזמנה — ${product.name}`}
-            onClick={() => (direct ? addProductToCart(product) : router.push(href))}
+            onClick={() => (direct ? addProductToCart(product, colorId, 1, options) : router.push(href))}
             className={`pointer-events-auto relative z-10 grid place-items-center rounded-[10px] text-white shadow-[0_4px_10px_rgb(60_80_250/0.25)] transition active:scale-90 disabled:bg-x-faint! disabled:shadow-none ${
               compact ? 'size-9' : 'size-10'
             } ${accent === 'violet' ? 'bg-x-violet hover:bg-x-violet-600' : 'bg-x-indigo hover:bg-x-violet-600'}`}

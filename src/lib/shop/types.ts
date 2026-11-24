@@ -82,6 +82,8 @@ export interface Product {
   /** A featured clip with its own heading (path without extension: .mp4 video, .jpg poster). */
   /** Longer page copy shown instead of the description (paragraphs; a leading '**' marks a bold line). */
   story?: string[];
+  /** Big highlighted selling points under the title (e.g. boosted suction). */
+  callouts?: string[];
   /** Show the colors / single version group as a check-box picker on the product card. */
   cardChoices?: boolean;
   demo?: { title: string; highlight?: string; clips: { video: string; badge?: string; duration?: string; label: string }[] };

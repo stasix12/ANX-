@@ -76,6 +76,7 @@ export const SEED_PRODUCTS: Product[] = [
     ...base,
     id: 'p-anaconda',
     slug: 'anaconda',
+    callouts: ['לחץ שאיבה מוגבר', 'לחץ התזה מוגבר'],
     cardChoices: true,
     name: 'ANACONDA',
     subtitle: 'ידית מקצועית לניקוי ספות',
@@ -90,6 +91,8 @@ export const SEED_PRODUCTS: Product[] = [
     ],
     video: { webm: '/video/anaconda-demo.webm', mp4: '/video/anaconda-demo.mp4', poster: '/video/anaconda-demo-poster.jpg' },
     highlights: [
+      'לחץ שאיבה מוגבר — שואבת יותר מים ולכלוך מהריפוד',
+      'לחץ התזה מוגבר — החומר חודר עמוק יותר לבד',
       '3 מצבי אחיזה — אוחזים בדרך שנוחה לכל סוג עבודה וזווית',
       'צורה ארגונומית שמותאמת לשעות ארוכות של עבודה',
       'גוף עמיד לחום ולשחיקה, מיוצר בישראל',
@@ -637,7 +640,7 @@ const DEMO_ADMIN: User = {
 };
 
 /** Bumped when the seed changes shape, so browsers drop the old demo catalogue. */
-export const DB_VERSION = 38;
+export const DB_VERSION = 39;
 
 export function buildSeedDB(): ShopDB {
   return {

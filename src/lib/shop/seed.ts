@@ -28,7 +28,7 @@ export const COLORS = {
   purple: { id: 'purple', name: 'סגול', swatch: ['#7d4cf2', '#121419'] },
   white: { id: 'white', name: 'לבן', swatch: ['#f5f5f7'] },
   // Handle finishes, named as the owner sells them.
-  galaxy: { id: 'galaxy', name: 'Black galaxy', swatch: ['#1d1f24', '#4a3f7a'] },
+  galaxy: { id: 'galaxy', name: 'Black galaxy', swatch: ['#1d1f24'] },
   greenJungle: { id: 'jungle', name: 'Green jungle', swatch: ['#c9e83a'] },
   coldWhite: { id: 'cold-white', name: 'Cold white', swatch: ['#eef3f8'] },
   blackPurple: { id: 'black-purple', name: 'Black purple', swatch: ['#1d1f24', '#b04ad0'] },
@@ -641,7 +641,7 @@ const DEMO_ADMIN: User = {
 };
 
 /** Bumped when the seed changes shape, so browsers drop the old demo catalogue. */
-export const DB_VERSION = 40;
+export const DB_VERSION = 41;
 
 export function buildSeedDB(): ShopDB {
   return {

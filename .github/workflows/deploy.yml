@@ -69,6 +69,19 @@ jobs:
       # nothing and keeps Next's _next/ directory safe if that ever changes.
       - run: touch out/.nojekyll
 
+      # Temporary shutdown: while a MAINTENANCE file sits in the repo root,
+      # every page is replaced by the maintenance notice. Delete the file
+      # (and push) to bring the store back.
+      - name: Maintenance mode
+        run: |
+          if [ -f MAINTENANCE ]; then
+            cname=$(cat out/CNAME 2>/dev/null || true)
+            rm -rf out && mkdir out
+            cp maintenance/index.html maintenance/404.html out/
+            touch out/.nojekyll
+            [ -n "$cname" ] && echo "$cname" > out/CNAME || true
+          fi
+
       - uses: actions/upload-pages-artifact@v3
         with:
           path: out

@@ -249,14 +249,61 @@ export class BrowserSession {
    * Opens facebook.com and reports the session state without touching
    * anything. Used by "בדוק חיבור" and before every batch of jobs.
    */
-  async checkLogin(headless: boolean): Promise<{ state: 'connected' | 'needs_auth'; detail: string; account?: AccountProfile | null }> {
+  async checkLogin(
+    headless: boolean,
+    hooks?: { onChallenge?: (screenshot: Buffer) => Promise<string | null> },
+  ): Promise<{ state: 'connected' | 'needs_auth'; detail: string; account?: AccountProfile | null }> {
     if (!this.hasProfile()) return { state: 'needs_auth', detail: 'אין עדיין פרופיל דפדפן — לחצו "התחבר לפייסבוק".' };
     const page = await this.newPage(headless, 'בדיקת התחברות');
     try {
       await page.goto('https://www.facebook.com/', { waitUntil: 'domcontentloaded', timeout: 60_000 });
       await page.waitForTimeout(2500);
-      const kind = await classifyPage(page);
-      if (kind === 'checkpoint') return { state: 'needs_auth', detail: 'Facebook מציג בדיקת אבטחה — פתחו את הדפדפן וטפלו בה.' };
+      let kind = await classifyPage(page);
+      /*
+       * ─── A CHECK THE OWNER CAN ANSWER FROM ANYWHERE ───────────────────
+       *
+       * "אי אפשר לעשות דפדפן שירוץ על ענן במקום המחשב?" — 25.11.2026.
+       *
+       * It can, and worker/Dockerfile already does. What stopped it being
+       * usable was this line: a checkpoint here returned "פתחו את הדפדפן
+       * וטפלו בה", which is an instruction nobody can follow on a container
+       * with no screen. The worker then sits in needs_auth for ever and
+       * every gate below it holds, so one security check silently ends the
+       * whole account's publishing until somebody walks to a machine that,
+       * in the cloud, does not exist.
+       *
+       * The piece that answers it was already written — and written for
+       * exactly this: interactiveLogin's onChallenge photographs the page,
+       * puts it on the dashboard, waits for what the owner types, and types
+       * it back in. Its own comment says it is "for a customer whose browser
+       * runs on a server they will never see". It was wired to the login
+       * command alone.
+       *
+       * So it is wired here too, and HERE rather than into publishing: this
+       * check runs on a timer before every batch, so a checkpoint raised by
+       * any operation is caught within one cycle — without a single line
+       * changing in the path that publishes his posts.
+       *
+       * Asked once per check. Answering is not passing: the page is read
+       * again afterwards and only a real session reports connected.
+       */
+      if (kind === 'checkpoint' && hooks?.onChallenge) {
+        const shot = await page.screenshot({ type: 'png', timeout: 15_000 }).catch(() => null);
+        const answer = shot ? await hooks.onChallenge(shot).catch(() => null) : null;
+        if (answer) {
+          await typeChallengeAnswer(page, answer);
+          await page.waitForTimeout(4000);
+          kind = await classifyPage(page).catch(() => 'checkpoint' as PageKind);
+        }
+      }
+      if (kind === 'checkpoint') {
+        return {
+          state: 'needs_auth',
+          detail: hooks?.onChallenge
+            ? 'Facebook מציג בדיקת אבטחה. הצילום נמצא במסך החשבון — הזינו שם את מה שהיא מבקשת.'
+            : 'Facebook מציג בדיקת אבטחה — פתחו את הדפדפן וטפלו בה.',
+        };
+      }
       if (kind === 'login' || !(await this.hasLoginCookie())) return { state: 'needs_auth', detail: 'לא מחובר לפייסבוק — לחצו "התחבר לפייסבוק".' };
       /*
        * WHO is signed in, read here because here is the one moment the worker

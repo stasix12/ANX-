@@ -5566,6 +5566,56 @@ const scenario: { step: string; line: string }[] = [];
   assert.ok(!/בחלון שעל המחשב|החלון על המחשב נשאר פתוח/.test(accountPage), 'and the screen no longer tells anyone to walk to the machine');
 
   /*
+   * ─── 25.11.2026 · AND NOT ONLY DURING A LOGIN ──────────────────────────
+   *
+   * "אי אפשר לעשות דפדפן שירוץ על ענן במקום המחשב?"
+   *
+   * It can — worker/Dockerfile is exactly that — and the relay above is the
+   * piece that makes it usable by somebody who will never see the machine.
+   * It was wired to ONE caller: the login command. Every other path that met
+   * a security check returned "פתחו את הדפדפן וטפלו בה", which in a container
+   * is an instruction nobody can follow: the worker drops to needs_auth, the
+   * gates below it hold, and one check silently ends the account's publishing
+   * until a human reaches a screen that does not exist.
+   *
+   * So it is wired into the PERIODIC CHECK, which runs before every batch and
+   * therefore catches a check raised by any operation within one cycle —
+   * without one line changing in the path that publishes his posts.
+   */
+  assert.ok(
+    /async checkLogin\(\s*headless: boolean,\s*hooks\?: \{ onChallenge\?/.test(sessionSrc),
+    'the periodic connection check can carry a challenge to the screen too',
+  );
+  assert.ok(
+    /if \(kind === 'checkpoint' && hooks\?\.onChallenge\)/.test(sessionSrc),
+    'and photographs the check rather than telling a screenless machine to open a browser',
+  );
+  assert.ok(
+    /await typeChallengeAnswer\(page, answer\);\s*await page\.waitForTimeout\(4000\);\s*kind = await classifyPage/.test(sessionSrc),
+    'the answer is typed in and the page READ AGAIN — answering is not passing',
+  );
+  assert.ok(
+    (localWorker.match(/onChallenge: \(shot\) => askOnScreen\(state, shot\)/g) ?? []).length >= 3,
+    'and every caller of the check hands the relay over, not just the login command',
+  );
+  /* The question comes off the screen by itself now, because the login path
+     is no longer the only thing that can raise it. */
+  assert.ok(
+    /console\.log\('\[worker\] ✓ התקבלה תשובת אימות מהמסך\.'\);[\s\S]{0,700}await clearChallenge\(state\);/.test(localWorker),
+    'an answered challenge is cleared by the function that raised it',
+  );
+  assert.ok(
+    /console\.log\('\[worker\] ℹ לא התקבלה תשובת אימות בזמן\.'\);[\s\S]{0,120}await clearChallenge\(state\);/.test(localWorker),
+    'and so is one that expired — a stale question is worse than none',
+  );
+  /* And the sentence no longer claims a login is in progress, because it
+     may not be. */
+  assert.ok(
+    !/פייסבוק מבקשת אימות כדי להשלים את ההתחברות/.test(localWorker),
+    'the activity line no longer says "to complete the login" for a check that is not one',
+  );
+
+  /*
    * A MISSING MIGRATION MUST NOT MAKE THE WORKER IGNORE EVERYTHING.
    *
    * Emptying the payload as the command is claimed is right, and on a database

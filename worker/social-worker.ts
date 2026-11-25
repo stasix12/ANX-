@@ -640,7 +640,7 @@ async function main(): Promise<void> {
   if (session.hasProfile()) {
     try {
       const browser = await browserSettings();
-      const check = await session.checkLogin(!browser.debugMode);
+      const check = await session.checkLogin(!browser.debugMode, { onChallenge: (shot) => askOnScreen(state, shot) });
       state.browserState = check.state;
       state.lastCheckAt = Date.now();
       await recordAccount(state, check.account);
@@ -977,7 +977,20 @@ async function sessionReady(state: WorkerState, headless: boolean): Promise<bool
   state.recheckSession = false;
   const fresh = Date.now() - state.lastCheckAt;
   if (state.browserState === 'connected' && fresh <= (asked ? RECHECK_FLOOR_MS : LOGIN_RECHECK_MS)) return true;
-  const check = await session.checkLogin(headless);
+  /*
+   * THE CHALLENGE GOES TO THE SCREEN, NOT TO THE MACHINE.
+   *
+   * This check runs before every batch of jobs, so it is where a security
+   * check raised by ANY operation surfaces within one cycle. On the owner's
+   * own PC the old answer — "open the browser and handle it" — worked. On
+   * worker/Dockerfile, which is the same engine in a container with no
+   * screen, it is an instruction nobody can follow, and the worker would sit
+   * in needs_auth until somebody walked to a machine that does not exist.
+   *
+   * askOnScreen is the piece that already solved this for the login command.
+   * Nothing in the publishing path changes.
+   */
+  const check = await session.checkLogin(headless, { onChallenge: (shot) => askOnScreen(state, shot) });
   state.lastCheckAt = Date.now();
   state.browserState = check.state;
   await recordAccount(state, check.account);
@@ -6937,7 +6950,10 @@ async function askOnScreen(state: WorkerState, shot: Buffer): Promise<string | n
     return null;
   }
   console.log('[worker] ℹ פייסבוק מבקשת אימות — השאלה הועברה למסך, ממתין לתשובה.');
-  await logActivity('warn', 'login_challenge', 'פייסבוק מבקשת אימות כדי להשלים את ההתחברות. פתחו את מסך החשבון והזינו את מה שהיא מבקשת.');
+  /* NOT "to complete the login" any more: since 25.11.2026 this is also
+     raised by the periodic connection check, which is what makes a browser
+     in a container answerable. The sentence says what is true either way. */
+  await logActivity('warn', 'login_challenge', 'פייסבוק מבקשת אימות. פתחו את מסך החשבון — הצילום שם — והזינו את מה שהיא מבקשת.');
 
   /*
    * Polled from inside the login rather than through the command loop, because
@@ -6964,12 +6980,25 @@ async function askOnScreen(state: WorkerState, shot: Buffer): Promise<string | n
       });
       if (claimed && code) {
         console.log('[worker] ✓ התקבלה תשובת אימות מהמסך.');
+        /*
+         * TAKEN OFF THE SCREEN BY THE FUNCTION THAT PUT IT THERE.
+         *
+         * clearChallenge used to be called only on the way out of the login
+         * command (one caller). Now that the periodic check raises this too,
+         * a question answered mid-cycle would otherwise sit on the account
+         * screen for ever, asking for a code nobody is waiting for — which
+         * the account screen's own comment calls worse than no picture. The
+         * login path still clears on its own exits; this is idempotent.
+         */
+        await clearChallenge(state);
         return code;
       }
     }
     await new Promise((r) => setTimeout(r, 3000));
   }
   console.log('[worker] ℹ לא התקבלה תשובת אימות בזמן.');
+  /* A question that expired is resolved too — see above. */
+  await clearChallenge(state);
   return null;
 }
 

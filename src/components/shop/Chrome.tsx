@@ -306,11 +306,11 @@ function Drawer({ open, onClose }: { open: boolean; onClose: () => void }) {
 }
 
 /** Required policies, at the very bottom of every page. */
-function LegalFooter() {
+function LegalFooter({ dark }: { dark?: boolean }) {
   return (
-    <footer className="mx-auto mt-8 max-w-7xl border-t border-x-line px-4 pt-4 text-center lg:px-8">
+    <footer className={`mx-auto mt-8 max-w-7xl border-t px-4 pt-4 text-center lg:px-8 ${dark ? 'border-white/15' : 'border-x-line'}`}>
       <nav aria-label="מידע משפטי">
-        <ul className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-[12.5px] font-semibold text-x-muted">
+        <ul className={`flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-[12.5px] font-semibold ${dark ? 'text-white/80' : 'text-x-muted'}`}>
           {LEGAL_DOCS.map((d) => (
             <li key={d.slug}>
               <Link href={`/shop/legal/${d.slug}`} className="underline-offset-2 hover:text-x-blue hover:underline">
@@ -320,7 +320,7 @@ function LegalFooter() {
           ))}
         </ul>
       </nav>
-      <p className="mt-1.5 text-[11.5px] text-x-faint">© {new Date().getFullYear()} ANX3D</p>
+      <p className={`mt-1.5 text-[11.5px] ${dark ? 'text-white/70' : 'text-x-faint'}`}>© {new Date().getFullYear()} ANX3D</p>
     </footer>
   );
 }
@@ -366,7 +366,7 @@ export function ShopFrame({
       {!hideHeader && <ShopHeader tone={header} back={back} title={title} onMenu={() => setMenu(true)} />}
       <main id="main" className={nav === false ? 'pb-8' : 'pb-[calc(92px+env(safe-area-inset-bottom))] lg:pb-16'}>
         {children}
-        <LegalFooter />
+        <LegalFooter dark={dark} />
       </main>
       {nav !== false && <BottomNav active={nav} />}
       <Drawer open={menu} onClose={close} />

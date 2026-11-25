@@ -137,10 +137,8 @@ export function SearchView({ initial = '' }: { initial?: string }) {
               const words = text.trim();
               const idx = sg.label.indexOf(words);
               return (
-                <li key={sg.kind + sg.slug} id={`sg-${i}`} role="option" aria-selected={i === active}>
-                  <button
-                    type="button"
-                    onClick={() => pick(i)}
+                <li key={sg.kind + sg.slug} id={`sg-${i}`} role="option" aria-selected={i === active} onClick={() => pick(i)} className="cursor-pointer">
+                  <div
                     dir="ltr"
                     className={`flex w-full items-center gap-3 rounded-xl px-2 py-2.5 text-left text-[16px] ${i === active ? 'bg-x-soft' : 'hover:bg-x-soft'}`}
                   >
@@ -161,7 +159,7 @@ export function SearchView({ initial = '' }: { initial?: string }) {
                       )}
                     </span>
                     {sg.kind === 'category' && <span className="ml-auto text-xs text-x-faint">קטגוריה</span>}
-                  </button>
+                  </div>
                 </li>
               );
             })}
@@ -177,9 +175,12 @@ export function SearchView({ initial = '' }: { initial?: string }) {
               ) : null}
             </p>
             {results.length ? (
-              <ProductGrid products={results} />
+              <>
+                <h2 className="sr-only">תוצאות החיפוש</h2>
+                <ProductGrid products={results} />
+              </>
             ) : (
-              <EmptyState icon={<IconSearch size={34} />} title={`לא נמצאו תוצאות עבור "${submitted}"`} text="נסו מילה אחרת, או עיינו בקטגוריות." action={{ label: 'לכל הקטגוריות', href: '/shop/categories' }} />
+              <EmptyState sub icon={<IconSearch size={34} />} title={`לא נמצאו תוצאות עבור "${submitted}"`} text="נסו מילה אחרת, או עיינו בקטגוריות." action={{ label: 'לכל הקטגוריות', href: '/shop/categories' }} />
             )}
           </section>
         ) : (

@@ -118,6 +118,7 @@ function ProductDetail({ product }: { product: Product }) {
                 onScroll={onScroll}
                 className="x-noscrollbar flex aspect-[1.6/1] snap-x snap-mandatory overflow-x-auto lg:aspect-[1.25/1]"
                 aria-roledescription="גלריה"
+                tabIndex={0}
               >
                 {slides.map((sl, i) => (
                   <div key={sl.src + i} className="size-full shrink-0 snap-center bg-[#f3f4f6]" aria-hidden={i !== index}>

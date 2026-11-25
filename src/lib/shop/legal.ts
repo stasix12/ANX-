@@ -21,7 +21,7 @@ export interface LegalDoc {
   sections: LegalSection[];
 }
 
-const UPDATED = '24.11.2026';
+const UPDATED = '25.11.2026';
 const L = site.legal;
 // Non-breaking hyphen + LTR isolate so the number never splits or flips inside Hebrew text.
 const phone = `\u2066${site.phoneDisplay.replace(/-/g, '\u2011')}\u2069`;
@@ -231,6 +231,7 @@ export const LEGAL_DOCS: LegalDoc[] = [
               'ניגודיות צבעים בין טקסט לרקע, והגדלת טקסט בכלי הדפדפן ללא אובדן תוכן.',
               'כיבוד הגדרת "הפחתת תנועה" של מערכת ההפעלה ברוב האנימציות.',
               'התאמה לתצוגה בטלפונים, בטאבלטים ובמחשבים.',
+              'בדיקה אוטומטית של כל עמודי האתר בכלי axe-core מול תקן WCAG 2.1 ברמה AA, ובדיקת ניווט במקלדת ותצוגה ברוחב מסך של 320 פיקסלים — נכון ל־25.11.2026.',
               'תפריט "כלי נגישות" בכל עמוד: הגדלה והקטנה של הטקסט, גווני אפור, ניגודיות גבוהה, ניגודיות הפוכה, רקע בהיר, הדגשת קישורים, פונט קריא ועצירת אנימציות. ההגדרות נשמרות במכשיר.',
             ],
           },

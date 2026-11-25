@@ -20,7 +20,7 @@ export function LegalView({ slug }: { slug: string }) {
                   <p key={i}>{b}</p>
                 ) : 'link' in b ? (
                   <p key={i}>
-                    <a href={b.link} target="_blank" rel="noopener noreferrer" className="inline-flex h-10 items-center rounded-full bg-[#25d366] px-4 text-[14px] font-bold text-white">
+                    <a href={b.link} target="_blank" rel="noopener noreferrer" className="inline-flex h-10 items-center rounded-full bg-[#0e7a55] px-4 text-[14px] font-bold text-white">
                       {b.label}
                     </a>
                   </p>

@@ -1011,13 +1011,13 @@
   --color-x-ink: #0f1115;
   --color-x-ink-2: #2b2f38;
   --color-x-muted: #5f6673;
-  --color-x-faint: #8c93a0;
+  --color-x-faint: #646b78; /* 5.4:1 on white (WCAG AA) */
   --color-x-line: #e7e9ef;
   --color-x-soft: #f3f5f8;
   --color-x-soft-2: #f7f8fa;
   --color-x-star: #2a7bf8;
-  --color-x-green: #1f9d55;
-  --color-x-red: #e0353b;
+  --color-x-green: #15803d; /* 5.0:1 on white (WCAG AA) */
+  --color-x-red: #c81e24; /* 5.7:1 on white (WCAG AA) */
   --color-x-night: #070f1d;
   --color-x-night-2: #0c1830;
 

@@ -116,9 +116,13 @@ export function CatalogView({ slug, cat, sortParam }: { slug: string; cat?: stri
 
         <div className="mt-4">
           {list.length ? (
-            <ProductGrid products={list} />
+            <>
+              <h2 className="sr-only">רשימת המוצרים</h2>
+              <ProductGrid products={list} />
+            </>
           ) : (
             <EmptyState
+              sub
               icon={<IconFilter size={34} />}
               title="לא נמצאו מוצרים"
               text={nFilters ? 'נסו להרחיב את הסינון או לנקות אותו.' : 'עדיין אין מוצרים בקטגוריה הזו.'}

@@ -198,16 +198,19 @@ export function EmptyState({
   title,
   text,
   action,
+  sub,
 }: {
   icon: React.ReactNode;
   title: string;
+  /** Rendered under a page that already has its own h1. */
+  sub?: boolean;
   text?: string;
   action?: { label: string; href: string };
 }) {
   return (
     <div className="mx-auto flex max-w-sm flex-col items-center px-6 py-16 text-center animate-x-fade">
       <div className="mb-4 grid size-20 place-items-center rounded-full bg-x-blue-50 text-x-blue">{icon}</div>
-      <h2 className="text-lg font-extrabold">{title}</h2>
+      {sub ? <h2 className="text-lg font-extrabold">{title}</h2> : <h1 className="text-lg font-extrabold">{title}</h1>}
       {text && <p className="mt-1.5 text-sm text-x-muted">{text}</p>}
       {action && (
         <Link href={action.href} className={`${btn.blue} mt-6 h-12 px-8`}>

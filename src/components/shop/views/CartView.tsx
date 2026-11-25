@@ -26,7 +26,7 @@ export function CartView() {
         </h1>
 
         {!s.ready ? null : !totals.lines.length ? (
-          <EmptyState icon={<IconCart size={34} />} title="העגלה ריקה" text="הוסיפו מוצרים מהחנות והם יופיעו כאן." action={{ label: 'להתחיל לקנות', href: '/shop/c/all' }} />
+          <EmptyState sub icon={<IconCart size={34} />} title="העגלה ריקה" text="הוסיפו מוצרים מהחנות והם יופיעו כאן." action={{ label: 'להתחיל לקנות', href: '/shop/c/all' }} />
         ) : (
           <div className="lg:grid lg:grid-cols-[1fr_380px] lg:items-start lg:gap-10">
             <ul className="space-y-3">

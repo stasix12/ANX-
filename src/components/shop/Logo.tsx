@@ -15,6 +15,7 @@ export function Logo({
   return (
     <span
       dir="ltr"
+      role="img"
       aria-label="ANX3D"
       className={`inline-block select-none font-black leading-none tracking-[-0.04em] ${className}`}
       style={upright ? undefined : { transform: 'skewX(-12deg)' }}

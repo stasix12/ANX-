@@ -21,6 +21,7 @@ export function FavoritesView() {
           <ProductGrid products={list} />
         ) : (
           <EmptyState
+            sub
             icon={<IconHeart size={34} />}
             title="אין עדיין מועדפים"
             text="לחצו על הלב שעל מוצר כדי לשמור אותו כאן."

@@ -59,6 +59,25 @@ const FIXTURES = [
        with no room to print them measured green. */
     days: [0, 1, 2, 3, 4, 6],
   },
+  /*
+   * ─── A ROUND THAT ENDED, WHICH THIS FIXTURE NEVER HAD ──────────────────
+   *
+   * Four campaigns and not one of them 'completed', so the tile's whole
+   * finished branch — the words, the fill and the tick — was asserted
+   * against a state the file never produced. 26.11.2026 changed all three
+   * of them and every assertion here went on passing.
+   *
+   * 248 of 250 with two groups left out is the owner's own shape: a round
+   * that reached its end having lost a little, which is exactly the case the
+   * badge was told to stop grading.
+   */
+  { c: campaign('e', 'פרסומת רוסית לספות'), ordinal: 20, st: state('completed', 248, 250, 0, 14), days: [0, 1, 2, 3, 4, 5, 6] },
+  /*
+   * AND THE ONE ENDING THAT MAY NOT CLAIM IT COMPLETED. Nothing published at
+   * all is not a round that finished badly, and a green tick over it would
+   * say the opposite of what happened.
+   */
+  { c: campaign('f', 'סבב שלא יצא ממנו כלום'), ordinal: 19, st: state('completed', 0, 60, 0, 11), days: [0, 1, 2, 3, 4, 5, 6] },
 ];
 
 /*

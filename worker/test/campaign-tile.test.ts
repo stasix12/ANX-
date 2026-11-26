@@ -287,14 +287,21 @@ async function main(): Promise<void> {
         };
       });
 
-      eq(seen.count, 4, `${w}: four campaigns are drawn at once — the brief's own number`);
+      /* Six since 26.11.2026: the four the brief asked to see at once, plus
+         the two endings the finished-round pill is about — a round that
+         completed having lost a little, and one that published nothing. */
+      eq(seen.count, 6, `${w}: every fixture campaign is drawn at once`);
       eq(seen.over, false, `${w}: the grid widened the page`);
       eq(seen.small, 0, `${w}: a control under the 40px floor`);
       is(seen.targets >= 20, `${w}: the measurement found the controls (${seen.targets})`);
       eq(seen.clipped, 0, `${w}: a figure or label is cut off`);
       eq(seen.escaped, 0, `${w}: a control left its own tile`);
       eq(seen.rtl, 'rtl', `${w}: the tile is not laid out right-to-left`);
-      eq(seen.back, 1, `${w}: exactly the one held campaign offers the way back`);
+      /* Three, and the number is the tile's own rule rather than a count of
+         paused campaigns: the button is `!running && onResume`, so the one
+         held campaign and the two finished ones all offer it. That rule is
+         untouched by the 26.11.2026 status change — only the fixture grew. */
+      eq(seen.back, 3, `${w}: every campaign that is not running offers the way back`);
       eq(crashes, [], `${w}: the grid threw`);
 
       if (width < 1280) {
@@ -302,7 +309,11 @@ async function main(): Promise<void> {
            the portrait tile it replaces, so four campaigns still stand in one
            screen — which was the point of the two-up grid — while each one
            reads across instead of being squeezed into half a phone. */
-        eq(seen.rows, [1, 1, 1, 1], `${w}: one card to a row, four in view — got rows of ${seen.rows.join('/')}`);
+        eq(
+          seen.rows,
+          [1, 1, 1, 1, 1, 1],
+          `${w}: one card to a row — got rows of ${seen.rows.join('/')}`,
+        );
         /*
          * DOWN FROM 460, BECAUSE THE HEIGHT IS THE POINT OF THIS PASS: "יש
          * לצמצם את גובה הכרטיס … אין להחזיר את הפריסה הגבוהה והישנה."
@@ -327,14 +338,35 @@ async function main(): Promise<void> {
         is(seen.tallest <= ceiling, `${w}: the tallest card is ${seen.tallest}px, over ${ceiling} — the brief asked for the height to come DOWN`);
       }
 
-      /* 170/250 = 68%, 105/250 = 42%, 250/250 = 100%, 65/250 = 26% — the
-         reference's own four, and the bar must be the number beside it. */
+      /* 170/250 = 68%, 105/250 = 42%, 250/250 = 100%, 65/250 = 26%, and the
+         two finished rounds 248/250 = 99% and 0/60 = 0% — the bar must be
+         the number beside it in every one of them. */
       for (const b of seen.bars) {
         const said = Number((b.chip || '').replace('%', ''));
         is(Number.isFinite(said) && Math.abs(b.pct - said) <= 2, `${w}: a bar is ${b.pct}% while its chip says ${b.chip}`);
       }
-      eq(seen.bars.map((b) => b.chip), ['68%', '42%', '100%', '26%'], `${w}: the four percentages are the fixtures' own`);
-      eq(seen.pills, ['פעיל', 'פעיל', 'מושהה', 'פעיל'], `${w}: three publishing and one held, as the reference draws`);
+      eq(
+        seen.bars.map((b) => b.chip),
+        ['68%', '42%', '100%', '26%', '99%', '0%'],
+        `${w}: every percentage is its fixture's own`,
+      );
+      /*
+       * ─── 26.11.2026 · THE FINISHED ROUND SAYS SO HERE TOO ──────────────
+       *
+       *   "החלת השינוי על כל כרטיסי הקמפיינים במערכת"
+       *
+       * This tile keeps a status map of its own rather than reading
+       * runBadge(), which is exactly how it was nearly left behind: three
+       * cards changed and this one would have gone on saying "הסתיים". The
+       * two endings are pinned side by side because they are the whole rule
+       * — a round that reached its end is "הסבב הושלם" whatever it lost, and
+       * a round that published nothing may not claim it completed.
+       */
+      eq(
+        seen.pills,
+        ['פעיל', 'פעיל', 'מושהה', 'פעיל', 'הסבב הושלם', 'הסתיים בלי פרסומים'],
+        `${w}: three publishing, one held, one finished and one that produced nothing`,
+      );
 
       const shot = path.join(dir, `grid-${width}.png`);
       await page.screenshot({ path: shot, fullPage: true });

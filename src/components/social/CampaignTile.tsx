@@ -89,9 +89,27 @@ export interface CampaignTileProps {
   globalPaused?: boolean;
 }
 
-/** פעיל / מושהה / הסתיים — the three the reference draws, from the real state. */
+/** פעיל / מושהה / הסבב הושלם — the three the reference draws, from the real state. */
+/*
+ * ─── 26.11.2026 · THIS TILE HAS ITS OWN MAP, AND THAT IS WHY IT WAS MISSED ─
+ *
+ *   "החלת השינוי על כל כרטיסי הקמפיינים במערכת"
+ *
+ * Three cards read runBadge() in campaign.ts; this one does not, and a change
+ * made there reaches three of the four pills while the grid tile quietly
+ * keeps the old vocabulary. It is deliberately NOT switched over to runBadge
+ * here — that helper speaks a six-value tone vocabulary and this pill has
+ * three CSS states — but the two now agree on the two things the owner reads:
+ * the words, and the one ending that may not claim completion.
+ */
 function statusOf(state: CampaignState, globalPaused: boolean): { label: string; tone: 'live' | 'held' | 'done' } {
-  if (state.state === 'completed') return { label: 'הסתיים', tone: 'done' };
+  if (state.state === 'completed') {
+    /* The same exception runBadge() makes, for the same reason: a round that
+       published nothing is not a round that completed. */
+    return state.progress.published === 0
+      ? { label: 'הסתיים בלי פרסומים', tone: 'held' }
+      : { label: 'הסבב הושלם', tone: 'done' };
+  }
   if (state.state === 'stopped') return { label: 'נעצר', tone: 'held' };
   if (globalPaused || state.state === 'paused') return { label: 'מושהה', tone: 'held' };
   if (state.state === 'needs_attention') return { label: 'דורש טיפול', tone: 'held' };
@@ -225,7 +243,17 @@ export function CampaignTile({
               corner — and that is only possible outside that row. */}
           <span className="anxt-pill" data-tone={status.tone}>
             <svg aria-hidden viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              {running ? <path d="M9 7.5v9l7-4.5z" fill="currentColor" stroke="none" /> : <path d="M9.5 7.5v9M14.5 7.5v9" />}
+              {/* A TICK INSIDE THE CIRCLE on a finished round — the reference's
+                  own mark. The circle below is already drawn for every state,
+                  so this is the same glyph the big card's CheckCircleIcon is,
+                  built from the parts this pill already has. */}
+              {status.tone === 'done' ? (
+                <path d="m8.4 12.3 2.5 2.5 4.7-5" />
+              ) : running ? (
+                <path d="M9 7.5v9l7-4.5z" fill="currentColor" stroke="none" />
+              ) : (
+                <path d="M9.5 7.5v9M14.5 7.5v9" />
+              )}
               <circle cx="12" cy="12" r="9.2" />
             </svg>
             {status.label}

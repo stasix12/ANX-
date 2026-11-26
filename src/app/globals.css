@@ -3554,6 +3554,15 @@ button.anxf-row {
   background: var(--color-warning-400);
   color: var(--color-on-state);
 }
+/* "done" has been a tone this tile emits since it was written and a fill it
+   never had: a finished round fell through to the bare .anxt-pill and wore
+   the card's own surface. It is the same green as "live" because it is the
+   same statement — "רקע ירוק, עם כיתוב לבן" — and contrast.test.ts already
+   carries on-state over success-400 as a text pair at 5.7. */
+.anxt-pill[data-tone="done"] {
+  background: var(--color-success-400);
+  color: var(--color-on-state);
+}
 
 /* THE COVER. A third of the card, down its whole height, with a floor of
    112px so a short card keeps a picture worth looking at and a ceiling so a

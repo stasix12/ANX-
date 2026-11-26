@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { chromium } from 'playwright-core';
 import { GAP_MIN_MS, JOIN_RUN_CAP, joinGroups, joinOneGroup } from '../facebook/join';
+import { JOIN_RUN_CAP as SCREEN_RUN_CAP } from '../../src/lib/social/join-run';
 
 /**
  * JOINING GROUPS — THE RULES THAT PROTECT THE ACCOUNT, DRIVEN IN A BROWSER.
@@ -214,3 +215,21 @@ async function main(): Promise<void> {
 }
 
 void main();
+
+/*
+ * ─── THE NUMBER THE SCREENS PROMISE IS THE NUMBER THE WORKER KEEPS ────────
+ *
+ * The cap lives twice on purpose: worker/facebook/join.ts cannot import from
+ * src/, and the screens cannot import from worker/. What must never happen is
+ * the two drifting apart — a button offering eighteen over an engine that
+ * stops at fifteen is a button that lies, and the owner reads it as the
+ * feature being broken.
+ *
+ * Two screens now spend the UI copy — גילוי קבוצות and the national catalog's
+ * selection bar — which is what made this worth pinning rather than trusting.
+ */
+assert.equal(
+  SCREEN_RUN_CAP,
+  JOIN_RUN_CAP,
+  `the cap the screens promise (${SCREEN_RUN_CAP}) is not the cap the worker enforces (${JOIN_RUN_CAP}) — src/lib/social/join-run.ts and worker/facebook/join.ts must agree`,
+);

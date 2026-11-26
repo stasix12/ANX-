@@ -51,6 +51,7 @@ import {
 } from '@/lib/social/discovery';
 import {
   JOIN_ENDING,
+  JOIN_RUN_CAP,
   joinCardView,
   joinProgressUsable,
   joinRunLine,
@@ -101,11 +102,15 @@ import { CloseIcon, EyeIcon, SearchIcon, UsersIcon } from '@/components/icons';
 const FILTERS: DiscoveryFilter[] = ['all', 'exact', 'none', 'member', 'requested', 'public', 'private'];
 const SORTS: DiscoverySort[] = ['relevance', 'members', 'name'];
 
-/* The run's own ceiling, mirroring worker/facebook/join.ts. Fifteen groups at
-   roughly a minute and a half each is a little over twenty minutes, so the
-   screen waits half an hour before it stops watching — and says the run
-   continues rather than that it failed. */
-const JOIN_RUN_CAP = 15;
+/* Fifteen groups at roughly a minute and a half each is a little over twenty
+   minutes, so the screen waits half an hour before it stops watching — and
+   says the run continues rather than that it failed.
+
+   THE CEILING ITSELF MOVED OUT of this file on 26.11.2026, when the catalog
+   screen became a second place that offers a join: two screens hand-copying
+   one number is how they come to promise two different ones. It lives in
+   join-run.ts now, and the worker's own copy is still the one that enforces
+   it — worker/test/join.test.ts asserts the two agree. */
 const JOIN_WAIT_MS = 30 * 60_000;
 
 /*

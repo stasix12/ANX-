@@ -6,6 +6,12 @@ import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { GroupCard } from '@/components/social/GroupCard';
 import { GroupCatalog } from '@/components/social/GroupCatalog';
+import { JOIN_RUN_CAP, joinProgressUsable, joinRunLine } from '@/lib/social/join-run';
+
+/* How long this screen watches a join run before it stops and says the run
+   continues. The same half hour the discovery screen allows: fifteen groups
+   at a minute and a half each is a little over twenty minutes. */
+const JOIN_WATCH_MS = 30 * 60_000;
 import { SocialShell } from '@/components/social/SocialShell';
 import { TargetAvatar } from '@/components/social/TargetAvatar';
 import {
@@ -31,6 +37,8 @@ import {
 } from '@/components/social/ui';
 import {
   addGroup,
+  readJoinRun,
+  startJoinGroups,
   adoptCatalogGroups,
   bulkDeleteTargets,
   bulkUpdateTargets,
@@ -109,6 +117,18 @@ export default function GroupsPage() {
   const seed = useState(() => readSnapshot<GroupsSnapshot>(SNAPSHOT.groups))[0];
   const [groups, setGroups] = useState<SocialTarget[] | null>(seed?.groups ?? null);
   const [workerOnline, setWorkerOnline] = useState<boolean | null>(seed?.workerOnline ?? null);
+  /*
+   * THE WORKER'S ID, which this page already read and threw away.
+   *
+   * listWorkers() is in the batch below for one boolean — is anything online —
+   * and a command has to be addressed to a machine. Same choice the discovery
+   * screen makes: the online one, else the first one, else null (which
+   * sendWorkerCommand accepts: the command waits in the queue for whichever
+   * machine picks it up).
+   */
+  const [workerId, setWorkerId] = useState<string | null>(null);
+  /** "3 מתוך 15" while a join run is going, null when there is none. */
+  const [joinProgress, setJoinProgress] = useState<string | null>(null);
   const [selected, setSelected] = useState<string[]>([]);
   /*
    * Selection is a mode, not an always-on affordance.
@@ -230,6 +250,7 @@ export default function GroupsPage() {
     }
     setGroups(mine);
     setWorkerOnline(online);
+    setWorkerId(w.find((x) => x.online)?.id ?? w[0]?.id ?? null);
     setNextByTarget(next);
     writeSnapshot<GroupsSnapshot>(SNAPSHOT.groups, { groups: mine, workerOnline: online, nextByTarget: next });
   }, []);
@@ -634,6 +655,95 @@ export default function GroupsPage() {
                 return false;
               } finally {
                 setBusy(null);
+              }
+            }}
+            joining={busy === 'join-catalog'}
+            joinProgress={joinProgress}
+            /*
+             * ─── 26.11.2026 · "תוסיף שיהיה אופציה להוסיף את הקבוצות האלה
+             *     בפייסבוק ושיתחבר לבד בפעם אחת כל מה שאני מסמן" ──────────
+             *
+             * The engine for this already existed and was wired to one screen
+             * only: גילוי קבוצות. Nothing new opens a browser here — this
+             * sends the same 'join' command, to the same worker branch, into
+             * the same paced loop. What is new is that the national catalog
+             * can start it, which is where he is actually standing when he
+             * finds groups he is not in.
+             *
+             * NOT act(), for the same reason onAdd above is not: the catalog
+             * needs the boolean to decide whether to keep his selection.
+             */
+            onJoin={async (picked) => {
+              if (!picked.length) return false;
+              /*
+               * THE ONE PRECONDITION THE SCREEN CAN CHECK. The command would
+               * sit in the queue for ever against a machine that is not
+               * running, and the owner would be watching a bar that never
+               * moves. Said before the dialog, not after it.
+               */
+              if (workerOnline === false) {
+                toast('התוכנה במחשב לא פועלת, ולכן אי אפשר להצטרף לקבוצות.', 'error');
+                return false;
+              }
+              const take = Math.min(picked.length, JOIN_RUN_CAP);
+              const ok = await confirm.ask({
+                title: `להצטרף ל-${take} קבוצות?`,
+                body:
+                  `התוכנה תפתח קבוצה אחרי קבוצה ותלחץ "הצטרפות" — לאט, עם הפסקה של דקה עד שתיים בין אחת לשנייה, ` +
+                  `כדי שפייסבוק לא יחסום את החשבון. זה ייקח בערך ${Math.max(1, Math.round(take * 1.5))} דקות והכל ירוץ ברקע.\n\n` +
+                  `קבוצה שמבקשת לענות על שאלות הצטרפות — נדלג עליה ותענה בעצמך. אם פייסבוק יגביל, נעצור מיד.` +
+                  (picked.length > JOIN_RUN_CAP ? `\n\n${JOIN_RUN_CAP} זו המכסה לריצה אחת — הרץ שוב להמשך.` : '') +
+                  /* The sentence that stops the next question. Joining and
+                     listing are two different acts on this screen and the bar
+                     now has a button for each; a group he joins today is not
+                     published to until he adds it. */
+                  `\n\nההצטרפות לא מוסיפה אותן לרשימת הפרסום — אחרי שתתקבל, סמנו אותן ולחצו "הוסף לקבוצות שלי".`,
+                confirmLabel: 'התחל',
+              });
+              if (!ok) return false;
+              setBusy('join-catalog');
+              setError(null);
+              try {
+                const { id } = await startJoinGroups(workerId, picked.map((g) => g.url));
+                /*
+                 * WATCHED, not fired and forgotten. The run is paced at a
+                 * minute to two per group on purpose, so without a line on
+                 * screen the owner has no way to tell a careful run from a
+                 * dead one — and the first thing he would do is press again.
+                 * joinRunLine is the discovery screen's own sentence, so one
+                 * run reads identically wherever it was started from.
+                 */
+                const until = Date.now() + JOIN_WATCH_MS;
+                let ended: { status: string; result: string | null } | null = null;
+                while (Date.now() < until) {
+                  await new Promise((done) => setTimeout(done, 4_000));
+                  const row = await readJoinRun(id).catch(() => null);
+                  const live = joinProgressUsable(row?.progress ?? null, Date.now()) ? (row?.progress ?? null) : null;
+                  setJoinProgress(live ? joinRunLine(live.done, live.total) : null);
+                  if (row?.status === 'done' || row?.status === 'failed') {
+                    ended = { status: row.status, result: row.result ?? null };
+                    break;
+                  }
+                }
+                /* NOT A FAILURE. The command is still in the queue and the
+                   machine is still working through it — a screen that stops
+                   watching must say exactly that. */
+                if (!ended) {
+                  toast('ההצטרפות ממשיכה לרוץ במחשב. אפשר לחזור למסך הזה מאוחר יותר.', 'info');
+                } else {
+                  toast(
+                    ended.result || (ended.status === 'failed' ? 'ההצטרפות נכשלה.' : 'ההצטרפות הסתיימה.'),
+                    ended.status === 'failed' ? 'error' : 'success',
+                  );
+                }
+                await load();
+                return true;
+              } catch (err) {
+                toast(friendlyMessage(err, 'לא הצלחנו להתחיל את ההצטרפות.'), 'error');
+                return false;
+              } finally {
+                setBusy(null);
+                setJoinProgress(null);
               }
             }}
           />

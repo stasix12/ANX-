@@ -32,6 +32,22 @@ export type { JoinStage };
  * log, written by the worker since long before this feature, and that is what
  * survives a refresh and a database that never ran the migration.
  */
+/**
+ * HOW MANY GROUPS ONE RUN WILL PRESS "הצטרפות" ON.
+ *
+ * THE WORKER ENFORCES ITS OWN COPY — worker/facebook/join.ts, JOIN_RUN_CAP —
+ * and that one is the law: it counts presses inside the loop and returns
+ * stoppedBy: 'cap'. This is the number the SCREENS are allowed to promise,
+ * and it exists so that two screens cannot promise two different numbers.
+ * worker/test/join.test.ts asserts the two are equal, because a screen that
+ * offers eighteen and a worker that stops at fifteen is a screen that lies.
+ *
+ * It counts PRESSES AND NOT ADDRESSES, which is the whole reason the number
+ * is survivable: a ticked group he is already in costs no press, no cap slot
+ * and no pause. So "הצטרף ל-15" is fifteen groups he is really not in.
+ */
+export const JOIN_RUN_CAP = 15;
+
 export interface JoinProgress {
   /** Bumped if the shape ever changes; a reader that does not know it draws nothing. */
   v: number;

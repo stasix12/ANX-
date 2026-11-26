@@ -37,6 +37,7 @@
  *   npm run build && npx tsx worker/test/catalog-screen.test.ts
  */
 import assert from 'node:assert/strict';
+import { JOIN_RUN_CAP } from '../../src/lib/social/join-run';
 import { copyFileSync, mkdtempSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -508,6 +509,87 @@ async function main(): Promise<void> {
        */
       eq(short.filter((x) => x.h < 36), [], `every control at ${width}px is at least 36px high`);
     }
+
+    /* ───────── 7b. JOINING ON FACEBOOK, FROM THE SAME SELECTION ───────── */
+    /*
+     * "תוסיף שיהיה אופציה להוסיף את הקבוצות האלה בפייסבוק ושיתחבר לבד בפעם
+     *  אחת כל מה שאני מסמן" — 26.11.2026
+     *
+     * Two hand-offs now leave this bar and they are NOT the same act. Adding
+     * puts a row in the publishing list; joining opens the owner's live
+     * Facebook and presses a button in it. The harness keeps them in two
+     * separate arrays precisely so a patch that wires one to the other fails
+     * here.
+     */
+    await page.evaluate(() => { window.__joined = []; window.__added = []; });
+    const sticky = page.locator('[data-group-catalog] .sticky');
+    if (await sticky.count()) await sticky.locator('button', { hasText: 'נקה' }).click();
+    /* Section 6 narrowed the list to one city and one category, which left the
+       three membership rows off the page. Widen it again and wait for the
+       answer, so this section is driven by the fixture and not by what the
+       section before it happened to leave on screen. */
+    await page.selectOption('[data-group-catalog] select[aria-label="קטגוריה"]', '');
+    await page.selectOption('[data-group-catalog] select[aria-label="עיר"]', '');
+    await page.waitForFunction(
+      () => document.querySelectorAll('[data-group-catalog] li').length >= 60,
+      null,
+      { timeout: 4000 },
+    );
+
+    /*
+     * THE TWO ROWS A JOIN RUN MUST REFUSE TO PRESS. The stub marks one group
+     * 'member' and one 'requested'. Ticking only those two must offer no join
+     * at all: he is in the first, and the second already has a request
+     * waiting that a second press cannot speed up — and on the worker side
+     * that one is not even free, it spends a slot and a full minute's pause.
+     */
+    /* The same `badge` helper section 4b uses — an element whose WHOLE text is
+       the word, so "חבר" cannot be caught out by "20K חברים". */
+    const joinMember = badge('חבר');
+    const joinPending = badge('ממתין לאישור');
+    eq(await joinMember.count(), 1, 'the fixture really draws a row he is already a member of');
+    eq(await joinPending.count(), 1, 'and one with a request already waiting');
+    await joinMember.locator('[role="checkbox"]').click();
+    await joinPending.locator('[role="checkbox"]').click();
+    is(
+      !((await page.locator('[data-group-catalog] .sticky').textContent()) ?? '').includes('הצטרף בפייסבוק'),
+      'ticking only a member and a pending request offers no join — there is nothing to press',
+    );
+    /* And the OTHER button is still there: those two are perfectly addable. */
+    is(
+      ((await page.locator('[data-group-catalog] .sticky').textContent()) ?? '').includes('הוסף לקבוצות שלי'),
+      'the add hand-off is untouched by the join filter',
+    );
+
+    /* NOW EVERYTHING ON THE PAGE. */
+    await page.locator('[data-group-catalog] button', { hasText: 'בחר את המוצגות' }).first().click();
+    const shown = await rows.count();
+    const joinBtn = page.locator('[data-group-catalog] .sticky button', { hasText: 'הצטרף בפייסבוק' });
+    eq(await joinBtn.count(), 1, 'with the whole page ticked the join is offered');
+    /*
+     * THE LABEL SAYS WHAT THE RUN WILL DO, not how many he ticked. The worker
+     * stops at JOIN_RUN_CAP presses, so a button promising sixty would be a
+     * promise the engine refuses to keep.
+     */
+    is(
+      ((await joinBtn.textContent()) ?? '').includes(String(JOIN_RUN_CAP)),
+      `the button names the run's ceiling (${JOIN_RUN_CAP}), not the size of the selection`,
+    );
+    await joinBtn.click();
+    await page.waitForFunction(() => window.__joined.length === 1, null, { timeout: 4000 });
+    /*
+     * EVERYTHING TICKED IS SENT EXCEPT THOSE TWO — the cap counts presses and
+     * not addresses, so a group he turns out to already be in costs the run
+     * nothing and holding addresses back would only waste the ceiling.
+     */
+    eq(
+      await page.evaluate(() => window.__joined[0].length),
+      shown - 2,
+      'the join hand-off carries every ticked row but the member and the pending one',
+    );
+    /* AND IT ADDED NOTHING. Joining a group does not put it in the publishing
+       list — that is a second, separate decision, and his standing rule. */
+    eq(await page.evaluate(() => window.__added.length), 0, 'joining never writes to the publishing list');
 
     /* ───────────── 8. IT SCANS NOTHING AND PROMISES NOTHING ───────────── */
     const text = (await page.locator('[data-group-catalog]').textContent())?.replace(/\s+/g, ' ') ?? '';

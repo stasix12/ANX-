@@ -13,6 +13,7 @@ import {
   type CatalogGroup,
   type CatalogSort,
 } from '@/lib/social/client';
+import { JOIN_RUN_CAP } from '@/lib/social/join-run';
 import { Figure, GroupRow } from './Discovery';
 import type { DiscoveredGroupRow } from '@/lib/social/types';
 import { friendlyMessage } from '@/lib/social/errors';
@@ -106,6 +107,9 @@ function asDiscovered(g: CatalogGroup, membership: DiscoveredGroupRow['membershi
 
 export function GroupCatalog({
   onAdd,
+  onJoin,
+  joining = false,
+  joinProgress = null,
   busy = false,
 }: {
   /**
@@ -122,6 +126,25 @@ export function GroupCatalog({
    * picking through.
    */
   onAdd?: (groups: CatalogGroup[], source: 'row' | 'bulk') => boolean | void | Promise<boolean | void>;
+  /**
+   * ─── 26.11.2026 · "תוסיף שיהיה אופציה להוסיף את הקבוצות האלה בפייסבוק
+   *     ושיתחבר לבד בפעם אחת כל מה שאני מסמן" ──────────────────────────────
+   *
+   * A SECOND CALLBACK AND NOT A SECOND IMPORT. This component is a reader —
+   * it calls searchCatalog and nothing else, and worker/test/catalog.test.ts
+   * holds it to that by reading the file. Joining opens the owner's live
+   * Facebook session and presses a button in it, which is the furthest thing
+   * from a read, so it leaves here as a list of groups and the page that
+   * already owns the writes decides what to do with it.
+   *
+   * It is handed ONLY the rows worth pressing: see `joinable` below.
+   * Returning `false` keeps the selection, exactly as onAdd does.
+   */
+  onJoin?: (groups: CatalogGroup[]) => boolean | void | Promise<boolean | void>;
+  /** A join run is in flight — the bar says so instead of offering another. */
+  joining?: boolean;
+  /** "3 מתוך 15", from the run's own progress. Null when there is no run. */
+  joinProgress?: string | null;
   busy?: boolean;
 }) {
   const [rows, setRows] = useState<CatalogGroup[]>([]);
@@ -286,6 +309,30 @@ export function GroupCatalog({
     });
 
   const chosenList = [...chosen.values()];
+  /*
+   * WHICH OF THE TICKED ROWS A JOIN RUN WOULD ACTUALLY PRESS.
+   *
+   * Two states are dropped, and only two:
+   *
+   *   'member'    — he is in it. The worker reads the page, sees the joined
+   *                 label and returns `already` before pressing anything, so
+   *                 sending it costs nothing at all. It is dropped so the
+   *                 BUTTON'S NUMBER is honest: he ticked twelve and three are
+   *                 his, so the button offers nine.
+   *   'requested' — a request is already waiting. This one is not free: the
+   *                 worker opens the page, finds the pending label, and that
+   *                 group still spends one of the fifteen slots and a full
+   *                 minute-to-two pause. Dropping it here is the difference
+   *                 between fifteen real attempts and fifteen no-ops.
+   *
+   * 'unknown' IS KEPT, deliberately. The catalog is a shared national list and
+   * membership here comes from whatever a discovery scan happened to record —
+   * absence is the absence of an answer, not a denial. The page the worker
+   * opens is the only thing that actually knows, and it answers for free.
+   */
+  const joinable = onJoin
+    ? chosenList.filter((g) => !['member', 'requested'].includes(member.get(g.external_id) ?? 'unknown'))
+    : [];
   /*
    * THE FIGURE IS HIS LIST, NOT THIS PAGE. "כבר אצלי" means how many groups
    * he publishes to — the same 293 the tab strip counts — and counting the
@@ -577,21 +624,67 @@ export function GroupCatalog({
       )}
 
       {/* ─── 7. and what to do with the chosen ───────────────────────────── */}
-      {onAdd && chosenList.length > 0 && (
-        <div className="sticky bottom-2 flex items-center justify-between gap-2 rounded-2xl border border-brand-500/30 bg-ink-850 p-2 shadow-[0_8px_20px_-12px_rgba(2,124,187,0.6)]">
+      {(onAdd || onJoin) && chosenList.length > 0 && (
+        <div className="sticky bottom-2 flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-brand-500/30 bg-ink-850 p-2 shadow-[0_8px_20px_-12px_rgba(2,124,187,0.6)]">
+          {/* While a run is going the count is the wrong thing to show: the
+              selection is frozen and what he wants to know is how far it has
+              got. The sentence comes from joinRunLine, the same one the
+              discovery screen prints, so one run reads identically from
+              either screen. */}
           <span className="text-[12px] font-bold text-mist-100">
-            <span className="tabular-nums" dir="ltr">{chosenList.length}</span> {t('נבחרו')}
+            {joinProgress ? (
+              <span dir="auto">{joinProgress}</span>
+            ) : (
+              <>
+                <span className="tabular-nums" dir="ltr">{chosenList.length}</span> {t('נבחרו')}
+              </>
+            )}
           </span>
-          <span className="flex gap-2">
-            <Button variant="ghost" onClick={() => setChosen(new Map())} className="!min-h-9 px-3 !text-[12px]">
+          <span className="flex flex-wrap gap-2">
+            <Button variant="ghost" disabled={joining} onClick={() => setChosen(new Map())} className="!min-h-9 px-3 !text-[12px]">
               {t('נקה')}
             </Button>
+            {/*
+                ─── "ושיתחבר לבד בפעם אחת כל מה שאני מסמן" ─────────────────
+                Drawn only when there is something to press: every ticked row
+                being one he is already in means a join run would open twelve
+                pages and click nothing, and a button that promises that is
+                worse than no button.
+
+                THE NUMBER IS CAPPED IN THE LABEL, not silently in the worker.
+                The run stops at JOIN_RUN_CAP presses, so a label reading
+                "הצטרף בפייסבוק 40" would be a promise the engine refuses to
+                keep — he would come back to fifteen and call it broken. It
+                says what will happen, and the caller's dialog says how to get
+                the rest.
+            */}
+            {onJoin && joinable.length > 0 && (
+              <Button
+                variant="secondary"
+                busy={joining}
+                onClick={async () => {
+                  const ok = await onJoin(joinable);
+                  if (ok !== false) {
+                    setChosen(new Map());
+                    /* The database's answer and not the selection's, exactly
+                       as the add button does — a run that joined nine of
+                       twelve must leave the screen showing nine. */
+                    await refreshMine();
+                  }
+                }}
+                className="!min-h-9 px-3 !text-[12px]"
+              >
+                {t('הצטרף בפייסבוק')} {Math.min(joinable.length, JOIN_RUN_CAP)}
+              </Button>
+            )}
             {/* CLEARED ONLY ONCE IT REALLY LANDED. Emptying the bar on the tap
                 would wipe a selection of sixty groups on a failed write, with
                 nothing left on screen to try again with — so the caller's
                 answer decides, and `false` keeps the selection. */}
+            {onAdd && (
             <Button
               busy={busy}
+              disabled={joining}
               onClick={async () => {
                 /*
                  * ─── THE ONE THING HIS OWN RULE IS ABOUT ────────────────
@@ -631,6 +724,7 @@ export function GroupCatalog({
             >
               {t('הוסף לקבוצות שלי')}
             </Button>
+            )}
           </span>
         </div>
       )}

@@ -43,7 +43,7 @@ import {
   syncWeeklyHours,
   stopCampaign,
 } from '@/lib/social/client';
-import { campaignState, cancellableRows, type CampaignState } from '@/lib/social/campaign';
+import { campaignFinished, campaignState, cancellableRows, type CampaignState } from '@/lib/social/campaign';
 import { SNAPSHOT, readSnapshot, writeSnapshot } from '@/lib/social/snapshot';
 import { MIN_REPEAT_HOURS, readRepeat, readSchedule, repeatColumns, repeatFloorFrom, scheduleColumns, type CampaignRepeat, type CampaignSchedule, readRounds, roundsColumn, roundsSavedMessage, type CampaignRound,} from '@/lib/social/campaign-schedule';
 import { accountGapLabel } from '@/lib/social/rules';
@@ -280,9 +280,44 @@ export default function CampaignsPage() {
 
   const stateOf = useCallback((c: Campaign): CampaignState => states[c.id] ?? campaignState([], c), [states]);
 
+  /*
+   * ─── 26.11.2026 · "יש לי 2 קמפיינים שעובדים למה במסך קמפיינים זה לא סופר
+   *     אותם ונראה 0" ───────────────────────────────────────────────────────
+   *
+   * Because a round that finished today is not a campaign that finished, and
+   * until now this screen could not tell the two apart.
+   *
+   * campaignStates() scores a campaign with the daily repeat ON against
+   * TODAY only — `todayOnly = readRepeat(campaign).enabled` in client.ts —
+   * and resolveState() returns 'completed' the moment today's open rows reach
+   * zero. Tomorrow's rows are not in today's counts, so they cannot rescue
+   * it. His two rounds finished at 39/41 and 54/56, landed in 'completed',
+   * went into "הסתיימו", and "פעילים" — which is not a predicate at all but
+   * the leftover, list.length − done − paused — fell to nought. At seven and
+   * at eleven tomorrow morning they would have climbed back for a few hours
+   * and dropped to nought again.
+   *
+   * The screen already knew better fifty lines down: readoutFor() is what
+   * prints "חזרה יומית פעילה — הסבב הבא ייפתח מחר" on the very same card.
+   * Two halves of one screen holding two opinions about one campaign.
+   *
+   * ONE PREDICATE, SHARED WITH THE FILTER BELOW, because the chip's number
+   * and the list it opens were two copies of the same three lines and this is
+   * exactly the kind of pair that drifts. An ARCHIVED campaign is still
+   * finished — that is 'stopped', and the repeat cannot revive it — and a
+   * round that really was the last one, with no repeat, is finished too.
+   *
+   * Nothing here touches resolveState(), the queue, or the scheduling. It
+   * changes which word this screen puts over a campaign, and nothing else.
+   */
+  const finished = useCallback(
+    (c: Campaign) => campaignFinished(stateOf(c).state, c.status, readRepeat(c, floorHours).enabled),
+    [stateOf, floorHours],
+  );
+
   const counts = useMemo(() => {
     const list = campaigns ?? [];
-    const done = list.filter((c) => ['completed', 'stopped'].includes(stateOf(c).state)).length;
+    const done = list.filter(finished).length;
     /* HELD, not merely "not running": a campaign the owner paused, or one the
        global pause is holding. A campaign that has never started is neither —
        it is waiting to be launched, and calling it paused would offer a way
@@ -292,7 +327,7 @@ export default function CampaignsPage() {
        both summed from states this page already read, not re-queried. */
     const queued = list.reduce((n, c) => n + stateOf(c).progress.scheduled, 0);
     return { all: list.length, done, paused, live: list.length - done - paused, queued };
-  }, [campaigns, stateOf, control?.paused]);
+  }, [campaigns, stateOf, finished, control?.paused]);
 
   /*
    * Sorted, not just filtered.
@@ -350,7 +385,7 @@ export default function CampaignsPage() {
 
   const visible = useMemo(() => {
     const list = campaigns ?? [];
-    const finished = (c: Campaign) => ['completed', 'stopped'].includes(stateOf(c).state);
+    /* The same predicate the chips are counted with — see its note above. */
     const held = (c: Campaign) => stateOf(c).state === 'paused' || Boolean(control?.paused && stateOf(c).state === 'running');
     const byFilter =
       filter === 'all'
@@ -392,7 +427,7 @@ export default function CampaignsPage() {
       if (nb) return 1;
       return 0;
     });
-  }, [campaigns, filter, stateOf, readoutFor]);
+  }, [campaigns, filter, stateOf, finished, control?.paused, readoutFor]);
 
   /*
    * ─── SAVING A CAMPAIGN'S PUBLISHING WINDOW ─────────────────────────────

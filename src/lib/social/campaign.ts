@@ -1260,6 +1260,34 @@ export function runBadge(
  * So: pause is about the ROWS (is anything left to hold back), resume is about
  * the RECORD (is it the pause flag that is holding them).
  */
+/**
+ * ─── IS THIS CAMPAIGN FINISHED, or did only today's ROUND finish? ──────────
+ *
+ *   "יש לי 2 קמפיינים שעובדים למה במסך קמפיינים זה לא סופר אותם ונראה 0"
+ *
+ * campaignStates() scores a campaign whose daily repeat is ON against TODAY
+ * alone — `todayOnly = readRepeat(campaign).enabled` in client.ts — and
+ * resolveState() returns 'completed' the moment today's open rows reach zero.
+ * Tomorrow's rows are not in today's counts and cannot rescue it. So his two
+ * rounds, done at 39/41 and 54/56, read 'completed' at half past one in the
+ * afternoon while the same screen printed "הסבב הבא ייפתח מחר" under them.
+ *
+ * THE THREE INPUTS ARE SCALARS ON PURPOSE. This could have taken a Campaign
+ * and called readRepeat() itself, and then campaign.ts would import
+ * campaign-schedule.ts, which imports from here. A rule with three arguments
+ * and no imports is also a rule a test can state in one line.
+ *
+ * `archived` is finished whatever its repeat says — the repeat cannot revive
+ * a campaign the owner put away, and that is the 'stopped' state. A campaign
+ * the owner paused never reaches 'completed' in the first place, and is
+ * excluded anyway so that a paused repeater cannot be counted as alive.
+ */
+export function campaignFinished(state: RunState, status: Campaign['status'] | undefined, repeats: boolean): boolean {
+  if (state !== 'completed' && state !== 'stopped') return false;
+  if (state === 'completed' && repeats && status !== 'archived' && status !== 'paused') return false;
+  return true;
+}
+
 export function canPauseRun(progress: CampaignProgress, campaignStatus?: Campaign['status']): boolean {
   return campaignStatus !== 'paused' && campaignStatus !== 'archived' && openRows(progress) > 0;
 }

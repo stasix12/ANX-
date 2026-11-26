@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { evaluateQueueItem } from '../../src/lib/social/rules';
+import { campaignFinished } from '../../src/lib/social/campaign';
 import { DEFAULT_LIMITS } from '../../src/lib/social/types';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
@@ -456,6 +457,41 @@ async function main(): Promise<void> {
     is(/state\.startedAt === null/.test(predicate), 'and that predicate reads the round\u2019s first publication');
     is(/state\.everPublished \?\? 0\) === 0/.test(predicate), 'and its lifetime count — not one day of it');
     is(/state\.progress\.total === 0/.test(predicate), 'beside the today-scoped pair, which still has to be empty');
+  }
+
+  /*
+   * ─── 26.11.2026 · A ROUND THAT ENDED IS NOT A CAMPAIGN THAT ENDED ───────
+   *
+   *   "יש לי 2 קמפיינים שעובדים למה במסך קמפיינים זה לא סופר אותם ונראה 0"
+   *
+   * The clock this file is about has a second consequence nobody had stated:
+   * campaignStates() scores a REPEATING campaign against today alone, so
+   * resolveState() calls it 'completed' the moment today's rows run out —
+   * at half past one in the afternoon, with tomorrow's round already named
+   * on the same card. The campaigns screen counted that as finished and
+   * "פעילים" fell to nought.
+   *
+   * campaignFinished() is the one rule both the chip and the list it opens
+   * now ask. It is scalars in and a boolean out, so the whole truth table is
+   * eight lines.
+   */
+  {
+    const F = campaignFinished;
+    /* THE OWNER'S OWN CASE: today's round done, repeat on, alive. */
+    is(F('completed', 'active', true) === false, 'a repeating campaign whose round ended today is not finished');
+    /* The same campaign on the day the repeat is switched off: really over. */
+    is(F('completed', 'active', false) === true, 'without the repeat, a completed round IS the end of the campaign');
+    /* Archived outranks the repeat — the repeat cannot revive it. */
+    is(F('stopped', 'archived', true) === true, 'an archived campaign stays finished whatever its repeat says');
+    is(F('completed', 'archived', true) === true, 'and so does an archived one whose last round completed');
+    /* Paused is held, not finished, and must not be rescued into "פעילים"
+       by its repeat either — it has its own chip. */
+    is(F('completed', 'paused', true) === true, 'a paused repeater is not counted as alive');
+    /* Everything that is not an ending is simply not finished. */
+    for (const st of ['running', 'paused', 'not_started', 'needs_attention'] as const) {
+      is(F(st, 'active', true) === false, `'${st}' is not an ending`);
+      is(F(st, 'active', false) === false, `'${st}' is not an ending, repeat or no repeat`);
+    }
   }
 
   console.log(`repeat rules OK — ${checks} assertions, decided by the real engine against a fake database`);

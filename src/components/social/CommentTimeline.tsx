@@ -99,6 +99,8 @@ export function CommentTimeline({
   attention,
   totals,
   upcoming,
+  arming = [],
+  autoSince = {},
   campaigns,
   today,
   now: nowProp,
@@ -141,6 +143,18 @@ export function CommentTimeline({
   totals: CommentTotals;
   /** Publications still waiting to go out — the dashboard's existing read. */
   upcoming: QueueRow[];
+  /**
+   * Published posts whose AUTOMATIC comment has not been armed yet —
+   * listCommentsArming(). Optional, because a caller that does not pass it
+   * simply has no arming rail; the dashboard passes it.
+   */
+  arming?: QueueRow[];
+  /**
+   * campaignId → the instant that round's automatic-comment switch was last
+   * turned on, from commentAutoSince(). The arm refuses to comment on
+   * anything older, so the rail must refuse to promise one.
+   */
+  autoSince?: Record<string, string>;
   /** Read only for comment_text: which rounds have a comment waiting to follow. */
   campaigns: Campaign[];
   /**
@@ -241,6 +255,45 @@ export function CommentTimeline({
   const rounds = new Map(campaigns.map((c) => [c.id, c]));
   /* The far end of the same day. A comment that follows a post due tomorrow
      lunchtime is real work and belongs on tomorrow's rail, not on this one. */
+  /*
+   * ─── AN 'AHEAD' ROW'S CLOCK IS THE COMMENT'S, NOT THE POST'S ────────────
+   *
+   *   "התגובה אמורה לצאת 4 שעות אחרי פרסום הפוסט, למה בלוח של התור זה מראה
+   *    לי שזה יוצא באותו שעה של פרסום הפוסט בקבוצה" — 18.11.2026
+   *
+   * It printed `scheduled_at` — the instant the POST goes out — beside the
+   * words "תגובה אחרי הפרסום". Two different facts on one line, and the only
+   * available reading is that the comment lands with the post. On a round set
+   * to four hours that is wrong by four hours, and it is wrong in the
+   * direction that makes the owner think the delay is not working.
+   *
+   * So a round whose automatic comment is ON is placed at publication + its
+   * own delay, through the same clamp the arm uses — the earliest the comment
+   * could be written. The row says "לא לפני" over it, because that is what
+   * the number is: the arm still waits for an idle window.
+   *
+   * A round with the switch OFF keeps the publication instant, because there
+   * is no comment time to show: nothing will arm it, and the row is only here
+   * to say that this post carries words for one. Its label says so.
+   *
+   * ─── 26.11.2026 · published_at FIRST, scheduled_at ONLY AS THE FALLBACK ──
+   *
+   * The arm counts from when the post ACTUALLY went out — `.lte('published_at',
+   * now − delay)` — and the two instants are not the same: a post planned for
+   * 07:40 that went out at 07:47 owes its comment from 07:47. While this
+   * clock was built on scheduled_at alone the difference was invisible,
+   * because the only rows it ever saw were still unpublished and had no
+   * published_at. The arming lane below is made entirely of rows that DO have
+   * one, so the fallback is now the exception and not the rule.
+   */
+  const commentFloorOf = (row: QueueRow): string | null => {
+    const round = row.campaign_id ? rounds.get(row.campaign_id) : undefined;
+    if (!round || round.comment_auto !== true) return null;
+    const at = Date.parse(row.published_at ?? row.scheduled_at ?? '');
+    if (!Number.isFinite(at)) return null;
+    return new Date(at + clampCommentDelay(round.comment_delay_seconds) * 1000).toISOString();
+  };
+
   const until = zonedToUtc(addDaysISO(zonedDateISO(now), 1), '00:00').getTime();
   const ahead = upcoming
     .filter((r) => {
@@ -254,6 +307,66 @@ export function CommentTimeline({
       return Boolean((c?.comment_text ?? '').trim());
     })
     .sort((a, b) => a.scheduled_at.localeCompare(b.scheduled_at));
+
+  /*
+   * ─── THE POST IS ALREADY OUT AND ITS COMMENT IS STILL COMING ────────────
+   *
+   *   "יש תגובה אוטומטית שצריכה לצאת עוד 10 שעות, למה הוא לא מראה אותה
+   *    בתור?" — 26.11.2026
+   *
+   * Because this lane did not exist, and the row was in none of the others.
+   *
+   * `ahead` above is built from `upcoming`, which is scheduled and paused
+   * publications. The four comment reads all require a non-empty
+   * comment_status. An automatic comment spends its whole delay — up to
+   * twelve hours — in the gap between the two: the post is 'published', so it
+   * left `upcoming`, and the arm has not touched comment_status yet, so it is
+   * in no comment read either. Three empty lists, and the card printed
+   * "עוד לא ביקשתם תגובות" over a comment that was genuinely on its way.
+   *
+   * The rows come from listCommentsArming(), and the two tests the query
+   * could not make are made here — they are the arm's own, copied from
+   * armAutoComments() rather than approximated:
+   *
+   *   - the round's switch is ON and it has words to say. Not `comment_text`
+   *     alone, which is what `ahead` checks: that rail is also willing to
+   *     describe a manual comment the owner will press for himself, while
+   *     nothing here is ever going to happen unless the arm does it.
+   *   - the post is newer than the instant that switch was last turned on.
+   *     The arm's `.gte('published_at', floor)`. Without it every post the
+   *     account ever made would sit here claiming a comment, for ever, and a
+   *     round with no stamp at all arms nothing.
+   *
+   * NO MIDNIGHT CAP, unlike `ahead`. That cap exists because a post due
+   * tomorrow lunchtime is tomorrow's work and there is a whole day of rail
+   * between here and it. These are different: the post is already out, the
+   * obligation is already real, and the delay's own ceiling is twelve hours —
+   * so the furthest one of these can land is tonight or early tomorrow. Cut
+   * at midnight it would vanish from the only screen that names it, which is
+   * the bug being fixed.
+   */
+  const armingAhead = arming
+    .filter((r) => {
+      if (byId.has(r.id)) return false;
+      /* A row that published between the two reads can arrive in both lists. */
+      if (ahead.some((a) => a.id === r.id)) return false;
+      const round = r.campaign_id ? rounds.get(r.campaign_id) : null;
+      if (!round || round.comment_auto !== true || !(round.comment_text ?? '').trim()) return false;
+      const at = Date.parse(r.published_at ?? '');
+      if (!Number.isFinite(at)) return false;
+      const floor = Date.parse(autoSince[r.campaign_id as string] ?? '');
+      if (!Number.isFinite(floor) || at < floor) return false;
+      return true;
+    })
+    .sort((a, b) => String(a.published_at).localeCompare(String(b.published_at)));
+
+  /* One forward rail, in the order the comments will actually be written:
+     by the floor each is waiting on, not by which read it arrived in. */
+  const forward = [...ahead, ...armingAhead].sort((a, b) =>
+    String(commentFloorOf(a) ?? a.published_at ?? a.scheduled_at ?? '').localeCompare(
+      String(commentFloorOf(b) ?? b.published_at ?? b.scheduled_at ?? ''),
+    ),
+  );
 
   /*
    * HOW LONG UNTIL EACH QUEUED COMMENT — "התגובות שאמורות לצאת הבאות בתור
@@ -362,7 +475,7 @@ export function CommentTimeline({
   const items: { row: QueueRow; kind: Kind }[] = [
     ...past.map((row) => ({ row, kind: 'past' as const })),
     ...waiting.map((row) => ({ row, kind: 'queued' as const })),
-    ...ahead.map((row) => ({ row, kind: 'ahead' as const })),
+    ...forward.map((row) => ({ row, kind: 'ahead' as const })),
   ];
 
   if (!items.length) {
@@ -406,41 +519,12 @@ export function CommentTimeline({
   const real = today.done + needsHuman + totals.pending;
   const dayISO = zonedDateISO(now);
 
-  /*
-   * ─── AN 'AHEAD' ROW'S CLOCK IS THE COMMENT'S, NOT THE POST'S ────────────
-   *
-   *   "התגובה אמורה לצאת 4 שעות אחרי פרסום הפוסט, למה בלוח של התור זה מראה
-   *    לי שזה יוצא באותו שעה של פרסום הפוסט בקבוצה" — 18.11.2026
-   *
-   * It printed `scheduled_at` — the instant the POST goes out — beside the
-   * words "תגובה אחרי הפרסום". Two different facts on one line, and the only
-   * available reading is that the comment lands with the post. On a round set
-   * to four hours that is wrong by four hours, and it is wrong in the
-   * direction that makes the owner think the delay is not working.
-   *
-   * So a round whose automatic comment is ON is placed at publication + its
-   * own delay, through the same clamp the arm uses — the earliest the comment
-   * could be written. The row says "לא לפני" over it, because that is what
-   * the number is: the arm still waits for an idle window.
-   *
-   * A round with the switch OFF keeps the publication instant, because there
-   * is no comment time to show: nothing will arm it, and the row is only here
-   * to say that this post carries words for one. Its label says so.
-   */
-  const commentFloorOf = (row: QueueRow): string | null => {
-    const round = row.campaign_id ? rounds.get(row.campaign_id) : undefined;
-    if (!round || round.comment_auto !== true) return null;
-    const at = Date.parse(row.scheduled_at ?? '');
-    if (!Number.isFinite(at)) return null;
-    return new Date(at + clampCommentDelay(round.comment_delay_seconds) * 1000).toISOString();
-  };
-
   /** The instant a row is placed at — null for a queue that has no clock. */
   const stampOf = (it: { row: QueueRow; kind: Kind }): string | null =>
     it.kind === 'past'
       ? it.row.comment_at ?? null
       : it.kind === 'ahead'
-        ? commentFloorOf(it.row) ?? it.row.scheduled_at
+        ? commentFloorOf(it.row) ?? it.row.published_at ?? it.row.scheduled_at
         : null;
 
   return (

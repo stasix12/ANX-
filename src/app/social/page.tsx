@@ -24,12 +24,14 @@ import {
   getControl,
   getLimits,
   listActivity,
+  commentAutoSince,
   listCampaigns,
   commentTotals,
   commentTotalsSince,
   listCommentsDone,
   listCommentsNeedingHuman,
   listCommentQueue,
+  listCommentsArming,
   listCommentsWaiting,
   listTimelineDone,
   listQueue,
@@ -166,6 +168,10 @@ interface DashboardData {
      comment list on this screen structurally excludes them — see
      listCommentsNeedingHuman. */
   commentsAttention: QueueRow[];
+  /* Published posts whose automatic comment has not been armed yet, and the
+     instant each round's switch was turned on — the arm's own two bounds. */
+  commentsArming: QueueRow[];
+  commentsAutoSince: Record<string, string>;
   limits: LimitsSettings;
   /** For the account-wide spacing rule the cards must respect — see scheduleReadout. */
   browser: BrowserSettings;
@@ -403,7 +409,7 @@ export default function SocialDashboard() {
        * IS on screen, it still reads every tick.
        */
       const needTargets = !setupDone.current;
-      const [campaigns, states, queue, today, failures, weekPublished, weekComments, limits, control, targets, manual, log, upcoming, inFlightRows, doneToday, workers, comments, commentsWaiting, totals, commentsToday, commentsDone, commentsAttention, browser, lastPublished, waitingToday, cycle] = await Promise.all([
+      const [campaigns, states, queue, today, failures, weekPublished, weekComments, limits, control, targets, manual, log, upcoming, inFlightRows, doneToday, workers, comments, commentsWaiting, totals, commentsToday, commentsDone, commentsAttention, commentsArming, commentsAutoSince, browser, lastPublished, waitingToday, cycle] = await Promise.all([
         campaignsPromise,
         statesPromise,
         queueSummary(),
@@ -455,6 +461,15 @@ export default function SocialDashboard() {
         /* The only read that can carry today's failures, and the note the worker
            wrote on each one. */
         listCommentsNeedingHuman(),
+        /* ─── 26.11.2026 · "יש תגובה אוטומטית שצריכה לצאת עוד 10 שעות, למה
+           הוא לא מראה אותה בתור?" ───────────────────────────────────────────
+           The two reads that lane needs. An automatic comment spends its
+           whole delay — up to twelve hours — as a published row whose
+           comment_status is still '', which every other comment read on this
+           screen excludes and `upcoming` (scheduled/paused) cannot hold
+           either. See listCommentsArming() in client.ts. */
+        listCommentsArming(),
+        commentAutoSince(),
         /* THE OTHER HALF OF "הבא בתור". rules.ts holds a row for the later of
            the campaign's own gap and an account-wide one, and the cards knew
            only the first — so they printed a minute the engine would not
@@ -507,6 +522,8 @@ export default function SocialDashboard() {
         commentsToday,
         commentsDone,
         commentsAttention,
+        commentsArming,
+        commentsAutoSince,
         limits,
         browser,
         lastPublished,
@@ -2429,6 +2446,8 @@ export default function SocialDashboard() {
             totals={data.commentTotals}
             today={data.commentsToday}
             upcoming={data.upcoming}
+            arming={data.commentsArming}
+            autoSince={data.commentsAutoSince}
             campaigns={data.campaigns}
           />
 

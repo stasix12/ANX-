@@ -3793,6 +3793,77 @@ export async function listCommentsWaiting(limit = 60): Promise<QueueRow[]> {
   return (res.data ?? []) as unknown as QueueRow[];
 }
 
+/**
+ * ─── 26.11.2026 · "יש תגובה אוטומטית שצריכה לצאת עוד 10 שעות, למה הוא לא
+ *     מראה אותה בתור?" ─────────────────────────────────────────────────────
+ *
+ * Because until this read there was no list she could be in.
+ *
+ * An automatic comment is not queued when the round is switched on and it is
+ * not queued when the post goes up. The worker arms it later, and only when
+ * the post is already OLD enough: armAutoComments() in worker/social-worker.ts
+ * selects status='published' AND comment_status='' AND published_at <= now −
+ * the round's delay, and only then writes comment_status='pending'. The delay
+ * is clamped to 1–12 hours, so for up to twelve hours after a post goes out
+ * its comment exists only as an arithmetic fact — a row whose comment_status
+ * is still the empty string.
+ *
+ * And the empty string is exactly what every other comment read excludes:
+ * listCommentQueue is .neq('comment_status',''), listCommentsWaiting is
+ * .in(['pending','commenting']), listCommentsDone is 'done',
+ * listCommentsNeedingHuman is ['failed','unverified']. The card's one
+ * forward-looking rail is built from `upcoming`, which is
+ * listQueue({ status: ['scheduled','paused'] }) — and a post that has already
+ * gone out is in neither list. It had no lane at all, so the rail was empty
+ * and the card printed "עוד לא ביקשתם תגובות" over a comment that was really
+ * coming in ten hours.
+ *
+ * NEWEST FIRST, which is the opposite of the two reads above it and is
+ * deliberate: this is the only comment list whose rows are NOT all real work.
+ * Every post ever published that never carried a comment also has
+ * comment_status='' for ever, so the oldest end of this query is the whole
+ * history of the account. The rows that can still be armed are the recent
+ * ones — at most the delay's twelve hours back — and reading oldest-first
+ * would spend the entire limit on rows from a year ago, which is the exact
+ * failure listCommentsWaiting above was written to undo. It is also the order
+ * the arm itself reads in (worker/social-worker.ts, .order('published_at',
+ * { ascending: false, nullsFirst: false })).
+ *
+ * The caller still has to apply the two tests this query cannot: the round's
+ * switch must be on with words to say, and the post must be newer than the
+ * instant that switch was last turned on — commentAutoSince() below. Both are
+ * the arm's own conditions, and without them the rail would promise comments
+ * that are never coming.
+ */
+export async function listCommentsArming(limit = 40): Promise<QueueRow[]> {
+  const res = await db()
+    .from('social_queue')
+    .select(COMMENT_WAIT_SELECT)
+    .eq('status', 'published')
+    .eq('comment_status', '')
+    .order('published_at', { ascending: false, nullsFirst: false })
+    .limit(limit);
+  /* Same silence as the two reads above, for the same reason. */
+  if (res.error) return [];
+  return (res.data ?? []) as unknown as QueueRow[];
+}
+
+/**
+ * When each round's automatic-comment switch was last turned ON.
+ *
+ * The arm refuses to comment on anything published before that instant
+ * (`.gte('published_at', floor)`), and a round with no stamp arms nothing at
+ * all. The rail has to apply the same floor or it would offer a comment on
+ * every post the account made before the switch existed.
+ *
+ * One settings row, read with the rest of the dashboard's batch. It is stored
+ * as a map rather than a column on social_campaigns on purpose — see the note
+ * on COMMENT_AUTO_SINCE_KEY and types.ts.
+ */
+export async function commentAutoSince(): Promise<Record<string, string>> {
+  return getSetting<Record<string, string>>(COMMENT_AUTO_SINCE_KEY, {});
+}
+
 export async function listCommentQueue(limit = 60): Promise<QueueRow[]> {
   const res = await db()
     .from('social_queue')

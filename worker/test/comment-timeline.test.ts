@@ -229,10 +229,16 @@ async function main(): Promise<void> {
       );
       /*
        * EVERY ROW THAT WAS READ IS DRAWN — the rail scrolls rather than
-       * folding. Seven finished inside the 24-hour window, seven queued, and
-       * two publications still due whose round is owed a comment.
+       * folding. Seven finished inside the 24-hour window, seven queued, two
+       * publications still due whose round is owed a comment, and — since
+       * 26.11.2026 — the one already-published post whose automatic comment
+       * is still counting down its delay.
        */
-      assert.equal(seen.rows, 15, `${width}px: the rail drew ${seen.rows} rows — 6 finished today + 7 queued + 2 scheduled ahead`);
+      assert.equal(
+        seen.rows,
+        16,
+        `${width}px: the rail drew ${seen.rows} rows — 6 finished today + 7 queued + 2 scheduled ahead + 1 published and arming`,
+      );
       /*
        * TWENTY-FOUR HOURS ONLY. The fixture carries a comment from forty hours
        * ago; it must not be drawn. Checked by NAME rather than by a count, so
@@ -287,11 +293,18 @@ async function main(): Promise<void> {
        * round carrying comment_text. The third must not appear however
        * imminent it is — checked by name, because a count alone would pass on
        * a filter that dropped the wrong one.
+       *
+       * THREE SINCE 26.11.2026, not two: the forward rail now also carries the
+       * already-published post whose automatic comment is counting down its
+       * delay. The two kinds are told apart by their wording — a scheduled
+       * publication in a round with the switch OFF says "מפרסם, ואז תגובה",
+       * and anything with a real floor says "לא לפני". The count of the
+       * second is pinned at exactly one further down.
        */
       assert.equal(
         seen.aheadRows,
-        2,
-        `${width}px: exactly the two due publications whose round carries comment_text are owed a comment — the third round has none and must not appear`,
+        3,
+        `${width}px: the forward rail is the two due publications whose round carries comment_text plus the one published post still waiting out its comment delay — the third due round has no comment_text and must not appear`,
       );
       assert.ok(
         seen.names.includes('ניקוי מזגנים — באר שבע'),
@@ -401,6 +414,49 @@ async function main(): Promise<void> {
       assert.ok(
         seen.links.includes('https://facebook.com/groups/3'),
         `${width}px: a comment with no permalink must fall back to the group address`,
+      );
+
+      /*
+       * ─── THE POST IS OUT AND ITS COMMENT IS STILL COMING ────────────────
+       *
+       *   "יש תגובה אוטומטית שצריכה לצאת עוד 10 שעות, למה הוא לא מראה אותה
+       *    בתור?" — 26.11.2026
+       *
+       * An automatic comment spends its whole delay — up to twelve hours — as
+       * a published row whose comment_status is still ''. Every comment read
+       * on this card excludes the empty string, and `upcoming` holds only
+       * scheduled and paused publications, so the row was in no list at all
+       * and the card printed its empty state over a comment that was really
+       * on its way.
+       *
+       * The fixture hands the lane FOUR rows in that state and exactly one of
+       * them may be drawn. The other three are the arm's own three refusals,
+       * and they are in the fixture so each refusal is asserted against a row
+       * that exists rather than against a row the file never offered.
+       */
+      assert.ok(
+        seen.text.includes('לוח ברוסית — באר שבע'),
+        `${width}px: a published post whose automatic comment is still counting down its delay is on no rail — that is the bug this lane fixes`,
+      );
+      assert.ok(
+        seen.text.includes('לא לפני — תגובה אחרי הפוסט'),
+        `${width}px: the arming row must say the number is a floor, not an appointment — the arm still waits for an idle window`,
+      );
+      /* Published 17:30 local in a round set to ten hours. 03:30 is PAST
+         tonight's midnight on purpose: `ahead` caps its look-ahead there, and
+         if this lane ever inherits that cap the row disappears again. */
+      assert.ok(
+        seen.text.includes('03:30'),
+        `${width}px: the arming row must be placed at published_at + the round's delay, even when that lands after midnight`,
+      );
+      /* FROM BEFORE THE SWITCH (m2), SWITCH OFF (m3), NO ROUND (m4). The arm
+         will never touch any of the three, so the rail must not promise a
+         comment on them. They share one target name, so one absence covers
+         all three; 'לא לפני' appearing once covers it from the other side. */
+      assert.equal(
+        (seen.text.match(/לא לפני/g) ?? []).length,
+        1,
+        `${width}px: exactly one arming row may be drawn — a post from before the switch was turned on, a round with the switch off and a publication with no round at all are never armed`,
       );
 
       /*

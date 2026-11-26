@@ -215,7 +215,75 @@ const soon = (minutes: number) => new Date(NOW.getTime() + minutes * 60_000).toI
 const campaigns = [
   { id: 'r1', name: 'סבב עם תגובה', service: '', city: '', language: 'he', status: 'active', notes: '', comment_text: 'מחיר: 299 ש"ח' },
   { id: 'r2', name: 'סבב בלי תגובה', service: '', city: '', language: 'he', status: 'active', notes: '', comment_text: '' },
+  /*
+   * THE ROUND THE ARMING LANE IS ABOUT — the switch is ON with a ten-hour
+   * delay, which is the round in "יש תגובה אוטומטית שצריכה לצאת עוד 10
+   * שעות". r4 is its control: same ten hours, same words, switch OFF, so
+   * nothing will ever arm it and it must not appear.
+   */
+  {
+    id: 'r3',
+    name: 'סבב עם תגובה אוטומטית',
+    service: '',
+    city: '',
+    language: 'he',
+    status: 'active',
+    notes: '',
+    comment_text: 'עוד פרטים בפרטי',
+    comment_auto: true,
+    comment_delay_seconds: 36_000,
+  },
+  {
+    id: 'r4',
+    name: 'סבב שהמתג שלו כבוי',
+    service: '',
+    city: '',
+    language: 'he',
+    status: 'active',
+    notes: '',
+    comment_text: 'עוד פרטים בפרטי',
+    comment_auto: false,
+    comment_delay_seconds: 36_000,
+  },
 ] as never as import('@/lib/social/types').Campaign[];
+
+/*
+ * ─── THE ARMING LANE'S FIXTURE ──────────────────────────────────────────────
+ *
+ * Every row here is `status: 'published'` with `comment_status: ''` — the
+ * state an automatic comment sits in for the whole of its delay, and the state
+ * that was in no list on this card until 26.11.2026.
+ *
+ * Only ONE of the four may be drawn. The other three are each a different
+ * reason the arm will never touch the row, and they are in the fixture so the
+ * three refusals are asserted against rows that exist rather than against
+ * rows the file never offered.
+ */
+const autoSince: Record<string, string> = { r3: ago(24 * 60), r4: ago(24 * 60) };
+
+const arming: QueueRow[] = [
+  /* THE ONE. Published an hour ago in a round set to ten hours, so its
+     comment is owed at 09:30 tomorrow morning — past tonight's midnight, which
+     is exactly why this lane must not carry `ahead`'s midnight cap. */
+  row({
+    id: 'm1',
+    status: 'published',
+    campaign_id: 'r3',
+    published_at: ago(60),
+    scheduled_at: ago(63),
+    comment_status: '',
+    target: { id: '11', name: 'לוח ברוסית — באר שבע', channel: 'facebook_group', image_url: null, url: 'https://facebook.com/groups/11' } as never,
+  }),
+  /* FROM BEFORE THE SWITCH. The arm's `.gte('published_at', floor)` refuses
+     it, so the rail must too — otherwise every post the account ever made
+     would sit here claiming a comment that is never coming. */
+  row({ id: 'm2', status: 'published', campaign_id: 'r3', published_at: ago(48 * 60), scheduled_at: ago(48 * 60), comment_status: '' }),
+  /* SWITCH OFF. It has comment_text, which is all `ahead` asks of a round —
+     and it is not enough here, because nothing arms it. */
+  row({ id: 'm3', status: 'published', campaign_id: 'r4', published_at: ago(60), scheduled_at: ago(60), comment_status: '' }),
+  /* NO ROUND AT ALL — a one-off publication. No switch, no delay, no stamp. */
+  row({ id: 'm4', status: 'published', campaign_id: null, published_at: ago(30), scheduled_at: ago(30), comment_status: '' }),
+]
 
 const upcoming: QueueRow[] = [
   row({ id: 'u1', status: 'scheduled', campaign_id: 'r1', scheduled_at: soon(20), published_at: null, comment_status: '' }),
@@ -343,7 +411,7 @@ const body = renderSnapshot(
   createElement(
     'div',
     null,
-    createElement('div', { className: 'probe' }, createElement(CommentTimeline, { rows, waiting, done, attention: [], totals, today, upcoming, campaigns, now: NOW })),
+    createElement('div', { className: 'probe' }, createElement(CommentTimeline, { rows, waiting, done, attention: [], totals, today, upcoming, arming, autoSince, campaigns, now: NOW })),
     createElement(
       'div',
       { className: 'probe-preview', style: { maxWidth: '512px', margin: '16px auto 0' } },

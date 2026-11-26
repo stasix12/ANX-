@@ -1344,6 +1344,10 @@ export default function CampaignsPage() {
       <CampaignCommentSheet
         key={commentFor?.id ?? 'none'}
         open={commentFor !== null}
+        /* Whose failures to show at the top of the sheet. See
+           RoundCommentFailures: this is where they moved to from the
+           dashboard, at the owner's second request. */
+        campaignId={commentFor?.id ?? null}
         onClose={() => setCommentFor(null)}
         /* The LAST RUN's publications, which is what queueCampaignComment
            now matches. It was `everPublished` — everything the round had put

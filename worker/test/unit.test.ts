@@ -4206,6 +4206,39 @@ const scenario: { step: string; line: string }[] = [];
    * whatever four months of drift made of it.
    */
   const commentCard = readFileSync(new URL('../../src/components/social/CommentQueueCard.tsx', import.meta.url), 'utf8');
+
+  /*
+   * ─── 26.11.2026 · AND THE SECOND TIME HE ASKED, IT MOVED RATHER THAN DIED ─
+   *
+   * "למחוק את ההתראות האדומות האלה שלא יופיעו ככה פעם הבאה, שיהיה בכל לשונית
+   *  שזה נכשל שיהיה אפשר להכנס ולראות."
+   *
+   * CommentQueueCard was parked when he first asked (the note above). A
+   * compact version of it then grew back inside CommentTimeline, on the same
+   * screen, printing three failures in full. comment-timeline.test.ts now
+   * asserts the dashboard does NOT carry the worker's sentence — and an
+   * assertion that something is absent is only honest if something else
+   * asserts it is present somewhere. This is that somewhere.
+   *
+   * The round's own comment sheet, reached from the campaign card, carries
+   * the note, the screenshot of what the browser had, and the retry.
+   */
+  const commentSheet = readFileSync(new URL('../../src/components/social/CampaignCommentSheet.tsx', import.meta.url), 'utf8');
+  assert.ok(/function RoundCommentFailures/.test(commentSheet), 'the round that failed shows its own stalled comments');
+  assert.ok(
+    /listCommentsNeedingHuman\(30, campaignId\)/.test(commentSheet),
+    'read for THAT campaign — thirty failures across every round could hold none of the one he is looking at',
+  );
+  assert.ok(/r\.comment_note \|\| commentLabel/.test(commentSheet), 'with the reason the worker wrote down');
+  assert.ok(/r\.comment_shot && <CommentShot/.test(commentSheet), 'and the picture its browser had at that moment');
+  assert.ok(/retryComment\(r\.id\)/.test(commentSheet) && /retryFailedComments\(/.test(commentSheet), 'and a way to try again, one or all');
+  assert.ok(/if \(!rows\.length\) return null;/.test(commentSheet), 'and nothing at all on a round with nothing wrong');
+  /* Every screen that opens the sheet passes the campaign, or the failures
+     would appear on one of the three and not the others. */
+  for (const screen of ['src/app/social/page.tsx', 'src/app/social/campaigns/page.tsx', 'src/app/social/campaigns/[id]/page.tsx']) {
+    const src = readFileSync(new URL(`../../${screen}`, import.meta.url), 'utf8');
+    assert.ok(/campaignId=\{/.test(src), `${screen} hands the sheet the campaign whose failures to show`);
+  }
   const dashSrcComments = readFileSync(new URL('../../src/app/social/page.tsx', import.meta.url), 'utf8');
   assert.ok(/<CommentTimeline\s/.test(dashSrcComments), 'and so does the main screen');
   assert.ok(/row\.target\?\.name/.test(commentRail), 'the rail names the group each comment went to');

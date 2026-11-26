@@ -770,6 +770,9 @@ export default function CampaignControlCenter() {
                     key={`${campaign.comment_text ?? ''}|${campaign.comment_gap_seconds ?? 30}`}
                     open={commentOpen}
                     onClose={() => setCommentOpen(false)}
+                    /* The round's own stalled comments, at the top of its own
+                       sheet. See RoundCommentFailures. */
+                    campaignId={campaign.id}
                     /* The last run's publications, not every publication this
                        screen happens to be holding — see useLastRunScope. */
                     publishedCount={commentScope === undefined ? null : (commentScope?.count ?? 0)}

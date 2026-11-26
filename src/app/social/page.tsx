@@ -2459,6 +2459,10 @@ export default function SocialDashboard() {
         key={commentFor?.id ?? 'none'}
         open={commentFor !== null}
         onClose={() => setCommentFor(null)}
+        /* The same failures, in the same place, whichever screen opened the
+           sheet — this one is behind a tap, which is the whole difference
+           from printing them on the dashboard. See RoundCommentFailures. */
+        campaignId={commentFor?.id ?? null}
         /*
          * THE NUMBER THE WRITE WILL ACTUALLY TOUCH, read off the run itself.
          *

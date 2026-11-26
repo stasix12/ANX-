@@ -499,11 +499,37 @@ async function main(): Promise<void> {
        */
       assert.ok(!stalled.text.includes('לפי הקצב היום'), `${width}px: a column of failures was read as a working pace`);
       assert.ok(stalled.text.includes('תגובות נעצרו היום'), `${width}px: the stopped comments are counted but not shown`);
+      /*
+       * ─── 26.11.2026 · THE REASON MOVED; IT DID NOT GO AWAY ─────────────
+       *
+       * "למחוק את ההתראות האדומות האלה שלא יופיעו ככה פעם הבאה, שיהיה בכל
+       *  לשונית שזה נכשל שיהיה אפשר להכנס ולראות."
+       *
+       * This assertion used to require the worker's own sentence — "לא מצאנו
+       * את הפוסט הזה בקבוצה" — on THIS card, and it was right to: the count
+       * above it was an assertion with nothing behind it. But three of those
+       * sentences in full, in a warn tint, at the top of the first screen he
+       * opens is the thing he asked to be rid of, for the second time
+       * (CommentQueueCard was parked for the same reason — unit.test.ts).
+       *
+       * So the requirement is inverted rather than deleted, which is the only
+       * honest way to move evidence: the card must NOT carry the reason, and
+       * must say where it is. The reason itself is asserted where it now
+       * lives — RoundCommentFailures in CampaignCommentSheet, with the
+       * screenshot and the retry — and unit.test.ts holds that end.
+       */
       assert.ok(
-        stalled.text.includes('לא מצאנו את הפוסט הזה בקבוצה'),
-        `${width}px: the reason the worker recorded is still on no screen the owner can reach`,
+        !stalled.text.includes('לא מצאנו את הפוסט הזה בקבוצה'),
+        `${width}px: the dashboard is printing the failures in full again — they belong to the round`,
       );
-      assert.ok(stalled.text.includes('ועוד 9'), `${width}px: the rest are not accounted for`);
+      assert.ok(
+        stalled.text.includes('הפירוט אצל הקמפיין שזה קרה בו'),
+        `${width}px: the count is on screen with nothing behind it and nowhere to look`,
+      );
+      assert.ok(
+        !stalled.text.includes('ועוד 9'),
+        `${width}px: "and nine more" belonged to a list that is no longer here`,
+      );
 
       console.log(`  ✓ ${width}px — ${seen.rows} rows, card ${seen.cardHeight}px, no overflow, no clipped text`);
     }

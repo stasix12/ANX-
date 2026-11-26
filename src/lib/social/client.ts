@@ -3721,11 +3721,30 @@ export async function listCommentsDone(limit = 40): Promise<QueueRow[]> {
 const COMMENT_ATTENTION_SELECT =
   'id, status, comment_status, comment_at, comment_note, comment_shot, published_at, scheduled_at, permalink, campaign_id, target:social_targets(id,name,channel,url,image_url)';
 
-export async function listCommentsNeedingHuman(limit = 30): Promise<QueueRow[]> {
-  const res = await db()
+export async function listCommentsNeedingHuman(limit = 30, campaignId?: string): Promise<QueueRow[]> {
+  /*
+   * ─── 26.11.2026 · AND THE SAME READ, NARROWED TO ONE ROUND ─────────────
+   *
+   * "למחוק את ההתראות האדומות האלה שלא יופיעו ככה פעם הבאה, שיהיה בכל
+   *  לשונית שזה נכשל שיהיה אפשר להכנס ולראות."
+   *
+   * The dashboard printed all of them as three long paragraphs, which is the
+   * second time the owner has asked for this off his main screen — see the
+   * note in unit.test.ts about CommentQueueCard being parked for exactly the
+   * same reason. The failures themselves are not noise; the place was wrong.
+   * They belong to the ROUND they happened in, so the campaigns screen asks
+   * the same question about one campaign and the dashboard keeps a line.
+   *
+   * The filter is applied before the limit, which is the whole point: thirty
+   * failures across every campaign could hold none of the campaign the owner
+   * is looking at.
+   */
+  let q = db()
     .from('social_queue')
     .select(COMMENT_ATTENTION_SELECT)
-    .in('comment_status', ['failed', 'unverified'])
+    .in('comment_status', ['failed', 'unverified']);
+  if (campaignId) q = q.eq('campaign_id', campaignId);
+  const res = await q
     .order('comment_at', { ascending: false, nullsFirst: false })
     .limit(limit);
   /* Same silence as the reads around it, for the same reason: this runs on the

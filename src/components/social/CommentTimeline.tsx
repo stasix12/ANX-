@@ -10,7 +10,6 @@ import { COMMENT_TONE, commentLabel, commentNeedsHuman } from '@/lib/social/comm
 import { addDaysISO, agree, formatDateHe, formatDateTimeHe, formatTimeHe, startOfZonedDay, zonedDateISO, zonedToUtc } from '@/lib/social/time';
 import { MessageIcon, ShareIcon } from '@/components/icons';
 import { TargetAvatar } from './TargetAvatar';
-import { CommentShot } from './CommentShot';
 import { CommentPreviewSheet } from './CommentPreviewSheet';
 /* LiveFlow's own picture box and people mark, so the two lists cannot drift
    apart — see the note over the list below. */
@@ -509,31 +508,32 @@ export function CommentTimeline({
         NO RETRY BUTTON HERE, on purpose. A round's failures are retried on the
         campaign screen, which refuses 'unverified' — Enter was pressed on
         those and the comment may already be under the post.
+
+        ─── 26.11.2026 · AND NOT THE FAILURES THEMSELVES ANY MORE ──────────
+
+        "למחוק את ההתראות האדומות האלה שלא יופיעו ככה פעם הבאה, שיהיה בכל
+         לשונית שזה נכשל שיהיה אפשר להכנס ולראות."
+
+        This block printed three of them in full — the same long sentence
+        repeated three times, in a warn tint, at the top of the main screen.
+        It is the SECOND time the owner has asked for this off the dashboard:
+        CommentQueueCard was parked for the same reason, and unit.test.ts
+        still says so.
+
+        The evidence was right to exist — the number above it was an
+        assertion with nothing on the screen behind it — but the place was
+        wrong. A failure belongs to the ROUND it happened in, so the whole of
+        it (the note, the screenshot of what the browser saw, the retry
+        button) moved to the campaigns screen, per campaign, and what stays
+        here is the count and where to look. The number is still backed; the
+        backing is one tap away instead of three paragraphs deep.
       */}
       {attentionTop.length > 0 && (
-        <div className={`mt-2 rounded-xl px-2.5 py-2 ${TONE_TINT.warn}`}>
-          <p className={`text-[11.5px] font-extrabold ${TONE_TEXT.warn}`}>
-            {`${needsHuman} ${agree(needsHuman, 'תגובה נעצרה היום', 'תגובות נעצרו היום')} — זה מה שהתוכנה דיווחה`}
-          </p>
-          <ul className="mt-1 space-y-1">
-            {attentionTop.map((r) => (
-              <li key={r.id} className="flex items-start gap-2 text-[11px] leading-snug">
-                <span dir="auto" className="w-24 shrink-0 truncate font-bold text-mist-200">
-                  {r.target?.name ? <span data-no-translate>{r.target.name}</span> : t('קבוצה')}
-                </span>
-                <span dir="auto" className="min-w-0 flex-1 text-mist-400">
-                  {r.comment_note || commentLabel(r.comment_status)}
-                </span>
-                {r.comment_shot && <CommentShot path={r.comment_shot} />}
-              </li>
-            ))}
-          </ul>
-          {needsHuman > attentionTop.length && (
-            <p className="mt-1 text-[11px] text-mist-500">
-              {`ועוד ${needsHuman - attentionTop.length} — כולן במסך הסבב, עם כפתור "נסה שוב"`}
-            </p>
-          )}
-        </div>
+        <p className="mt-2 text-[11px] leading-4 text-mist-500">
+          {`${needsHuman} ${agree(needsHuman, 'תגובה נעצרה היום', 'תגובות נעצרו היום')}. `}
+          <span className="font-bold text-mist-300">{t('הפירוט אצל הקמפיין שזה קרה בו')}</span>
+          {` — ${t('מסך הקמפיינים')}, ${t('עם מה שהמחשב ראה וכפתור "נסה שוב"')}.`}
+        </p>
       )}
 
       {/*

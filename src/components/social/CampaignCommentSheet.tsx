@@ -3,9 +3,11 @@
 import { useEffect, useState } from 'react';
 import { t } from '@/lib/social/i18n';
 import { formatDayMonthHe, formatTimeHe, ltr } from '@/lib/social/time';
-import { lastRunScope, type LastRunScope } from '@/lib/social/client';
+import { lastRunScope, listCommentsNeedingHuman, retryComment, retryFailedComments, type LastRunScope, type QueueRow } from '@/lib/social/client';
+import { commentLabel } from '@/lib/social/comments';
 import type { MediaItem } from '@/lib/social/types';
 import { MediaUploader } from './MediaUploader';
+import { CommentShot } from './CommentShot';
 import { Button, Field, Notice, SegmentedControl, Sheet, inputClass } from './ui';
 
 /**
@@ -105,9 +107,108 @@ export function runLabelOf(scope: Pick<LastRunScope, 'roundAt' | 'fromISO' | 'la
   return ltr(hour ? `${day} · ${hour}` : day);
 }
 
+/**
+ * ─── מה שנעצר בסבב הזה, אצל הסבב הזה ─────────────────────────────────────
+ *
+ * "למחוק את ההתראות האדומות האלה שלא יופיעו ככה פעם הבאה, שיהיה בכל לשונית
+ *  שזה נכשל שיהיה אפשר להכנס ולראות" — 26.11.2026.
+ *
+ * The dashboard printed every stalled comment in full, three long paragraphs
+ * deep, in a warn tint, at the top of the first screen he opens. It is the
+ * second time he has asked for this off that screen — CommentQueueCard was
+ * parked for the same reason months ago and unit.test.ts still records it.
+ *
+ * The evidence itself was never the problem. "3 דורשות טיפול היום" with
+ * nothing behind it is an assertion, and the worker had already written down
+ * why each one stopped and photographed the page it stopped on. What was
+ * wrong is that a failure belongs to the ROUND it happened in, and the main
+ * screen is not that round.
+ *
+ * So the whole of it lives here: the note, the picture the browser had, and
+ * the retry — on the round's own comment screen, which is reached from the
+ * campaign card. The dashboard keeps the count and says where to look.
+ *
+ * It draws NOTHING when there is nothing, so a healthy round's sheet is
+ * exactly what it was before this existed.
+ */
+function RoundCommentFailures({ campaignId, open }: { campaignId: string | null; open: boolean }) {
+  const [rows, setRows] = useState<QueueRow[]>([]);
+  const [busy, setBusy] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!open || !campaignId) {
+      setRows([]);
+      return;
+    }
+    let alive = true;
+    /* Silent on failure, like every other read behind a sheet: a list that
+       could not be read must not take the sheet down with it — the owner
+       opened it to write a comment. */
+    listCommentsNeedingHuman(30, campaignId)
+      .then((r) => { if (alive) setRows(r); })
+      .catch(() => { if (alive) setRows([]); });
+    return () => { alive = false; };
+  }, [open, campaignId]);
+
+  async function act(key: string, run: () => Promise<unknown>) {
+    setBusy(key);
+    try {
+      await run();
+      if (campaignId) setRows(await listCommentsNeedingHuman(30, campaignId).catch(() => []));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  if (!rows.length) return null;
+  return (
+    <div className="mb-3 rounded-xl border border-ink-700 bg-ink-900/60 p-2.5">
+      <div className="flex items-center justify-between gap-2">
+        <h3 className="text-[12.5px] font-extrabold text-mist-100">
+          {`${rows.length} ${rows.length === 1 ? t('תגובה נעצרה בסבב הזה') : t('תגובות נעצרו בסבב הזה')}`}
+        </h3>
+        <button
+          type="button"
+          disabled={busy !== null}
+          onClick={() => void act('all', () => retryFailedComments(campaignId as string))}
+          className="inline-flex min-h-8 items-center rounded-full border border-ink-700 px-2.5 text-[11px] font-bold text-mist-300 transition-colors hover:border-brand-400 hover:text-brand-400 disabled:opacity-50"
+        >
+          {busy === 'all' ? t('מנסה…') : t('נסה שוב את כולן')}
+        </button>
+      </div>
+      <ul className="mt-2 space-y-2">
+        {rows.map((r) => (
+          <li key={r.id} className="rounded-lg bg-ink-900 p-2">
+            <p dir="auto" className="text-[11.5px] font-bold text-mist-200">
+              {r.target?.name ? <span data-no-translate>{r.target.name}</span> : t('קבוצה')}
+            </p>
+            <p dir="auto" className="mt-0.5 text-[11px] leading-snug text-mist-400">
+              {r.comment_note || commentLabel(r.comment_status)}
+            </p>
+            <div className="mt-1 flex items-center gap-2">
+              {/* What the browser actually had on screen at that moment —
+                  the one thing that turns "תסדר" into a decision. */}
+              {r.comment_shot && <CommentShot path={r.comment_shot} />}
+              <button
+                type="button"
+                disabled={busy !== null}
+                onClick={() => void act(r.id, () => retryComment(r.id))}
+                className="inline-flex min-h-8 items-center rounded-full border border-ink-700 px-2.5 text-[11px] font-bold text-mist-300 transition-colors hover:border-brand-400 hover:text-brand-400 disabled:opacity-50"
+              >
+                {busy === r.id ? t('מנסה…') : t('נסה שוב')}
+              </button>
+            </div>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 export function CampaignCommentSheet({
   open,
   onClose,
+  campaignId = null,
   publishedCount,
   runLabel = '',
   atLeast = false,
@@ -120,6 +221,9 @@ export function CampaignCommentSheet({
 }: {
   open: boolean;
   onClose: () => void;
+  /** Whose round this is — the failures below are read for it. See
+      RoundCommentFailures. Null while no campaign is open. */
+  campaignId?: string | null;
   /**
    * How many posts this will land on — the number that makes it a decision.
    *
@@ -172,6 +276,11 @@ export function CampaignCommentSheet({
 
   return (
     <Sheet open={open} onClose={onClose} title={t('הוסף תגובה לפרסומים של הריצה האחרונה')}>
+      {/* ABOVE THE FORM, and before every other branch: a round with stalled
+          comments is a round whose owner came here to find out why, and the
+          branches below answer a different question. Draws nothing when
+          there is nothing. */}
+      <RoundCommentFailures campaignId={campaignId} open={open} />
       {failed ? (
         /* See RunScopeState.failed. A refusal is not an emptiness. */
         <Notice tone="warn">{t('לא הצלחנו לבדוק על אילו פרסומים התגובה תיווסף. סגרו ונסו שוב.')}</Notice>

@@ -5616,6 +5616,49 @@ const scenario: { step: string; line: string }[] = [];
   );
 
   /*
+   * ─── 26.11.2026 · ONE FACEBOOK ACCOUNT, ONE WORKER ─────────────────────
+   *
+   * "שתוכנה והדפדפן ירוצו על ענן גם אצלי וגם אצל הלקוחות."
+   *
+   * A worker registers on (tenant_id, name), so worker@cloud and
+   * worker@DESKTOP-xxxx are two rows and both can be online with the same
+   * fb_user_id — because the migration COPIES the profile and
+   * desktop/main.ts defaults openAtLogin to true. One Facebook account live
+   * from a home connection and a datacenter in the same minute is the
+   * literal definition of a stolen session, and both workers show green, so
+   * nobody would notice. At ten customers it is systematic.
+   */
+  assert.ok(/async function twinWorkerHold/.test(localWorker), 'a worker notices a twin on its own Facebook account');
+  assert.ok(
+    /\.eq\('fb_user_id', mine\)[\s\S]{0,80}\.neq\('id', state\.id\)/.test(localWorker),
+    'found by the account they share, not by name — the names are what differ',
+  );
+  assert.ok(/if \(!mine\) return '';/.test(localWorker), 'and never on an empty account id, which would match every worker that has not logged in');
+  assert.ok(
+    /\.gt\('last_seen_at'/.test(localWorker),
+    'only a twin that is actually alive — a retired row is not a second session',
+  );
+  /* THE NEWCOMER YIELDS: the real case is a PC waking up into a cloud worker
+     that has run for weeks, so the PC must be the one that stands down. */
+  assert.ok(
+    /const elder = twins\.find\(\(t\) => \(Date\.parse\(t\.created_at\) \|\| 0\) < ours\);/.test(localWorker),
+    'the older registration keeps the account and the newcomer stands down',
+  );
+  /* IT ADDS NO GATE. It feeds the attention mechanism that already stops
+     everything, so the publishing path is untouched. */
+  assert.ok(
+    /const twin = await twinWorkerHold\(state\)[\s\S]{0,260}if \(state\.attention\) return idle/.test(localWorker),
+    'and it stops the worker through the attention gate that already exists, not a new one',
+  );
+  assert.ok(/'worker_twin'/.test(localWorker), 'and it is written to the history, because both workers otherwise show green');
+  /* A FAILED READ MUST NOT STOP A QUEUE. The hazard is rare; silence is not
+     a reason to hold every publication. */
+  assert.ok(
+    /if \(error\) return state\.twinHold = '';/.test(localWorker),
+    'a read it could not make holds nothing — the cure must not be worse than the hazard',
+  );
+
+  /*
    * A MISSING MIGRATION MUST NOT MAKE THE WORKER IGNORE EVERYTHING.
    *
    * Emptying the payload as the command is claimed is right, and on a database

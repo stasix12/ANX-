@@ -132,6 +132,8 @@ const TITLE: Record<string, string> = {
   coverage_search: 'כיסוי ארצי — חיפוש קבוצות',
   /* פייסבוק החליפה את דף התוצאות באמצע הגלילה. מה שנקרא עד אז נשמר. */
   discover_interrupted: 'החיפוש נקטע — פייסבוק ביקשה אימות',
+  /* אותו חשבון פייסבוק פעיל בשני workers. אחד מהם חייב להיכבות. */
+  worker_twin: 'אותו חשבון פייסבוק פעיל בשני מחשבים',
   campaign_paused: 'הסבב הושהה',
   /* CHZARA. Two headlines rather than one with a word swapped: this is the
      line in his history that says his account began republishing by itself,

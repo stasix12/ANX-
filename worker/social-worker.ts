@@ -380,6 +380,10 @@ interface WorkerState {
    */
   accountRow?: string;
   accountsTotal?: number;
+  /** When THIS worker's row was first registered — the tiebreak for a twin. */
+  registeredAt?: string;
+  /** Why a twin on the same Facebook account is holding us. See twinWorkerHold. */
+  twinHold?: string;
 }
 
 const session = new BrowserSession();
@@ -440,7 +444,7 @@ async function main(): Promise<void> {
       db
         .from('social_workers')
         .upsert({ name: env.workerName, status: 'online', version: VERSION, host: hostname(), last_seen_at: new Date().toISOString() }, { onConflict })
-        .select('id, fb_user_id')
+        .select('id, fb_user_id, created_at')
         .single(),
     'tenant_id,name',
     'name',
@@ -494,6 +498,9 @@ async function main(): Promise<void> {
     spacingNoticeAt: 0,
     idleNoticeShown: false,
     accountId: ((worker as { fb_user_id?: string }).fb_user_id ?? '') || undefined,
+    /* The tiebreak when two workers share one Facebook account: the older
+       registration keeps it. See twinWorkerHold. */
+    registeredAt: (worker as { created_at?: string }).created_at ?? undefined,
   };
 
   /*
@@ -1233,6 +1240,18 @@ async function tick(state: WorkerState): Promise<void> {
       `ההודעה "${held.slice(0, 90)}" עצרה את הפרסום ${mins} דקות — ניקינו אותה ואנחנו מנסים שוב. אם הסיבה עדיין קיימת היא תחזור מיד, בלי שתצטרכו לעשות דבר.`,
     );
     console.log(`[worker] הודעה שעצרה את התור ${mins} דק׳ נוקתה אוטומטית — מנסים שוב.`);
+  }
+  /*
+   * ONE FACEBOOK ACCOUNT, ONE WORKER. Checked here because `attention` is
+   * the mechanism that already stops everything, so this adds no gate of its
+   * own — see twinWorkerHold for why this is the hazard that breaks every
+   * migration to the cloud, weeks after the migration.
+   */
+  const twin = await twinWorkerHold(state).catch(() => '');
+  if (twin && state.attention !== twin) {
+    state.attention = twin;
+    state.attentionAt = Date.now();
+    await logActivity('warn', 'worker_twin', twin);
   }
   if (state.attention) return idle(state, `ממתין לטיפול ידני: ${state.attention}`);
   if (state.browserState === 'disconnected') return idle(state, 'אין חיבור לפייסבוק — לחצו "התחבר לפייסבוק" בלוח הבקרה.');
@@ -7045,6 +7064,73 @@ async function clearChallenge(state: WorkerState): Promise<void> {
 async function browserSettings(): Promise<BrowserSettings> {
   const stored = await getSetting<BrowserSettings>('browser', DEFAULT_BROWSER);
   return { ...stored, debugMode: env.forceHeaded, testMode: false, requireConfirmation: false };
+}
+
+/**
+ * ─── שני workers על חשבון פייסבוק אחד ────────────────────────────────────
+ *
+ * "אני רוצה להוריד את התלות במחשב, שתוכנה והדפדפן ירוצו על ענן גם אצלי
+ *  וגם אצל הלקוחות" — 26.11.2026.
+ *
+ * THE ONE THING THAT BREAKS EVERY MIGRATION, AND IT BREAKS IT WEEKS LATER.
+ *
+ * A worker registers on (tenant_id, name), so `worker@cloud` and
+ * `worker@DESKTOP-4F2A` are two rows and BOTH may be online at once — with
+ * the same fb_user_id, because the cloud profile was COPIED from the PC and
+ * not moved. desktop/main.ts defaults openAtLogin to true, so the machine
+ * that was "turned off" rejoins by itself at the next Windows update.
+ *
+ * The queue is claimed atomically, so this is not duplicate posts. It is one
+ * Facebook account live from a home connection in Israel and a datacenter at
+ * the same minute — which is not a risk signal, it is THE risk signal, the
+ * literal definition of a stolen session. And nobody would notice: both
+ * workers show green.
+ *
+ * At one customer that is a footgun. At ten it is systematic: every customer
+ * who migrates leaves one behind.
+ *
+ * WHICH ONE STANDS DOWN. The newcomer. The scenario that actually happens is
+ * a cloud worker running steadily for weeks and a PC waking up into it, so
+ * the PC must yield. The reverse — deploying the cloud worker while the PC
+ * is still on — then refuses to start and says why, which is the correct
+ * answer to doing the migration in the wrong order, not a bug.
+ *
+ * IT ADDS NO GATE. It sets state.attention, and the gate that already exists
+ * for that does the rest. Nothing in the publishing path changes.
+ */
+const TWIN_CHECK_EVERY_MS = 60_000;
+let twinCheckedAt = 0;
+
+async function twinWorkerHold(state: WorkerState): Promise<string> {
+  /* Only once we know WHOSE account this is: an empty fb_user_id would match
+     every worker that has not logged in yet, which is not a twin. */
+  const mine = state.accountId;
+  if (!mine) return '';
+  const now = Date.now();
+  if (now - twinCheckedAt < TWIN_CHECK_EVERY_MS) return state.twinHold ?? '';
+  twinCheckedAt = now;
+
+  const db = await workerDb();
+  const { data, error } = await db
+    .from('social_workers')
+    .select('id, name, host, last_seen_at, created_at')
+    .eq('fb_user_id', mine)
+    .neq('id', state.id)
+    .gt('last_seen_at', new Date(now - 2 * 60_000).toISOString());
+  /* A read that failed says nothing, and silence here must not stop a queue:
+     the hazard is rare and the cure cannot be worse than it. */
+  if (error) return state.twinHold = '';
+
+  const twins = (data ?? []) as { name: string; host: string; created_at: string }[];
+  if (!twins.length) return state.twinHold = '';
+  /* The older registration keeps the account; the newcomer yields. */
+  const ours = Date.parse(state.registeredAt ?? '') || now;
+  const elder = twins.find((t) => (Date.parse(t.created_at) || 0) < ours);
+  if (!elder) return state.twinHold = '';
+  return state.twinHold =
+    `אותו חשבון פייסבוק פעיל גם ב-worker אחר ("${elder.name}"${elder.host ? ` על ${elder.host}` : ''}). ` +
+    'שני מחשבים על חשבון אחד נראים לפייסבוק כהשתלטות — כבו אחד מהם. ' +
+    'אם העברתם לענן: בטלו את "הפעל עם Windows" במחשב הישן.';
 }
 
 async function heartbeat(state: WorkerState, status: 'online' | 'needs_attention' | 'offline', debugMode = false, browserOverride?: WorkerState['browserState']): Promise<void> {

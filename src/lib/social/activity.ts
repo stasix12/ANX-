@@ -81,6 +81,12 @@ const KIND: Record<string, ActivityKind> = {
    */
   discover_interrupted: 'failure',
   /*
+   * שני workers על אותו חשבון פייסבוק. 'failure' כי זו המצאות שחייבת לעצור
+   * הכל: חשבון אחד שפעיל משני מקומות בו-זמנית הוא בדיוק מה שפייסבוק קוראת
+   * לו השתלטות. השורה הזו היא ההתראה היחידה — שני ה-workers מראים ירוק.
+   */
+  worker_twin: 'failure',
+  /*
    * הצטרפות אוטומטית לקבוצה. 'success' and not 'system': it is the machine
    * doing the thing the owner pressed, on his own account, and the line naming
    * which group is the only record that it happened. A join that did NOT

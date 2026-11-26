@@ -1065,7 +1065,11 @@ const RU: Record<string, string> = {
   /* "Ошибки в цикле" says there are errors; the Hebrew says the round
      FINISHED with errors — the difference between a warning and a result.
      This is shorter still, so it fits wherever that did. */
-  'הסבב הושלם': 'Раунд завершён',
+  /* "Завершён" and not "Раунд завершён": the pill sits on the campaign
+     card's cover with 101px of room, and the longer form measured 121 and
+     clipped at 390 and 430. The neighbouring keys show the convention for
+     this pill — 'הסתיים עם כשלים' was 'С ошибками'. */
+  'הסבב הושלם': 'Завершён',
   'הצלחה': 'Успех',
   'קבוצות קיבלו פרסום בהצלחה': 'групп успешно получили публикацию',
   'קבוצות לא קיבלו פרסום בסבב הנוכחי': 'групп не получили публикацию в текущем раунде',

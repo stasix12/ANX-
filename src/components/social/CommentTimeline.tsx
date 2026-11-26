@@ -528,11 +528,14 @@ export function CommentTimeline({
         here is the count and where to look. The number is still backed; the
         backing is one tap away instead of three paragraphs deep.
       */}
+      {/* ONE TEXT NODE, because the DOM translator matches a whole node. The
+          first draft of this line was three — a count, a bold span and a tail
+          — and the Russian switch left two of them in Hebrew. The sentence
+          the dictionary holds is the § form, exactly as the line it replaced
+          did ('§ § — זה מה שהתוכנה דיווחה'). */}
       {attentionTop.length > 0 && (
         <p className="mt-2 text-[11px] leading-4 text-mist-500">
-          {`${needsHuman} ${agree(needsHuman, 'תגובה נעצרה היום', 'תגובות נעצרו היום')}. `}
-          <span className="font-bold text-mist-300">{t('הפירוט אצל הקמפיין שזה קרה בו')}</span>
-          {` — ${t('מסך הקמפיינים')}, ${t('עם מה שהמחשב ראה וכפתור "נסה שוב"')}.`}
+          {`${needsHuman} ${agree(needsHuman, 'תגובה נעצרה היום', 'תגובות נעצרו היום')} — הפירוט אצל הקמפיין שזה קרה בו, במסך הקמפיינים, עם מה שהמחשב ראה וכפתור "נסה שוב"`}
         </p>
       )}
 

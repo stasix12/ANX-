@@ -272,7 +272,18 @@ const NO_TRANSLATE_SITES = [
      comment text the round holds. Neither is ours to translate. */
   'src/components/social/CommentPreviewSheet.tsx:2',
   'src/components/social/CommentQueueCard.tsx:2',
-  'src/components/social/CommentTimeline.tsx:3',
+  /*
+   * 26.11.2026 · THE GROUP NAME MOVED WITH THE FAILURES.
+   *
+   * CommentTimeline went 3 → 2 and CampaignCommentSheet gained its one: the
+   * stalled comments left the dashboard for the round's own sheet, and the
+   * group's name went with them. It is the protected kind — a name that
+   * identifies something outside this app, which "Наш район" would stop
+   * matching — not a caption, which is what this count exists to catch
+   * somebody quietly opting out of.
+   */
+  'src/components/social/CampaignCommentSheet.tsx:1',
+  'src/components/social/CommentTimeline.tsx:2',
   'src/components/social/ContentCard.tsx:1',
   'src/components/social/Discovery.tsx:4',
   'src/components/social/GroupCard.tsx:1',

@@ -94,6 +94,26 @@ export const TONE_TINT: Record<Tone, string> = {
   neutral: 'bg-ink-800',
 };
 
+/**
+ * ─── 26.11.2026 · THE FILLED PILL ───────────────────────────────────────────
+ *
+ * A tint is how this product says "this is the state"; a FILL is how it says
+ * "this is the outcome". Until now only the queue row's StatusPill had one,
+ * hand-written into statusClass, and the campaign cards had no way to draw
+ * the green badge the owner's reference image shows without inventing a third
+ * green somewhere.
+ *
+ * `on-state` is the ink that goes on every one of these, and the pairs that
+ * are actually used are declared in worker/test/contrast.test.ts.
+ */
+export const TONE_SOLID: Record<Tone, string> = {
+  brand: 'bg-brand-500 text-on-brand',
+  good: 'bg-success-400 text-on-state',
+  bad: 'bg-error-500 text-on-state',
+  warn: 'bg-warning-400 text-on-state',
+  neutral: 'bg-mist-500 text-on-state',
+};
+
 export const TONE_BORDER: Record<Tone, string> = {
   brand: 'border-brand-300/30',
   good: 'border-success-400/30',
@@ -745,12 +765,25 @@ export function StatusPill({ status, long = false }: { status: QueueStatus; long
   );
 }
 
-export function Badge({ tone = 'neutral', children }: { tone?: 'neutral' | 'brand' | 'good' | 'warn' | 'bad' | 'info'; children: React.ReactNode }) {
+export function Badge({
+  tone = 'neutral',
+  solid = false,
+  children,
+}: {
+  tone?: 'neutral' | 'brand' | 'good' | 'warn' | 'bad' | 'info';
+  /**
+   * A FILL instead of a tint — "רקע ירוק, עם כיתוב לבן". Reserved for an
+   * OUTCOME: the round ended. A tint says which state a thing is in and is
+   * what every other badge in the product wants.
+   */
+  solid?: boolean;
+  children: React.ReactNode;
+}) {
   // `info` is kept as a prop value so call sites do not have to change, but
   // it resolves to the same blue as `brand`: sky was a fifth hue doing a job
   // blue already does.
   const t: Tone = tone === 'info' ? 'brand' : tone;
-  const cls = `${TONE_TINT[t]} ${TONE_TEXT[t]}`;
+  const cls = solid ? TONE_SOLID[t] : `${TONE_TINT[t]} ${TONE_TEXT[t]}`;
   return <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-bold whitespace-nowrap ${cls}`}>{children}</span>;
 }
 

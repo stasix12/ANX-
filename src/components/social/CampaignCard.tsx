@@ -450,8 +450,31 @@ export function CampaignCard({
    *                         reports published === total with publications
    *                         still waiting; client.ts names this exact failure.
    */
+  /*
+   * ─── 26.11.2026 · `live.tone === 'good'` STOPPED MEANING THIS ───────────
+   *
+   * The badge no longer grades the round: "גם אם מסתיים עם כשלים ולא משנה
+   * כמה שיציג שקמפיין הושלם", so a completed round is tone 'good' whatever
+   * it lost. That is right for the BADGE, which reports completion — and it
+   * would have been quietly wrong here, because this line makes the other
+   * claim: that it ended WELL. Left as it was, a round that reached every
+   * group while three publications failed would have started printing
+   * "הקמפיין הסתיים בהצלחה".
+   *
+   * So the clause is replaced by exactly what it used to imply and nothing
+   * more. `live.done` keeps the guard the tone was really there for — the
+   * global-pause and disconnected short-circuits return no `done` — and the
+   * two zero checks restore what tone 'good' used to carry on its own before
+   * the badge was told to stop grading.
+   */
   const finishedClean =
-    total > 0 && published === total && state.state === 'completed' && live.tone === 'good' && !state.truncated;
+    total > 0 &&
+    published === total &&
+    state.state === 'completed' &&
+    live.done === true &&
+    failed === 0 &&
+    skipped === 0 &&
+    !state.truncated;
 
   /*
    * ─── WHEN THE NEXT PUBLICATION ACTUALLY HAPPENS ────────────────────────
@@ -770,8 +793,16 @@ export function CampaignCard({
           */}
           <span className="pointer-events-none absolute top-1.5 end-1.5 flex max-w-[calc(100%-12px)] items-center gap-0.5">
             {badge.live && <span aria-hidden className={`pulse-dot h-1.5 w-1.5 shrink-0 rounded-full ${TONE_FILL[badgeTone]}`} />}
-            <Badge tone={badge.tone}>
-              <BoltIcon aria-hidden className="h-2.5 w-2.5 shrink-0" />
+            {/* A FINISHED ROUND WEARS THE SAME PILL ON EVERY CARD —
+                "החלת השינוי על כל כרטיסי הקמפיינים במערכת". Filled green with
+                a tick, and the bolt gives way to it: the bolt is the running
+                mark, and a round that has ended is not running. */}
+            <Badge tone={badge.tone} solid={badge.done}>
+              {badge.done ? (
+                <CheckCircleIcon aria-hidden className="h-2.5 w-2.5 shrink-0" />
+              ) : (
+                <BoltIcon aria-hidden className="h-2.5 w-2.5 shrink-0" />
+              )}
               {badge.label}
             </Badge>
           </span>

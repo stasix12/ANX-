@@ -2375,4 +2375,4 @@ export const WORKER_VERSION = '4.93.0';
  * שניהם עברו ל-shownSchedule/fromShown, כמו כל שאר העורכים והקריאות. אף
  * מנגנון לא זז. זה מסך בלבד ולא רץ במחשב שלו.
  */
-export const WORKER_FINGERPRINT = 'c52f90ef4c659aba';
+export const WORKER_FINGERPRINT = '0c2fdfbed215d238';

@@ -1065,6 +1065,10 @@ const RU: Record<string, string> = {
   /* "Ошибки в цикле" says there are errors; the Hebrew says the round
      FINISHED with errors — the difference between a warning and a result.
      This is shorter still, so it fits wherever that did. */
+  'הסבב הושלם': 'Раунд завершён',
+  'הצלחה': 'Успех',
+  'קבוצות קיבלו פרסום בהצלחה': 'групп успешно получили публикацию',
+  'קבוצות לא קיבלו פרסום בסבב הנוכחי': 'групп не получили публикацию в текущем раунде',
   'הסתיים עם כשלים': 'С ошибками',
   'הקבוצה לא נפתחה': 'Группа не открылась',
   'הקטגוריה נוקתה.': 'Категория очищена.',

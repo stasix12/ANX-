@@ -2,8 +2,8 @@
 
 import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
-import { CalendarIcon, ChevronIcon, MegaphoneIcon, PauseIcon, RepeatIcon, SpinnerIcon } from '@/components/icons';
-import { keep } from '@/lib/social/i18n';
+import { CalendarIcon, CheckCircleIcon, ChevronIcon, InfoIcon, MegaphoneIcon, PauseIcon, RepeatIcon, SpinnerIcon } from '@/components/icons';
+import { keep, t } from '@/lib/social/i18n';
 import {
   canPauseRun,
   canResumeRun,
@@ -33,7 +33,7 @@ import { ProgressRing } from './ProgressRing';
 import { PostCover } from './PostCover';
 import { stageElapsed } from './PublicationItem';
 import { TargetAvatar } from './TargetAvatar';
-import { Button, ButtonLink, CARD, ProgressBar, TONE_FILL, TONE_TEXT, TONE_TINT, type Tone } from './ui';
+import { Button, ButtonLink, CARD, ProgressBar, TONE_FILL, TONE_SOLID, TONE_TEXT, TONE_TINT, type Tone } from './ui';
 import type { PublishCycle } from '@/lib/social/publish-cycle';
 import { LiveFlow, type FlowRow } from './LiveFlow';
 import { sceneModeFor, type SceneMode } from './sceneState';
@@ -109,11 +109,26 @@ function HeroPanel({ children, ariaLabel, className = 'p-4' }: { children: React
  * floor and the same height the title link beside it already reserves — so
  * the header line does not move by a pixel.
  */
-function StatePill({ tone, label, live, href }: { tone: Tone; label: string; live: boolean; href?: string | null }) {
+/*
+ * ─── 26.11.2026 · A FINISHED ROUND IS A FILLED GREEN PILL WITH A TICK ──────
+ *
+ *   "להחליף את הרקע הכתום של הסטטוס ברקע ירוק, עם כיתוב לבן ואייקון V בתוך
+ *    עיגול, בדיוק בהתאם לרפרנס."
+ *
+ * `done` comes from runBadge() rather than from reading the label here: three
+ * cards draw this badge and a string compare in each is three chances to
+ * disagree about what "finished" is.
+ *
+ * The live dot and the filled state are mutually exclusive by construction —
+ * `done` is only ever true on a completed round, and `live` only on a running
+ * one — so the pill never has to choose between them.
+ */
+function StatePill({ tone, label, live, done, href }: { tone: Tone; label: string; live: boolean; done?: boolean; href?: string | null }) {
   const pill = (
     <span
-      className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold ${TONE_TINT[tone]} ${TONE_TEXT[tone]}`}
+      className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold ${done ? TONE_SOLID[tone] : `${TONE_TINT[tone]} ${TONE_TEXT[tone]}`}`}
     >
+      {done && <CheckCircleIcon aria-hidden className="h-3.5 w-3.5 shrink-0" />}
       {live && <span aria-hidden className={`pulse-dot h-1.5 w-1.5 rounded-full ${TONE_FILL[tone]}`} />}
       {label}
     </span>
@@ -441,12 +456,6 @@ export function LiveCampaignHero({
    * from a badge, and the noun is written into every one of them so nothing
    * here can be read as a count of groups.
    */
-  const lostNote = [
-    progress.skipped > 0 ? counted(progress.skipped, 'פרסום אחד דולג', 'פרסומים דולגו') : '',
-    progress.failed > 0 ? counted(progress.failed, 'פרסום אחד נכשל', 'פרסומים נכשלו') : '',
-  ]
-    .filter(Boolean)
-    .join(' · ');
   const open = openRows(progress);
   /*
    * One opinion about the state — the label, the colour, and whether the dot
@@ -456,6 +465,38 @@ export function LiveCampaignHero({
    */
   const badge = runBadge(state, { globalPaused, workerOnline });
   const pillTone: Tone = toneOf(badge.tone);
+  /*
+   * ─── 26.11.2026 · THE ROUND IS OVER, SO THE CARD SUMMARISES IT ──────────
+   *
+   * One flag, read from runBadge() and not from the label, decides two things
+   * at once: the pill goes solid green with a tick, and the line under the
+   * bar becomes the summary row the reference draws. Both are the same fact
+   * — the round reached its end — so neither may be true without the other.
+   */
+  const roundDone = Boolean(badge.done);
+  /*
+   * WHAT THE GROUP FIGURES CANNOT SAY, in the unit they are not in.
+   *
+   * A skipped or failed publication is not a group, and there is no group-wise
+   * count of either — a group can have one of each. They stay on the card
+   * because a round losing 274 publications is not something to learn about
+   * from a badge, and the noun is written into every one of them so nothing
+   * here can be read as a count of groups.
+   *
+   * THE FAILURES LEAVE THIS LINE ONCE THE ROUND IS OVER — "להחליף את הניסוח
+   * 'פרסומים נכשלו' בניסוח 'קבוצות לא קיבלו פרסום בסבב הנוכחי', ללא כפילות
+   * במלל". On a finished round the summary row below says it in groups, which
+   * is the unit the owner reads, and saying it twice in two units on one card
+   * is the duplication the instruction names. While the round is still
+   * RUNNING there is no summary row, so the clause stays: a live failure is
+   * not something to drop off the screen.
+   */
+  const lostNote = [
+    progress.skipped > 0 ? counted(progress.skipped, 'פרסום אחד דולג', 'פרסומים דולגו') : '',
+    !roundDone && progress.failed > 0 ? counted(progress.failed, 'פרסום אחד נכשל', 'פרסומים נכשלו') : '',
+  ]
+    .filter(Boolean)
+    .join(' · ');
   // A button is offered only when it can act: nothing is left to pause once
   // every row has finished, and "המשך סבב" belongs to the RECORD's pause flag,
   // not to a state name — a paused run whose remaining rows all wait on a
@@ -647,7 +688,11 @@ export function LiveCampaignHero({
         <ProgressRing
           percent={groups.usable ? groups.percent : view.percent}
           label={`${groups.usable ? groups.percent : view.percent}%`}
-          sub={groups.usable ? 'מהקבוצות' : 'התקדמות'}
+          /* "הצלחה" and not "מהקבוצות", per the reference image. The figure
+             under it has not changed — it is the same groups.percent — but
+             the word names what the percentage IS rather than what it is a
+             fraction of, which is the question the ring is glanced at for. */
+          sub={groups.usable ? 'הצלחה' : 'התקדמות'}
           /* 78 → 62: the ring is a glance, not the headline it is on the
              round's own screen. 62 and not 58, which is where I first put it:
              at 58 the hole is 46px across and "מהקבוצות" is 38 — the word
@@ -684,11 +729,27 @@ export function LiveCampaignHero({
           <span dir="ltr" className="shrink-0 text-[13px] font-extrabold tabular-nums text-mist-100">
             {groups.usable ? `${groups.published} / ${groups.total}` : `${view.handled} / ${view.total}`}
           </span>
-          <span className="truncate text-[11px] font-bold leading-4 text-mist-500">
-            {groups.usable
-              ? `${agree(groups.published, 'קבוצה קיבלה', 'קבוצות קיבלו')}${state.todayOnly ? ' היום' : ''}`
-              : `${agree(view.handled, 'טופל', 'טופלו')}${state.todayOnly ? ' היום' : ''}`}
-          </span>
+          {/*
+            ─── GONE ONCE THE ROUND IS OVER, and for two reasons at once ────
+            *
+            * The reference's own strip is "📅 54 / 56 ▓▓▓ 96% | ✓ הסבב הושלם"
+            * — the words are not in it. They are not in it because the green
+            * row directly underneath now says the same thing in full, and
+            * saying it twice is the duplication the instruction names.
+            *
+            * And it had become false as well as redundant: the finished pill
+            * is wider than the amber label it replaced — a fill, a tick and
+            * a longer word — and at 390px this span truncated to
+            * "קבוצות קי…". A clipped count is the one thing this strip may
+            * not produce, which is what its own note above says.
+          */}
+          {!roundDone && (
+            <span className="truncate text-[11px] font-bold leading-4 text-mist-500">
+              {groups.usable
+                ? `${agree(groups.published, 'קבוצה קיבלה', 'קבוצות קיבלו')}${state.todayOnly ? ' היום' : ''}`
+                : `${agree(view.handled, 'טופל', 'טופלו')}${state.todayOnly ? ' היום' : ''}`}
+            </span>
+          )}
         </p>
         <div className="min-w-0 grow">
           {groups.usable ? (
@@ -734,8 +795,47 @@ export function LiveCampaignHero({
         </p>
         {/* The reference's own rule between the figures and the state chip. */}
         <span aria-hidden className="h-4 w-px shrink-0 bg-ink-700" />
-        <StatePill tone={pillTone} label={badge.label} live={badge.live} href={runBadgeHref(badge, campaign.id)} />
+        <StatePill tone={pillTone} label={badge.label} live={badge.live} done={badge.done} href={runBadgeHref(badge, campaign.id)} />
       </div>
+
+      {/*
+        ─── 26.11.2026 · THE ROUND'S RECEIPT, DIRECTLY UNDER THE BAR ─────────
+        *
+        *   "להציג מתחת למד ההתקדמות שורת סיכום קומפקטית בגוון ירוק בהיר.
+        *    בצד ימין להציג את מספר הקבוצות שקיבלו פרסום בהצלחה. בצד שמאל
+        *    להציג את מספר הקבוצות שלא קיבלו פרסום בסבב הנוכחי, לצד אייקון
+        *    מידע קטן."
+        *
+        * ONLY ON A FINISHED ROUND, and that is not a shortcut — it is what
+        * makes the left-hand number true. `groups.waiting` is "groups with no
+        * publication yet, whatever the reason". On a round that ENDED that is
+        * exactly "did not get the post"; at eleven in the morning it is
+        * mostly "has not been reached yet", and printing "לא קיבלו פרסום"
+        * over it would be the card inventing failures that have not happened.
+        * While the round runs the prose line below still carries the waiting
+        * count in its own honest words.
+        *
+        * justify-between does the two sides in RTL without a single
+        * directional class: first child at the start, which is the right.
+        * flex-wrap because at 360px two clauses of Hebrew do not fit on one
+        * line, and the measured suites fail a card that clips its own text.
+      */}
+      {roundDone && groups.usable && (
+        <div className="mt-1.5 flex flex-wrap items-center justify-between gap-x-3 gap-y-1 rounded-xl bg-success-400/10 px-2.5 py-1.5">
+          <p className="min-w-0 text-[11px] font-bold leading-4 text-success-400">
+            <span className="tabular-nums" dir="ltr">{groups.published}</span> {t('קבוצות קיבלו פרסום בהצלחה')}
+          </p>
+          {/* Drawn only when there is something to report. A clean round that
+              reached every group must not carry an empty "0 לא קיבלו" — the
+              green sentence beside it already says it reached all of them. */}
+          {groups.waiting > 0 && (
+            <p className="flex min-w-0 items-center gap-1 text-[11px] leading-4 text-mist-500">
+              <InfoIcon aria-hidden className="h-3.5 w-3.5 shrink-0" />
+              <span className="tabular-nums" dir="ltr">{groups.waiting}</span> {t('קבוצות לא קיבלו פרסום בסבב הנוכחי')}
+            </p>
+          )}
+        </div>
+      )}
 
       <div className="mt-1.5">
         {/*
@@ -796,7 +896,10 @@ export function LiveCampaignHero({
                  words. */
               [
                 groups.label,
-                groups.waitingLabel,
+                /* The summary row above owns this number once the round is
+                   over. Saying it there in groups and here again in the same
+                   unit is the duplication the instruction forbids. */
+                roundDone ? '' : groups.waitingLabel,
                 lostNote,
                 open > 0 ? counted(open, 'פרסום אחד עוד לא יצא', 'פרסומים עוד לא יצאו', 'שני פרסומים עוד לא יצאו') : '',
               ]

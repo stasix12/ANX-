@@ -1268,7 +1268,10 @@ async function main(): Promise<void> {
       'INV-9c',
       'so 39 of 39 is a hundred per cent, said plainly, under a green badge — no "לפחות", no orange',
       { percent: viewB.percent, hedged: viewB.handledLabel.startsWith('לפחות'), badge: runBadge(sb).label },
-      { percent: 100, hedged: false, badge: 'הושלם' },
+      /* 26.11.2026: the badge says the ROUND is over — "גם אם מסתיים עם
+         כשלים ולא משנה כמה שיציג שקמפיין הושלם". RUN_STATE_LABEL.completed
+         is still 'הושלם' and is what `card.stateLabel` above reads. */
+      { percent: 100, hedged: false, badge: 'הסבב הושלם' },
       NONE,
     );
     const viewA = runProgress(sa.progress, sa.todayOnly, sa.truncated);
@@ -1447,7 +1450,10 @@ async function main(): Promise<void> {
         '13 the posts that had nowhere to be',
         `INV-10f (${label})`,
         'and none of it can claim the day is over: 207 publications are still to go',
-        { state: sa.state, badge: runBadge(sa).label !== 'הושלם' },
+        /* `done` and not a label compare: the badge's words moved once and
+           a string test here would have gone on passing while measuring
+           nothing. */
+        { state: sa.state, badge: runBadge(sa).done !== true },
         { state: 'not_started', badge: true },
         NONE,
       );
@@ -1469,7 +1475,7 @@ async function main(): Promise<void> {
       {
         total: preplan[A].progress.total,
         state: preplan[A].state,
-        completed: runBadge(preplan[A]).label === 'הושלם',
+        completed: runBadge(preplan[A]).done === true,
         outside: preplan[A].publishedOutsidePlanToday,
       },
       { total: 0, state: 'not_started', completed: false, outside: 31 },

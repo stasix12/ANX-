@@ -68,7 +68,7 @@ import { ltr } from '@/components/social/DateTime';
 import type { Campaign, ControlSettings, Post } from '@/lib/social/types';
 import { friendlyMessage } from '@/lib/social/errors';
 import { CommentShot } from '@/components/social/CommentShot';
-import { CalendarIcon, ClipboardListIcon, PauseIcon, SearchIcon } from '@/components/icons';
+import { CalendarIcon, CheckCircleIcon, ClipboardListIcon, PauseIcon, SearchIcon } from '@/components/icons';
 
 /**
  * The campaign control centre — the screen the owner keeps open while a
@@ -499,7 +499,10 @@ export default function CampaignControlCenter() {
                   as if it were publishing right now. Both now come from
                   runBadge(), which requires a row a worker is actually holding. */}
               {badge?.live && badgeTone && <span aria-hidden className={`pulse-dot h-2 w-2 rounded-full ${TONE_FILL[badgeTone]}`} />}
-              <Badge tone={badge?.tone ?? 'neutral'}>{badge?.label ?? RUN_STATE_LABEL.not_started}</Badge>
+              <Badge tone={badge?.tone ?? 'neutral'} solid={badge?.done}>
+                    {badge?.done && <CheckCircleIcon aria-hidden className="h-3 w-3 shrink-0" />}
+                    {badge?.label ?? RUN_STATE_LABEL.not_started}
+                  </Badge>
               <span className="text-xs text-mist-500">
                 {[campaign.service, campaign.city].filter(Boolean).join(' · ')}
               </span>

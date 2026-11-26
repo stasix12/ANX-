@@ -1092,6 +1092,26 @@ export interface RunBadgeView {
   /** A pulsing "live" dot may be drawn only when this is true. */
   live: boolean;
   /**
+   * ─── 26.11.2026 · THE ROUND IS OVER, AND THE CARD SAYS SO IN GREEN ──────
+   *
+   *   "גם אם מסתיים עם כשלים ולא משנה כמה שיציג שקמפיין הושלם"
+   *
+   * The badge used to grade the round: failures turned it amber and renamed
+   * it "הסתיים עם כשלים". The owner's instruction is that the badge reports
+   * COMPLETION and nothing else — a round that reached its end is finished
+   * whatever it lost on the way, with no threshold.
+   *
+   * The failures are not hidden by that and were never this label's job:
+   * `rows` below still points the badge at them, and the card now carries a
+   * summary line under its bar naming how many groups did not get the post
+   * in this round. The badge says the round ended; the line says what it
+   * cost.
+   *
+   * It is a FLAG and not a new tone, because the solid green pill with the
+   * check in it is one treatment three cards have to draw identically.
+   */
+  done?: boolean;
+  /**
    * WHICH ROWS THE BADGE IS ABOUT — named as /social/history's own filter
    * names them, or null when the badge is about the run as a whole.
    *
@@ -1193,12 +1213,24 @@ export function runBadge(
     return { label: 'ספירה חלקית', tone: 'warn', live: false, rows: null };
   }
   if (state.state === 'completed' && (p.failed > 0 || p.skipped > 0)) {
-    const label =
-      p.failed > 0 ? 'הסתיים עם כשלים' : p.published === 0 ? 'הסתיים בלי פרסומים' : 'הסתיים — חלק דולגו';
-    /* Failures first where there are both: the badge named them, and they
+    /* Failures first where there are both: the badge points at them, and they
        are the half he can still do something about. */
-    return { label, tone: 'warn', live: false, rows: p.failed > 0 ? 'failed' : 'skipped' };
+    const rows = p.failed > 0 ? ('failed' as const) : ('skipped' as const);
+    /*
+     * THE ONE ROUND THAT IS NOT "הושלם", and it is not a threshold.
+     *
+     * Nothing published at all is not a round that finished badly, it is a
+     * round that produced nothing — and a green "הסבב הושלם" over 0 of 56
+     * would be the card telling him the opposite of what happened. Every
+     * other ending, whatever it lost, is a completed round.
+     */
+    if (p.published === 0) return { label: 'הסתיים בלי פרסומים', tone: 'warn', live: false, rows };
+    return { label: 'הסבב הושלם', tone: 'good', live: false, rows, done: true };
   }
+  /* A round that ended with nothing to report says exactly what a round that
+     ended with losses says. RUN_STATE_LABEL.completed is left alone: it is the
+     enum's own word and four other things read it. */
+  if (state.state === 'completed') return { label: 'הסבב הושלם', tone: 'good', live: false, rows: null, done: true };
   return {
     label: RUN_STATE_LABEL[state.state],
     tone: RUN_STATE_TONE[state.state],

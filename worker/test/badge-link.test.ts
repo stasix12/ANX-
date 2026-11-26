@@ -45,7 +45,20 @@ const history = src('../../src/app/social/history/page.tsx');
 {
   /* The owner's first screenshot: 53 rows, 11 of them failed, run over. */
   const endedBadly = runBadge({ state: 'completed', progress: progress({ total: 53, published: 41, skipped: 1, failed: 11, finished: 53 }) });
-  eq(endedBadly.label, 'הסתיים עם כשלים', 'the ended-with-failures label changed');
+  /*
+   * ─── 26.11.2026 · THE BADGE REPORTS COMPLETION, NOT A GRADE ────────────
+   *
+   *   "גם אם מסתיים עם כשלים ולא משנה כמה שיציג שקמפיין הושלם"
+   *
+   * It used to read "הסתיים עם כשלים" in amber. It now reads "הסבב הושלם" in
+   * filled green on every card, with no threshold — and the half of this
+   * file that matters did not change at all: `rows` still points at the
+   * failures, so the label the owner taps still opens the eleven rows it is
+   * about. That link is the reason this suite exists.
+   */
+  eq(endedBadly.label, 'הסבב הושלם', 'a round that reached its end says so, whatever it lost on the way');
+  eq(endedBadly.tone, 'good', 'and it says it in green');
+  eq(endedBadly.done, true, 'the filled pill and the tick are driven by this flag, not by the label');
   eq(endedBadly.rows, 'failed', 'and it must open the failures, not the one skipped row beside them');
 
   /* His second: a running round with rows waiting on him. */
@@ -55,8 +68,19 @@ const history = src('../../src/app/social/history/page.tsx');
 
   /* Skips with no failures say so, and open the skips. */
   const skipped = runBadge({ state: 'completed', progress: progress({ total: 10, published: 7, skipped: 3, finished: 10 }) });
-  eq(skipped.label, 'הסתיים — חלק דולגו', 'the some-skipped label changed');
+  eq(skipped.label, 'הסבב הושלם', 'skips do not downgrade a finished round either');
   eq(skipped.rows, 'skipped', 'and it must open the skipped rows');
+
+  /*
+   * THE ONE ENDING THAT IS STILL NOT "הושלם", and it is not a threshold:
+   * nothing published at all is not a round that finished badly, it is a
+   * round that produced nothing, and a green tick over it would be the card
+   * saying the opposite of what happened.
+   */
+  const nothing = runBadge({ state: 'completed', progress: progress({ total: 10, published: 0, failed: 10, finished: 10 }) });
+  eq(nothing.label, 'הסתיים בלי פרסומים', 'a round that published nothing may not claim it completed');
+  eq(nothing.done, undefined, 'and it gets no tick');
+  eq(nothing.rows, 'failed', 'it still opens the failures');
 
   const nothingOut = runBadge({ state: 'completed', progress: progress({ total: 4, skipped: 4, finished: 4 }) });
   eq(nothingOut.label, 'הסתיים בלי פרסומים', 'the nothing-published label changed');
@@ -69,7 +93,10 @@ const history = src('../../src/app/social/history/page.tsx');
 
   /* ── and the three that must NOT be pressable ── */
   const clean = runBadge({ state: 'completed', progress: progress({ total: 9, published: 9, finished: 9 }) });
-  eq(clean.label, 'הושלם', 'a clean finish changed its label');
+  /* A clean finish and a finish with losses now read identically — one
+     sentence for "the round is over", which is what the badge is for. */
+  eq(clean.label, 'הסבב הושלם', 'a clean finish changed its label');
+  eq(clean.done, true, 'and it is the same filled green pill');
   eq(clean.rows, null, 'a round that published everything must not offer a list of nothing');
 
   eq(runBadge({ state: 'running', progress: progress({ total: 9, published: 2, running: 1 }) }).rows, null, 'a running round is about the run, not about a set of rows');

@@ -572,6 +572,26 @@ export function BoltIcon(props: IconProps) {
   );
 }
 
+/**
+ * A circled "i" — information, not a warning.
+ *
+ * AlertCircleIcon is the same circle with an EXCLAMATION in it, and the two
+ * are not interchangeable beside a number: an exclamation says something is
+ * wrong, and the figure this sits next to on a finished round — how many
+ * groups did not get the post — is a fact the owner asked to be able to read,
+ * not an alarm. The dot is on top and the stem below, which is what makes it
+ * an "i" rather than an upside-down "!".
+ */
+export function InfoIcon(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <circle cx="12" cy="12" r="10" />
+      <path d="M12 16v-5" />
+      <path d="M12 7.5h.01" />
+    </svg>
+  );
+}
+
 export function XCircleIcon(props: IconProps) {
   return (
     <svg {...base} {...props}>

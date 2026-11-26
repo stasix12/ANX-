@@ -3,7 +3,8 @@
 import Link from 'next/link';
 import { t } from '@/lib/social/i18n';
 import { useEffect, useState } from 'react';
-import { BellIcon } from '@/components/icons';
+import { AlertCircleIcon, AlertTriangleIcon, BellIcon, ChevronIcon, ClockIcon } from '@/components/icons';
+import { activityText } from '@/lib/social/activity-text';
 import { listActivity, queueSummary } from '@/lib/social/client';
 import { relativeHe } from '@/lib/social/time';
 import type { ActivityEntry } from '@/lib/social/types';
@@ -150,28 +151,113 @@ export function NotificationBell() {
       {open && (
         <>
           <button type="button" aria-label={t('סגור')} className="fixed inset-0 z-40 cursor-default" onClick={() => setOpen(false)} />
-          <div className="absolute end-0 z-50 mt-2 w-80 max-w-[calc(100vw-2rem)] overflow-hidden rounded-card border border-ink-700 bg-ink-800 shadow-[0_4px_14px_rgba(40,20,80,0.06),0_18px_44px_-12px_rgba(46,16,101,0.18)]">
-            <header className="flex items-center justify-between border-b border-ink-700 px-3.5 py-2.5">
-              <p className="text-sm font-extrabold text-mist-100">{t('התראות')}</p>
-              {attention > 0 && <span className="rounded-full bg-warning-400/12 px-2 py-0.5 text-[11px] font-bold text-warning-400">{attention} דורשים טיפול</span>}
+          {/*
+            ─── נבנה מחדש לפי תמונת רפרנס מחייבת, 26.11.2026 ────────────────
+            "רפרנס עיצובי מחייב – שדרוג חלון ההתראות 1:1 … התמונה היא רפרנס
+             מחייב לביצוע ולא מקור להשראה בלבד."
+
+            שכבת הנתונים שמעל הבלוק הזה לא נגעה בה: אותו poll של 60 שניות,
+            אותו NOTABLE, אותו queue.summary.needsHuman, אותו SEEN_KEY ואותו
+            יעד /social/activity. מה שהשתנה הוא מה שהעין רואה.
+
+            הצבעים כולם טוקנים של social-theme ולא קודים קשיחים — הפעמון
+            מורכב רק מ-SocialShell, כלומר רק בתוך הערכה הזאת, ובכל זאת צבע
+            שנכתב כאן כ-hex היה נשאר מאחור בפעם הבאה שהערכה זזה. שתי התכליות
+            שאין להן טוקן — התכלת הבהירה של החלונית והגלולה הכתומה שיושבת על
+            הגרדיאנט הכחול — נבנות ב-color-mix מעל טוקן קיים, ולא כשכבה
+            שקופה: החלונית צפה מעל המסך, ושקיפות הייתה מראה דרכה את מה שמאחור.
+          */}
+          <div className="absolute end-0 z-50 mt-2 w-[82vw] max-w-sm overflow-hidden rounded-sheet border-2 border-ink-850 bg-[color-mix(in_srgb,var(--color-brand-500)_7%,var(--color-ink-850))] shadow-[0_4px_14px_rgba(40,20,80,0.06),0_18px_44px_-12px_rgba(46,16,101,0.18)]">
+            {/* הכותרת: גרדיאנט כחול, פעמון בעיגול שקוף-למחצה עם נקודה אדומה,
+                והגלולה הכתומה בקצה. הגרדיאנט נוסע ימין→שמאל, ולכן הפעמון
+                שיושב בימין יושב על brand-600 — וזה הצבע שטבעת הנקודה מקבלת. */}
+            <header className="flex items-center gap-2.5 bg-gradient-to-l from-brand-600 to-brand-500 px-3 py-2.5 text-on-brand">
+              <span className="relative grid h-9 w-9 shrink-0 place-items-center rounded-full bg-on-brand/15">
+                <BellIcon aria-hidden className="h-5 w-5" />
+                <span className="absolute -end-0.5 -top-0.5 h-2.5 w-2.5 rounded-full bg-error-500 ring-2 ring-brand-600" />
+              </span>
+              <p className="text-[18px] font-extrabold leading-none">{t('התראות')}</p>
+              {attention > 0 && (
+                <span className="ms-auto shrink-0 rounded-full bg-[color-mix(in_srgb,var(--color-warning-400)_16%,var(--color-ink-850))] px-2.5 py-1 text-[12px] font-bold text-warning-400">
+                  {attention} דורשים טיפול
+                </span>
+              )}
             </header>
-            <ul className="max-h-80 divide-y divide-ink-700 overflow-y-auto">
-              {items.length === 0 && <li className="px-3.5 py-6 text-center text-sm text-mist-500">{t('אין התראות חדשות.')}</li>}
-              {items.slice(0, 15).map((e) => (
-                <li key={e.id} className="px-3.5 py-2.5">
-                  <p className={`text-sm leading-snug ${e.level === 'error' ? 'text-error-400' : e.level === 'warn' ? 'text-warning-400' : 'text-mist-100'}`}>{e.message}</p>
-                  <p className="text-[11px] text-mist-500">{relativeHe(e.at)}</p>
-                </li>
-              ))}
+
+            {/* שלוש ההתראות האחרונות נכנסות בגובה הזה, והשאר בגלילה. 17.5rem
+                נמדד על הדבר עצמו: שלושה כרטיסים בני שתי שורות, שני רווחים של
+                8px ושתי רפידות של 8px. ב-15.5rem הכרטיס השלישי נחתך באמצע
+                שבב הזמן, וזה נראה שבור ולא גלול. */}
+            <ul className="max-h-[17.5rem] space-y-2 overflow-y-auto p-2">
+              {items.length === 0 && (
+                <li className="rounded-tile bg-ink-850 px-3.5 py-6 text-center text-[13px] text-mist-500">{t('אין התראות חדשות.')}</li>
+              )}
+              {items.slice(0, 15).map((e) => {
+                /* אותו מסלול טקסט של מרכז הפעילות ושל כרטיס לוח הבקרה —
+                   activityText() מחזיר כותרת קצרה ושורה מוסברת, וזה בדיוק
+                   המבנה של הרפרנס: כותרת 14px ומתחתיה שורה משנית 12px.
+                   לא נוסח כאן טקסט חדש ולא נגעה שורה במסד. */
+                const text = activityText(e);
+                const tone =
+                  e.level === 'error'
+                    ? { ink: 'text-error-400', box: 'bg-error-500/12 text-error-500', Icon: AlertTriangleIcon }
+                    : e.level === 'warn'
+                      ? { ink: 'text-warning-400', box: 'bg-warning-400/12 text-warning-400', Icon: AlertTriangleIcon }
+                      : { ink: 'text-mist-100', box: 'bg-brand-500/10 text-brand-500', Icon: AlertCircleIcon };
+                return (
+                  <li key={e.id}>
+                    {/* לחיצה על ההתראה פותחת את הפרטים המלאים: /social/activity
+                        הוא המסך שמרנדר כל שורה עם technical — ההודעה המלאה,
+                        שם האירוע, ה-meta, "נסה שוב" וחלון פרטי הפרסום. זה
+                        המסלול הקיים, לא מנגנון חדש. */}
+                    <Link
+                      href="/social/activity"
+                      onClick={() => setOpen(false)}
+                      className="flex items-start gap-2.5 rounded-tile bg-ink-850 p-2.5 shadow-[0_1px_3px_rgba(40,20,80,0.05)] transition-colors hover:bg-ink-900"
+                    >
+                      <span className={`grid h-8 w-8 shrink-0 place-items-center rounded-xl ${tone.box}`}>
+                        <tone.Icon aria-hidden className="h-4 w-4" />
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        {/* ההדגשה האדומה היא על החלק החשוב בלבד: הכותרת נושאת
+                            את צבע הדרגה, והשם שהשורה מדברת עליו נשאר כחול
+                            כהה. dir="auto" כי שם קבוצה יכול להגיע ברוסית או
+                            באנגלית, ובתוך תיבה RTL הוא נחתך בצד הלא נכון. */}
+                        <span className="block truncate text-[14px] font-extrabold leading-tight" dir="auto">
+                          <span className={tone.ink}>{text.title}</span>
+                          {text.subject && <span className="text-mist-100">{` ${text.subject}`}</span>}
+                        </span>
+                        {text.detail && (
+                          <span className="mt-0.5 block truncate text-[12px] leading-tight text-mist-500" dir="auto">
+                            {text.detail}
+                          </span>
+                        )}
+                        <span className="mt-1.5 inline-flex items-center gap-1 rounded-lg bg-brand-500/8 px-1.5 py-0.5 text-[11px] text-mist-500">
+                          <ClockIcon aria-hidden className="h-3 w-3" />
+                          {relativeHe(e.at)}
+                        </span>
+                      </span>
+                      <ChevronIcon aria-hidden className="mt-1.5 h-4 w-4 shrink-0 text-mist-500 rtl:rotate-180" />
+                    </Link>
+                  </li>
+                );
+              })}
             </ul>
+
             {/* /social/activity, not /social/history: this panel lists rows
                 from the activity log, and history lists social_queue —
                 publications. The link promised "all of it" and delivered a
                 different table, so a worker that stopped or a round that was
                 planned could not be found anywhere past this popover. */}
-            <Link href="/social/activity" onClick={() => setOpen(false)} className="block border-t border-ink-700 px-3.5 py-2.5 text-center text-sm font-bold text-brand-400">
-              {t('לכל הפעילות')}
-            </Link>
+            <div className="px-2 pb-2">
+              <Link
+                href="/social/activity"
+                onClick={() => setOpen(false)}
+                className="flex min-h-11 items-center justify-center rounded-full bg-gradient-to-l from-brand-600 to-brand-500 text-[14px] font-extrabold text-on-brand"
+              >
+                {t('לכל הפעילויות')}
+              </Link>
+            </div>
           </div>
         </>
       )}

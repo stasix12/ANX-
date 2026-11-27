@@ -17,12 +17,12 @@ import {
   type CampaignState,
   type RunTone,
 } from '@/lib/social/campaign';
-import { type CampaignRepeat, type CampaignRound, type CampaignSchedule } from '@/lib/social/campaign-schedule';
+import { dayRelativeHe, type CampaignRepeat, type CampaignRound, type CampaignSchedule } from '@/lib/social/campaign-schedule';
 import { scheduleReadout, type AccountSpacing } from '@/lib/social/schedule-readout';
 import { paceProfile } from '@/lib/social/rules';
 import { countdownTo } from '@/lib/social/countdown';
 import { LATEST_SCHEMA_FILE } from '@/lib/social/errors';
-import { agree, counted, formatTimeHe, relativeHe } from '@/lib/social/time';
+import { agree, counted, formatInstantHe, formatTimeHe, relativeHe } from '@/lib/social/time';
 import type { QueueRow } from '@/lib/social/client';
 import { QUEUE_STEP_LABEL, type QueueStep } from '@/lib/social/types';
 import type { Campaign, MediaItem, PaceId, SocialTarget } from '@/lib/social/types';
@@ -1209,6 +1209,8 @@ export function LiveQueueHero({
   plannedToday,
   pendingCancellable,
   nextAt,
+  nextRoundAt = null,
+  nextRoundOpenNow = false,
   nextTargetName,
   onRunNow,
   onTune,
@@ -1257,6 +1259,14 @@ export function LiveQueueHero({
   /** summary.cancellable — exactly what "delete the queue" would delete. */
   pendingCancellable: number;
   nextAt: string | null;
+  /**
+   * WHEN THE NEXT ROUND OPENS, for an account whose queue is empty only
+   * because the planner has not reached tomorrow yet. Null when nothing is
+   * coming — then the card really does say "אין פרסום מתוזמן".
+   */
+  nextRoundAt?: string | null;
+  /** The window is open and the repeat is armed: it can reopen any minute. */
+  nextRoundOpenNow?: boolean;
   nextTargetName: string | null;
   onRunNow?: () => void;
   onResume?: () => void;
@@ -1542,8 +1552,36 @@ export function LiveQueueHero({
    * because they are different facts, and neither is "0 ממתינים".
    */
   const waitingToday = Math.max(0, plannedToday - publishedToday);
+  /*
+   * ─── 27.11.2026 · AN EMPTY QUEUE IS NOT AN EMPTY SCHEDULE ───────────────
+   *
+   *   "למה רושם שאין פרסום מתוזמן? יש פרסום מתוזמן למחר ולשאר הימים שיראה
+   *    במסגרת קוביה שהפרסום פעיל"
+   *
+   * He was right and the sentence was literally true, which is the worst
+   * kind of wrong. `systemState === 'empty'` is
+   * `summary.queued === 0 && upcoming.length === 0`, and neither read has a
+   * date bound — the queue really was empty at half past seven in the
+   * evening. It was empty because the planner is forbidden to write past
+   * tonight's local midnight (endOfPlanningDay in plan.ts), so tomorrow's
+   * 07:00 row does not exist yet and is written a minute after midnight.
+   *
+   * So the banner was printing the PLANNER'S HORIZON as if it were his
+   * schedule — and the honest sentence was already on the same screen, two
+   * hundred pixels below it, where NextPublication prints "חזרה יומית
+   * פעילה — הסבב הבא ייפתח מחר … בשעה 07:00" off scheduleReadout().
+   *
+   * `nextRoundAt` is that same instant, handed down from the one place that
+   * holds the schedules. When it is there the queue is empty and the system
+   * is not, and the card says so.
+   */
+  const reopening = systemState === 'empty' && Boolean(nextRoundAt || nextRoundOpenNow);
   const headline =
-    systemState === 'empty'
+    reopening
+      ? nextRoundAt
+        ? `הסבב הבא ייפתח ${dayRelativeHe(new Date(nextRoundAt), new Date())} בשעה ${formatInstantHe(nextRoundAt)}`
+        : 'הסבב הבא ייפתח בכל רגע'
+      : systemState === 'empty'
       ? 'אין פרסום מתוזמן'
       : systemState === 'paused'
         ? 'שום דבר לא יוצא עד שתפעילו'
@@ -1613,6 +1651,12 @@ export function LiveQueueHero({
       <LiveFlow
         mode={sceneMode}
         headline={headline}
+        /* The pill is keyed on the scene, and the scene cannot tell "nothing
+           is coming" from "tomorrow is not written yet". Left alone it would
+           have said "אין פרסום מתוזמן" in grey, directly under a headline
+           naming tomorrow's hour. */
+        line={reopening ? 'מערכת הפרסום פעילה' : null}
+        lineTone={reopening ? 'good' : undefined}
         now={nowRow}
         /* Same gate on the list: a row the machine stopped holding is still
            queued, and drawing it with a spinner would say a dead worker is
@@ -1673,7 +1717,7 @@ export function LiveQueueHero({
         </div>
       )}
 
-      {systemState === 'empty' && (
+      {systemState === 'empty' && !reopening && (
         <div className="mt-3 rounded-xl bg-ink-900 px-3 py-3.5 text-center">
           {/* No clock, no 00:00, no group name. The + פוסט חדש button above is
               the action; a second one here would just be louder. */}

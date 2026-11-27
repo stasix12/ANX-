@@ -308,7 +308,12 @@ export function LiveFlow({
   publishedToday = null,
   onCycleToggle,
   cycleBusy = false,
+  line,
+  lineTone,
 }: {
+  /** Replaces the scene's default pill sentence. See the note on `state`. */
+  line?: string | null;
+  lineTone?: 'good' | 'warn' | 'bad' | 'mute';
   mode: SceneMode;
   /** "פרסום אחד ממתין לכם" — counted off the real queue by the screen. */
   headline: string;
@@ -364,7 +369,19 @@ export function LiveFlow({
   cycleBusy?: boolean;
 }) {
   const at = STATION_OF[mode];
-  const state = TONE[mode];
+  /*
+   * ─── 27.11.2026 · THE PILL MAY BE OVERRIDDEN, AND ONLY BY ITS CALLER ────
+   *
+   *   "למה רושם שאין פרסום מתוזמן? יש פרסום מתוזמן למחר ולשאר הימים"
+   *
+   * TONE is keyed on the scene, and the scene for an empty queue is `idle`
+   * whether the queue is empty because nothing is coming or because the
+   * planner has not written tomorrow yet. Those are two different sentences
+   * and only the caller knows which one is true — it is the one holding the
+   * schedules. So the mode still chooses the robot, the station and the
+   * default words, and a caller that knows better replaces the words.
+   */
+  const state = { ...TONE[mode], ...(line ? { line, tone: lineTone ?? TONE[mode].tone } : null) };
   const percent = now ? progressOfStep(now.step) : null;
   const stepLabel = now ? QUEUE_STEP_LABEL[(now.step ?? '') as QueueStep] || 'שולח פוסט לקבוצה' : '';
 

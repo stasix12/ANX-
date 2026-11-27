@@ -70,6 +70,7 @@ import { AUTOMATIC_WAITING_STATUSES, EMPTY_QUEUE_SUMMARY, IN_FLIGHT_STATUSES, TE
 import { SNAPSHOT, readSnapshot, writeSnapshot } from '@/lib/social/snapshot';
 import { addDaysISO, agree, counted, formatTimeHe, ltr, startOfZonedDay, startOfZonedWeek, zonedDateISO, zonedToUtc } from '@/lib/social/time';
 import { projectQueue, spacingFrom } from '@/lib/social/projection';
+import { scheduleReadout } from '@/lib/social/schedule-readout';
 import { stampText } from '@/components/social/DateTime';
 import type { FlowRow } from '@/components/social/LiveFlow';
 import { QUEUE_STEP_LABEL, type ActivityEntry, type BrowserSettings, type Campaign, type ControlSettings, type LimitsSettings, type MediaItem, type PaceId, type QueueStatus, type QueueStep } from '@/lib/social/types';
@@ -1302,6 +1303,42 @@ export default function SocialDashboard() {
     readSchedule(schedulePatch[campaign.id] ? { ...campaign, ...schedulePatch[campaign.id] } : campaign);
 
   /*
+   * ─── 27.11.2026 · WHEN THE NEXT ROUND OPENS, FOR THE BANNER ─────────────
+   *
+   *   "למה רושם שאין פרסום מתוזמן? יש פרסום מתוזמן למחר ולשאר הימים"
+   *
+   * The banner's `empty` face is `summary.queued === 0 && upcoming.length
+   * === 0`, and neither read has a date bound — at half past seven in the
+   * evening the queue really is empty. It is empty because the planner may
+   * not write past tonight's local midnight (endOfPlanningDay in plan.ts),
+   * so tomorrow's 07:00 row is written a minute after midnight and not
+   * before. The banner was printing that horizon as if it were his schedule.
+   *
+   * THE ANSWER IS ALREADY ON THIS SCREEN. scheduleReadout() is what the
+   * campaign cards below use to print "חזרה יומית פעילה — הסבב הבא ייפתח
+   * מחר … בשעה 07:00", and this is the same call with the same arguments.
+   * One function, one answer — the alternative was a second derivation up
+   * here, and two of those disagree within a week.
+   *
+   * THE EARLIEST ONE WINS, because the banner speaks for the whole account
+   * and the first round to open is the one that makes "the system is idle"
+   * false.
+   */
+  const nextRound = (() => {
+    if (!data) return { at: null as string | null, openNow: false };
+    const floor = repeatFloorFrom(data.limits);
+    let at: string | null = null;
+    let openNow = false;
+    for (const { campaign, state } of featurable) {
+      const readout = scheduleReadout(scheduleOf(campaign), state, undefined, readRepeat(campaign, floor), undefined);
+      if (readout.kind !== 'ended' || !readout.repeats) continue;
+      if (readout.openNow) openNow = true;
+      if (readout.opens && (!at || readout.opens < at)) at = readout.opens;
+    }
+    return { at, openNow };
+  })();
+
+  /*
    * CHZARA — written straight through, with NO debounce, and that difference
    * is deliberate.
    *
@@ -2129,6 +2166,8 @@ export default function SocialDashboard() {
             plannedToday={data.plannedToday}
             pendingCancellable={pending}
             nextAt={data.upcoming[0]?.scheduled_at ?? null}
+            nextRoundAt={nextRound.at}
+            nextRoundOpenNow={nextRound.openNow}
             nextTargetName={data.upcoming[0]?.target?.name ?? null}
             nextTarget={data.upcoming[0]?.target ?? null}
             inFlight={summary.inFlight}

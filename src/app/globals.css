@@ -2547,6 +2547,42 @@ body:has(.social-theme) .site-backdrop {
   gap: 4px;
   padding-bottom: 6px;
 }
+/* ─── 27.11.2026 · THE BANNER'S SUBTITLE AND ITS ONE ACTION ──────────────
+   The reference draws a quiet line under the headline and a filled pill
+   button beside it. Both sit inside .anxf-words, which is already a column
+   with a 4px gap, so neither needs a layout of its own — they need a size
+   and an ink that survive the dark gradient behind them. */
+.anxf-note {
+  margin: 0;
+  font-size: 11.5px;
+  line-height: 15px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.78);
+}
+/* The action. White on the gradient rather than a brand fill: the banner IS
+   brand-coloured, and a brand button on it reads as a shape rather than as
+   something to press. 36px tall — under the product's 40px floor on purpose,
+   because this is a shortcut to two buttons that are already full size
+   directly above the banner, not the only way to reach them. */
+.anxf-cta {
+  margin-top: 2px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 0 12px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.16);
+  color: #fff;
+  font-size: 12.5px;
+  font-weight: 800;
+  white-space: nowrap;
+  transition: background 0.15s ease;
+}
+.anxf-cta:hover { background: rgba(255, 255, 255, 0.26); }
+.anxf-cta:active { background: rgba(255, 255, 255, 0.32); }
+.anxf-cta svg { width: 15px; height: 15px; flex: none; }
+
 .anxf h2 {
   margin: 0;
   /* One line in the reference, and one line here for the sentence it draws.

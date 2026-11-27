@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityFeed } from '@/components/social/ActivityFeed';
 import { CardSwiper } from '@/components/social/CardSwiper';
@@ -370,6 +371,7 @@ export default function SocialDashboard() {
    * the first paint differ from the markup Next.js sent.
    */
   const [seen, setSeen] = useState<string[]>([]);
+  const router = useRouter();
   const toast = useToast();
   const confirm = useConfirm();
 
@@ -2207,6 +2209,10 @@ export default function SocialDashboard() {
             onSwitchProfile={switchProfile}
             intervention={intervention}
             onRunNow={runNow}
+            /* The same destination the big "+ פוסט חדש" above the banner
+               goes to. The banner's copy is a shortcut on the one face that
+               has nothing else to offer, not a second way in. */
+            onNewPost={() => router.push('/social/posts/new')}
             onTune={() => setTuner({ campaignId: data.upcoming[0]?.campaign_id ?? undefined })}
             updatedAt={updatedAt}
             refreshing={refreshing}

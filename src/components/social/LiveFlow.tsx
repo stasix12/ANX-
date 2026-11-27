@@ -310,7 +310,13 @@ export function LiveFlow({
   cycleBusy = false,
   line,
   lineTone,
+  note,
+  cta,
 }: {
+  /** A quiet line under the headline. See the note beside it in the JSX. */
+  note?: string | null;
+  /** The one action this face offers. `onPress` is required: no dead buttons. */
+  cta?: { label: string; icon: 'plus' | 'clock'; onPress: () => void } | null;
   /** Replaces the scene's default pill sentence. See the note on `state`. */
   line?: string | null;
   lineTone?: 'good' | 'warn' | 'bad' | 'mute';
@@ -491,10 +497,34 @@ export function LiveFlow({
         <AnxRobot mode={mode} />
         <div className="anxf-words">
           <h2 data-flow-title dir="auto">{headline}</h2>
+          {/*
+            ─── 27.11.2026 · THE SUBTITLE AND THE ACTION ─────────────────
+            *
+            * The banner was a headline and a pill. The owner's reference
+            * draws a third line under the headline and a button beside it,
+            * and the empty face is where both earn their place: the pill
+            * says WHAT the state is, the headline says WHEN, and neither
+            * tells him what he can do about it.
+            *
+            * Both are optional and both belong to the caller — a face with
+            * nothing useful to offer renders neither and the banner is
+            * exactly what it was. `onPress` is required by the type, so a
+            * decorative button cannot be built here by accident.
+          */}
+          {note && <p className="anxf-note" dir="auto">{note}</p>}
           <p className="anxf-state" data-tone={state.tone}>
             <i aria-hidden />
             {state.line}
           </p>
+          {cta && (
+            <button type="button" className="anxf-cta" onClick={cta.onPress}>
+              <svg aria-hidden viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                <circle cx="12" cy="12" r="9.2" />
+                {cta.icon === 'plus' ? <path d="M12 8v8M8 12h8" /> : <path d="M12 7.5V12l3 2" />}
+              </svg>
+              {cta.label}
+            </button>
+          )}
         </div>
         <FacebookMark className="anxf-fb-xl" />
       </div>

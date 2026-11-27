@@ -1213,6 +1213,7 @@ export function LiveQueueHero({
   nextRoundOpenNow = false,
   nextTargetName,
   onRunNow,
+  onNewPost,
   onTune,
   fbAccount = null,
   onRefresh,
@@ -1296,6 +1297,8 @@ export function LiveQueueHero({
    * the owner can use must not depend on another card being on screen.
    */
   onTune?: () => void;
+  /** The composer. Offered on the banner only when the queue is truly empty. */
+  onNewPost?: () => void;
   /**
    * Ask for fresh numbers, and say how old the ones on screen are.
    *

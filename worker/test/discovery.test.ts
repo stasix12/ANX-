@@ -1085,6 +1085,53 @@ const eq = (a: unknown, b: unknown, msg: string) => {
      where the one place that builds the command is. */
   const client = readFileSync(new URL('../../src/lib/social/client.ts', import.meta.url), 'utf8');
   is(/startJoinedScan/.test(page), 'the screen asks for the scan');
+
+  /*
+   * ─── 27.11.2026 · AND THE GROUPS SCREEN ASKS FOR IT TOO ─────────────────
+   *
+   *   "תוסיף כפתור למעלה במסך של הקבוצות, כפתור גדול ובולט שיעשה סנכרון בין
+   *    הקבוצות שהצטרפתי אליהם ויוסיף אותם לרשימות כמו בתמונה השנייה."
+   *
+   * The SAME card, drawn a second time, not a second card. MyGroupsCard
+   * holds no state and performs no IO, which is the property that makes this
+   * safe — and the property this block exists to keep: a copy of its markup
+   * on the groups screen would be two sets of words about one fact.
+   */
+  const groups = readFileSync(new URL('../../src/app/social/groups/page.tsx', import.meta.url), 'utf8');
+  is(/<MyGroupsCard/.test(groups), 'the groups screen draws the joined-groups card');
+  is(
+    /import \{ MyGroupsCard \} from '@\/components\/social\/Discovery'/.test(groups),
+    'and it imports the real one rather than owning a copy of its markup',
+  );
+  is(/startJoinedScan\(workerId\)/.test(groups), 'its sync asks for the same scan, with the same command');
+  is(/adoptDiscovered\(row\)/.test(groups), 'and adds through adoptDiscovered, which keeps the membership guarantee and the target_id back-link');
+  is(
+    !/adoptCatalogGroups\([^)]*joined/i.test(groups),
+    'never through the catalog write, which is the one write in the product that does not know who is a member',
+  );
+  /*
+   * ONE PRESS HERE, TWO ON גילוי קבוצות, and the difference is in the
+   * HANDLER rather than in the card. The groups screen's scan adopts what it
+   * finds; the discover screen's does not, because that screen is where he
+   * reads the names before he takes them.
+   */
+  {
+    const sync = groups.slice(groups.indexOf('const syncJoined'), groups.indexOf('const adoptMissingNow'));
+    is(sync.length > 0 && sync.length < 4000, 'syncJoined is one readable handler');
+    is(/startJoinedScan/.test(sync) && /adoptJoined\(fresh\)/.test(sync), 'one press reads Facebook and then adds what is missing');
+    is(/if \(!done\)/.test(sync), 'a scan that has not finished says so rather than repainting the card with the old answer');
+    is(/workerOnline === false/.test(sync), 'and it refuses up front when the machine that would do the reading is not running');
+    /* THE FOUR TESTS THAT DECIDE WHAT "MISSING" IS, copied from the discover
+       screen rather than approximated — `refused` is the one that matters
+       most: a group he LEFT must never be offered back to him. */
+    for (const guard of ['!r.hidden', '!r.target_id', 'facts.inList.has', 'facts.refused.has']) {
+      is(sync.includes(guard), `the sync applies ${guard} before it adds anything`);
+    }
+  }
+  is(
+    !/adoptJoined\(/.test(page.slice(page.indexOf('async function scanJoined'), page.indexOf('async function adoptJoined'))),
+    'and גילוי קבוצות keeps its two steps — its scan still only reads',
+  );
   is(/sendWorkerCommand\(workerId, 'discover', \{ source: 'joined' \}\)/.test(client), 'as a source of the command it already has — no new command name, no migration for the owner');
   is(/cmd\.payload\?\.source === 'joined'/.test(worker), 'and the worker branches on that rather than on a new command name');
 

@@ -6,12 +6,20 @@ import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { GroupCard } from '@/components/social/GroupCard';
 import { GroupCatalog } from '@/components/social/GroupCatalog';
+import { MyGroupsCard } from '@/components/social/Discovery';
 import { JOIN_RUN_CAP, joinProgressUsable, joinRunLine } from '@/lib/social/join-run';
 
 /* How long this screen watches a join run before it stops and says the run
    continues. The same half hour the discovery screen allows: fifteen groups
    at a minute and a half each is a little over twenty minutes. */
 const JOIN_WATCH_MS = 30 * 60_000;
+
+/* How long this screen waits for the joined-groups read before it says the
+   scan is still going. Ten minutes, the same ceiling גילוי קבוצות allows:
+   the worker scrolls Facebook's own groups page up to twelve times with a
+   1.2s settle between passes, and then fetches a picture for every group it
+   has never seen. */
+const JOINED_SCAN_WAIT_MS = 10 * 60_000;
 import { SocialShell } from '@/components/social/SocialShell';
 import { TargetAvatar } from '@/components/social/TargetAvatar';
 import {
@@ -37,6 +45,13 @@ import {
 } from '@/components/social/ui';
 import {
   addGroup,
+  adoptDiscovered,
+  hideDiscovered,
+  listJoined,
+  listTargetFacts,
+  listTargetPictures,
+  startJoinedScan,
+  waitForWorkerCommand,
   readJoinRun,
   startJoinGroups,
   adoptCatalogGroups,
@@ -66,6 +81,7 @@ import {
   parseGroupShareUrl,
   parseGroupUrl,
   type SocialTarget,
+  type DiscoveredGroupRow,
 } from '@/lib/social/types';
 import { friendlyMessage } from '@/lib/social/errors';
 import { ChartIcon, ChevronIcon, CloseIcon, MapPinIcon, PauseIcon, PencilIcon, PlayIcon, RepeatIcon, SearchIcon, StarIcon, TagIcon, TrashIcon, UsersIcon } from '@/components/icons';
@@ -129,6 +145,22 @@ export default function GroupsPage() {
   const [workerId, setWorkerId] = useState<string | null>(null);
   /** "3 מתוך 15" while a join run is going, null when there is none. */
   const [joinProgress, setJoinProgress] = useState<string | null>(null);
+  /*
+   * ─── 27.11.2026 · "תוסיף כפתור למעלה במסך של הקבוצות, כפתור גדול ובולט
+   *     שיעשה סנכרון בין הקבוצות שהצטרפתי אליהם ויוסיף אותם לרשימות" ────────
+   *
+   * The card that does this already existed and was reachable from one screen
+   * only — גילוי קבוצות, two taps away from here. MyGroupsCard is exported,
+   * holds no state and performs no IO: every value and every handler is a
+   * prop, which is why it can be drawn here without touching it. These five
+   * pieces of state are the props' source, and they are the same reads the
+   * discover page makes.
+   */
+  const [joined, setJoined] = useState<DiscoveredGroupRow[] | null>(null);
+  const [inSystem, setInSystem] = useState<Set<string>>(new Set());
+  const [refusedIds, setRefusedIds] = useState<Set<string>>(new Set());
+  const [targetPics, setTargetPics] = useState<Map<string, string>>(new Map());
+  const [scanning, setScanning] = useState(false);
   const [selected, setSelected] = useState<string[]>([]);
   /*
    * Selection is a mode, not an always-on affordance.
@@ -189,7 +221,7 @@ export default function GroupsPage() {
   const confirm = useConfirm();
 
   const load = useCallback(async () => {
-    const [t, w, queued, campaigns, limits, browser, lastPublished] = await Promise.all([
+    const [t, w, queued, campaigns, limits, browser, lastPublished, mineOnFb, facts, pics] = await Promise.all([
       listTargets(),
       listWorkers().catch(() => []),
       /*
@@ -213,6 +245,14 @@ export default function GroupsPage() {
       getLimits().catch(() => null),
       getBrowserSettings().catch(() => null),
       lastPublishedAt().catch(() => null),
+      /* ─── THE JOINED-GROUPS CARD'S THREE READS ──────────────────────────
+         Each catches its own failure. This screen's job is the publishing
+         list; a discovery table that has not been migrated yet, or a storage
+         bucket that answers slowly, must not take the group list down with
+         it — the card simply says it has not read anything yet. */
+      listJoined().catch(() => []),
+      listTargetFacts().catch(() => ({ inList: new Set<string>(), refused: new Set<string>() })),
+      listTargetPictures().catch(() => new Map<string, string>()),
     ]);
     const mine = t.filter((x) => x.channel === 'facebook_group' || x.channel === 'facebook_group_manual');
     const online = w.some((x) => x.online);
@@ -249,11 +289,169 @@ export default function GroupsPage() {
       if (!next[row.target_id]) next[row.target_id] = at ?? row.scheduled_at;
     }
     setGroups(mine);
+    /* The joined-groups card's three reads. Every one of them is allowed to
+       fail on its own: this screen's job is the publishing list, and a
+       discovery table that is not there yet must not blank it. */
+    setJoined(mineOnFb);
+    setInSystem(facts.inList);
+    setRefusedIds(facts.refused);
+    setTargetPics(pics);
     setWorkerOnline(online);
     setWorkerId(w.find((x) => x.online)?.id ?? w[0]?.id ?? null);
     setNextByTarget(next);
     writeSnapshot<GroupsSnapshot>(SNAPSHOT.groups, { groups: mine, workerOnline: online, nextByTarget: next });
   }, []);
+
+  /*
+   * ─── WHICH OF HIS FACEBOOK GROUPS ARE NOT IN THE PUBLISHING LIST ────────
+   *
+   * The same four tests the discover screen makes, and they are four and not
+   * one on purpose: `hidden` is a group he told us is not his, `target_id` is
+   * the back-link written when it was adopted, `inSystem` catches a group
+   * added by some other route, and `refused` is one he LEFT — re-offering
+   * that one would walk him back into a group he walked out of.
+   */
+  const joinedMissing = useMemo(
+    () =>
+      (joined ?? []).filter(
+        (r) => !r.hidden && !r.target_id && !inSystem.has(r.external_id) && !refusedIds.has(r.external_id),
+      ),
+    [joined, inSystem, refusedIds],
+  );
+
+  /** Every one of them into the list, one at a time, counting honestly. */
+  const adoptJoined = useCallback(
+    async (rows: DiscoveredGroupRow[]): Promise<{ added: number; failed: number }> => {
+      let added = 0;
+      let failed = 0;
+      for (const row of rows) {
+        try {
+          await adoptDiscovered(row);
+          added += 1;
+          setInSystem((was) => new Set(was).add(row.external_id));
+        } catch (err) {
+          /* Already there is not a failure — it is the outcome he wanted. */
+          if (/כבר קיימת/.test(friendlyMessage(err, ''))) {
+            setInSystem((was) => new Set(was).add(row.external_id));
+            added += 1;
+          } else {
+            failed += 1;
+          }
+        }
+      }
+      return { added, failed };
+    },
+    [],
+  );
+
+  /*
+   * ─── THE ONE PRESS HE ASKED FOR ─────────────────────────────────────────
+   *
+   *   "כפתור גדול ובולט שיעשה סנכרון בין הקבוצות שהצטרפתי אליהם ויוסיף
+   *    אותם לרשימות"
+   *
+   * On גילוי קבוצות this is two presses — read, then add — because that
+   * screen is a workbench and the owner is looking at the names before he
+   * takes them. Here it is one: he came to the groups screen to make the
+   * list match Facebook, and a button that reads and then waits for a second
+   * press has not done what it said.
+   *
+   * MyGroupsCard is untouched by that difference. It takes a handler; what
+   * the handler does is the screen's business, and the discover page's two
+   * steps are exactly as they were.
+   *
+   * NOTHING IS EVER REMOVED HERE. The sync closes the gap in one direction —
+   * a group he is in that the list does not have. A group in the list he is
+   * not in is a different question with a different answer, and the
+   * "דורשות טיפול" tab is where it is asked.
+   */
+  const syncJoined = useCallback(async () => {
+    if (scanning) return;
+    if (workerOnline === false) {
+      toast('התוכנה במחשב לא פועלת, ולכן אי אפשר לקרוא את הקבוצות שלך.', 'error');
+      return;
+    }
+    setScanning(true);
+    try {
+      const { id } = await startJoinedScan(workerId);
+      const done = await waitForWorkerCommand(id, JOINED_SCAN_WAIT_MS);
+      const [mineOnFb, facts, pics] = await Promise.all([listJoined(), listTargetFacts(), listTargetPictures()]);
+      /* NOT READ BACK UNTIL THE MACHINE HAS WRITTEN. A scan that is still
+         running must not repaint the card with what was there before it
+         started — the owner would read the old numbers as the new answer. */
+      if (!done) {
+        toast('הקריאה עדיין רצה במחשב. פתחו את המסך שוב בעוד כמה דקות.', 'info');
+        return;
+      }
+      setJoined(mineOnFb);
+      setInSystem(facts.inList);
+      setRefusedIds(facts.refused);
+      setTargetPics(pics);
+      if (done.status === 'failed') {
+        toast(done.result || 'הקריאה נכשלה.', 'error');
+        return;
+      }
+      const fresh = mineOnFb.filter(
+        (r) => !r.hidden && !r.target_id && !facts.inList.has(r.external_id) && !facts.refused.has(r.external_id),
+      );
+      if (!fresh.length) {
+        toast(`כל ${mineOnFb.length} הקבוצות שאתם חברים בהן כבר ברשימת הפרסום.`, 'success');
+        return;
+      }
+      const { added, failed } = await adoptJoined(fresh);
+      toast(
+        failed
+          ? `${added} קבוצות נוספו, ו-${failed} לא הצליחו. נסו אותן אחת-אחת.`
+          : `${added} ${added === 1 ? 'קבוצה נוספה' : 'קבוצות נוספו'} לרשימת הקבוצות שלך.`,
+        failed ? 'error' : 'success',
+      );
+      await load();
+    } catch (err) {
+      toast(friendlyMessage(err, 'הסנכרון נכשל.'), 'error');
+    } finally {
+      setScanning(false);
+    }
+  }, [scanning, workerOnline, workerId, toast, adoptJoined, load]);
+
+  /*
+   * The add on its own, for a card that already knows what is missing — the
+   * owner synced a minute ago, dismissed one row with the ×, and wants the
+   * rest in without reading Facebook again. syncJoined() above is the one
+   * press that does both.
+   */
+  const adoptMissingNow = useCallback(async () => {
+    if (!joinedMissing.length || busy === 'joined') return;
+    setBusy('joined');
+    try {
+      const { added, failed } = await adoptJoined(joinedMissing);
+      toast(
+        failed
+          ? `${added} קבוצות נוספו, ו-${failed} לא הצליחו. נסו אותן אחת-אחת.`
+          : `${added} ${added === 1 ? 'קבוצה נוספה' : 'קבוצות נוספו'} לרשימת הקבוצות שלך.`,
+        failed ? 'error' : 'success',
+      );
+      await load();
+    } finally {
+      setBusy(null);
+    }
+  }, [joinedMissing, busy, adoptJoined, toast, load]);
+
+  /** The × on a row: "this is not my group". A write, not a dismissal. */
+  const hideJoinedRow = useCallback(
+    async (row: DiscoveredGroupRow) => {
+      setBusy(row.id);
+      try {
+        await hideDiscovered(row.id, true);
+        setJoined((was) => (was ?? []).map((r) => (r.id === row.id ? { ...r, hidden: true } : r)));
+      } catch (err) {
+        toast(friendlyMessage(err, 'הפעולה נכשלה.'), 'error');
+      } finally {
+        setBusy(null);
+      }
+    },
+    [toast],
+  );
+
 
   /* One entry point for the first read and for the retry button, so a failed
      load is never a dead end: the banner carries the way out of it. */
@@ -593,6 +791,44 @@ export default function GroupsPage() {
             <code dir="ltr">start-worker.cmd</code> והשאירו את החלון פתוח.
           </Notice>
         )}
+
+        {/*
+          ─── 27.11.2026 · THE SYNC, AT THE TOP, WHERE HE LOOKS FOR IT ──────
+          *
+          *   "תוסיף כפתור למעלה במסך של הקבוצות, כפתור גדול ובולט שיעשה
+          *    סנכרון בין הקבוצות שהצטרפתי אליהם ויוסיף אותם לרשימות כמו
+          *    בתמונה השנייה."
+          *
+          * The same card, not a copy of it. MyGroupsCard is exported, holds
+          * no state and performs no IO — the discover page already draws it
+          * and two fixtures already call it as a plain function — so this is
+          * a fourth call site and the component itself is untouched. A
+          * second button written here would have been a second set of words
+          * about one fact, and they drift.
+          *
+          * ABOVE THE TABS AND NOT IN THE HEADER. The header already carries
+          * "בדוק הכל" and "+ הוסף", and a third control there is neither big
+          * nor prominent on a 375px phone. Here it is full width, it is the
+          * first thing under the title, and it is on every tab — the list he
+          * is syncing INTO is the one behind all three.
+          *
+          * AND NOT NAMED "בדוק". The header's "בדוק הכל" re-opens groups the
+          * list ALREADY has to re-read their name and picture; this one asks
+          * Facebook which groups he is in. Two different jobs, and the one
+          * thing that must not happen is two buttons a tap apart promising
+          * the same thing in two words.
+        */}
+        <MyGroupsCard
+          joined={joined}
+          missing={joinedMissing}
+          scanning={scanning}
+          busy={busy === 'joined'}
+          onScan={() => void syncJoined()}
+          onAdopt={() => void adoptMissingNow()}
+          onHide={(row) => void hideJoinedRow(row)}
+          busyId={busy}
+          pictures={targetPics}
+        />
 
         <SegmentedControl
           variant="tabs"
